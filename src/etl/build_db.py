@@ -1,80 +1,175 @@
-"""Construit la base DuckDB de travail a partir des 4 CSV.
-Schema remodele : media / kpi_compteurs / contexte
+"""Construit la base DuckDB de travail à partir des fichiers sources.
+
+Trois tables métier remplacent les quatre fichiers d'origine :
+
+- ``media``          — investissements et performances, format long, `type` éclaté
+- ``kpi_compteurs``  — l'indicateur cible, format large
+- ``contexte``       — variables de contexte, dépivotées
+
+Les fichiers ``features.csv``, ``features_cost.csv`` et ``features_context.csv`` se
+recoupent : le premier est la table maître dont les deux autres sont des vues dérivées.
+On ne lit donc que les vues, plus complètes pour notre usage (coût et performance côte
+à côte), afin d'éviter tout double comptage.
+
+Usage :
+    python -m src.etl.build_db [--out CHEMIN] [--quiet] [--skip-checks]
 """
+
+from __future__ import annotations
+
+import argparse
+import logging
 import os
 import pathlib
+import sys
 
 import duckdb
 import pandas as pd
 from dotenv import load_dotenv
 
-load_dotenv()
+from src.etl import checks, transforms
 
-# Racine du projet : src/etl/build_db.py -> remonter de 3 niveaux
+logger = logging.getLogger("etl")
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-SRC = ROOT / "data" / "raw"
-OUT = ROOT / os.getenv("DB_PATH", "data/mmm.duckdb")
-OUT.parent.mkdir(parents=True, exist_ok=True)
-if OUT.exists():
-    OUT.unlink()
-con = duckdb.connect(str(OUT))
+RAW_DIR = ROOT / "data" / "raw"
 
-# ---------- 1. media ----------
-fc = pd.read_csv(SRC / "features_cost.csv")
-parts = fc["type"].str.split("||", regex=False, expand=True)
-if parts.shape[1] < 4:
-    for i in range(parts.shape[1], 4):
-        parts[i] = None
-fc["objectif"] = parts[0].where(parts[1].notna(), fc["type"])
-fc["format"] = parts[1]
-fc["support"] = parts[2]
-fc["duree_sec"] = pd.to_numeric(parts[3], errors="coerce")
-fc["type_raw"] = fc["type"]
-fc["step_date"] = pd.to_datetime(fc["step_date"])
-media = fc[["step_date", "entity", "category", "typology", "channel",
-            "objectif", "format", "support", "duree_sec", "type_raw",
-            "cost", "performance", "performance_metric"]]
-con.execute("CREATE TABLE media AS SELECT * FROM media")
-
-# ---------- 2. kpi_compteurs ----------
-c = pd.read_csv(SRC / "compteurs.csv")
-c["step_date"] = pd.to_datetime(c["step_date"])
-c = c.rename(columns={
-    "ref_te_new_counters_without_dem": "new_counters_without_dem",
-    "ref_te_dem": "dem", "ref_te_inbound": "inbound",
-    "ref_te_outbound": "outbound", "ref_te_partners": "partners",
-    "ref_te_web": "web", "ref_te_mes": "mes", "ref_te_cdf": "cdf"})
-con.execute("CREATE TABLE kpi_compteurs AS SELECT * FROM c")
-
-# ---------- 3. contexte (depivote) ----------
-ctx = pd.read_csv(SRC / "features_context.csv")
-ctx["step_date"] = pd.to_datetime(ctx["step_date"])
-long = ctx.melt(id_vars="step_date", var_name="col", value_name="value")
+SOURCES = {
+    "media": "features_cost.csv",
+    "kpi_compteurs": "compteurs.csv",
+    "contexte": "features_context.csv",
+}
 
 
-def parse(col):
-    t = col.split("_")
-    entity, brand, typ, channel, typology, category = t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]
-    metric = "_".join(t[:-6])
-    return metric, category, typology, channel, typ, brand, entity
+def configure_logging(quiet: bool = False) -> None:
+    """Journal sur la sortie standard, horodaté et nivelé."""
+    logging.basicConfig(
+        level=logging.WARNING if quiet else logging.INFO,
+        format="%(asctime)s %(levelname)-7s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+        force=True,
+    )
 
 
-meta = long["col"].map(parse)
-long[["metric", "category", "typology", "channel", "type", "brand_name", "entity"]] = \
-    pd.DataFrame(meta.tolist(), index=long.index)
-contexte = long[["step_date", "metric", "brand_name", "entity",
-                 "category", "typology", "channel", "type", "value"]]
-con.execute("CREATE TABLE contexte AS SELECT * FROM contexte")
+def read_source(filename: str) -> pd.DataFrame:
+    """Lit un fichier source et journalise sa volumétrie.
 
-for t in ["media", "kpi_compteurs", "contexte"]:
-    n = con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-    print(f"{t:16s} {n:>7,} lignes")
-print("\nmedia — controle objectif/format :")
-print(con.execute("""
-    SELECT channel, objectif, format, COUNT(*) n
-    FROM media WHERE format IS NOT NULL
-    GROUP BY 1,2,3 ORDER BY n DESC LIMIT 6""").df().to_string(index=False))
-print("\ncontexte — metriques :")
-print(con.execute("SELECT metric, COUNT(*) n FROM contexte GROUP BY 1 ORDER BY n DESC").df().to_string(index=False))
-con.close()
-print("\nOK ->", OUT)
+    Raises:
+        FileNotFoundError: avec un message indiquant où déposer le fichier.
+    """
+    path = RAW_DIR / filename
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Fichier source absent : {path}\n"
+            f"Déposer les fichiers de données dans {RAW_DIR}/"
+        )
+    df = pd.read_csv(path)
+    logger.info("lecture   %-28s %6d lignes", filename, len(df))
+    return df
+
+
+def build_tables() -> dict[str, pd.DataFrame]:
+    """Applique les transformations et renvoie les trois tables prêtes à écrire."""
+    media, n_padding = transforms.build_media(read_source(SOURCES["media"]))
+    logger.info("media     remplissage exclu           %6d lignes", n_padding)
+    logger.info("media     table construite            %6d lignes", len(media))
+
+    kpi = transforms.build_kpi(read_source(SOURCES["kpi_compteurs"]))
+    logger.info("kpi       table construite            %6d lignes", len(kpi))
+
+    contexte = transforms.build_contexte(read_source(SOURCES["contexte"]))
+    logger.info("contexte  dépivoté                    %6d lignes", len(contexte))
+
+    return {"media": media, "kpi_compteurs": kpi, "contexte": contexte}
+
+
+def write_database(tables: dict[str, pd.DataFrame], out: pathlib.Path) -> pathlib.Path:
+    """Écrit les tables dans un fichier temporaire, puis le renomme.
+
+    L'écriture atomique garantit qu'un échec en cours de route laisse la base
+    précédente intacte, au lieu de la remplacer par une base tronquée.
+
+    Returns:
+        Le chemin du fichier temporaire, à renommer après validation.
+    """
+    tmp = out.with_suffix(out.suffix + ".tmp")
+    tmp.unlink(missing_ok=True)
+
+    con = duckdb.connect(str(tmp))
+    try:
+        for name, df in tables.items():
+            # DuckDB résout `df` en cherchant une variable Python de ce nom dans la
+            # portée appelante (mécanisme dit de « replacement scan ») : le DataFrame
+            # est lu directement en mémoire, sans copie ni import.
+            con.execute(f"CREATE TABLE {name} AS SELECT * FROM df")
+    finally:
+        con.close()
+
+    return tmp
+
+
+def validate(path: pathlib.Path) -> None:
+    """Ouvre la base en lecture seule et vérifie le contrat de données."""
+    con = duckdb.connect(str(path), read_only=True)
+    try:
+        checks.run_assertions(con)
+        checks.log_warnings(con)
+    finally:
+        con.close()
+
+
+def main(argv: list[str] | None = None) -> int:
+    load_dotenv()
+
+    parser = argparse.ArgumentParser(
+        prog="python -m src.etl.build_db",
+        description="Construit la base DuckDB à partir des fichiers sources.",
+    )
+    parser.add_argument(
+        "--out",
+        type=pathlib.Path,
+        default=None,
+        help="chemin de la base à produire (défaut : DB_PATH du .env)",
+    )
+    parser.add_argument("--quiet", action="store_true", help="ne journaliser que les avertissements")
+    parser.add_argument(
+        "--skip-checks",
+        action="store_true",
+        help="ne pas vérifier le contrat de données (déconseillé)",
+    )
+    args = parser.parse_args(argv)
+
+    configure_logging(args.quiet)
+
+    out = args.out or ROOT / os.getenv("DB_PATH", "data/mmm.duckdb")
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        tables = build_tables()
+        tmp = write_database(tables, out)
+
+        if not args.skip_checks:
+            validate(tmp)
+        else:
+            logger.warning("contrat de données non vérifié (--skip-checks)")
+
+        # Le remplacement n'intervient qu'une fois la base validée.
+        os.replace(tmp, out)
+        logger.info("écrit     %-28s %6.1f Mo", out.name, out.stat().st_size / 1e6)
+        return 0
+
+    except checks.DataQualityError as exc:
+        logger.error("contrat de données non respecté\n%s", exc)
+        logger.error("la base précédente n'a pas été remplacée")
+        return 1
+    except (FileNotFoundError, transforms.ContextColumnError) as exc:
+        logger.error("%s", exc)
+        return 1
+    finally:
+        # Ne jamais laisser traîner un fichier temporaire.
+        out.with_suffix(out.suffix + ".tmp").unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
