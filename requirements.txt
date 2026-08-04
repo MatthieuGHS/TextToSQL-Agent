@@ -1,0 +1,18 @@
+# === Modèle et orchestration ===
+anthropic                    # SDK Anthropic
+langchain-anthropic          # ChatAnthropic : connecteur Claude pour LangChain
+langchain-core               # types de base (messages, outils)
+langgraph                    # la boucle agentique comme graphe d'états
+
+# === Données ===
+duckdb                       # moteur SQL analytique local
+pandas                       # manipulation des résultats
+openpyxl                     # lecture de la grille d'évaluation .xlsx
+
+# === Interface et graphiques ===
+streamlit                    # E9 — interface chat
+plotly                       # E7 — rendu des graphiques
+
+# === Outils ===
+python-dotenv                # chargement du .env
+pytest                       # E5 — harnais d'évaluation

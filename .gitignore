@@ -1,0 +1,33 @@
+# === Données client — ne jamais committer ===
+data/raw/
+*.csv
+*.xlsx
+*.duckdb
+*.db
+*.sqlite
+
+# === Documents de travail contenant des chiffres client ===
+# À sortir de l'ignore une fois réécrits sur un jeu de données neutre.
+docs/
+*.pdf
+
+# === Secrets ===
+.env
+.env.local
+*.key
+
+# === Python ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# === Outils ===
+.claude/
+.vscode/
+.idea/
+.DS_Store
