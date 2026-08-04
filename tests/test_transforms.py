@@ -46,19 +46,48 @@ def test_split_type_hierarchique():
     assert result.loc[0, "duree_sec"] == 30
 
 
-def test_split_type_plat_conserve_la_valeur_entiere():
-    """Une valeur sans séparateur atterrit entière dans `objectif`.
+def test_split_type_plat_ne_remplit_aucun_niveau():
+    """Une valeur sans séparateur laisse les quatre colonnes nulles.
 
-    C'est ce qui permet à `WHERE objectif = 'brand'` de fonctionner sur le SEA. Sans ce
-    comportement, seul le premier segment serait conservé et les canaux non
-    hiérarchiques perdraient leur information.
+    La valeur reste lisible dans la colonne `type`. Le contraire — la faire retomber
+    dans `objectif` — y ferait cohabiter des rythmes de diffusion, des intentions de
+    recherche, des étapes de tunnel et de simples noms de canaux.
     """
     result = transforms.split_type_hierarchy(pd.Series(["brand", "nonbrand", "rtg"]))
 
-    assert list(result["objectif"]) == ["brand", "nonbrand", "rtg"]
+    assert result["objectif"].isna().all()
     assert result["format"].isna().all()
     assert result["support"].isna().all()
     assert result["duree_sec"].isna().all()
+
+
+def test_objectif_ne_melange_pas_les_concepts():
+    """`objectif` ne contient que des valeurs issues d'une hiérarchie réelle.
+
+    Sur un lot mêlant TV hiérarchique et SEA plat, aucun nom de canal ni intention de
+    recherche ne doit apparaître dans `objectif`.
+    """
+    df = media_source(
+        channel=["tv", "sea", "radio"],
+        type=["burst||classique||TF1||30", "brand", "radio"],
+        step_date=["2024-09-02"] * 3,
+        brand_name=["te"] * 3,
+        entity=["pge"] * 3,
+        category=["paid"] * 3,
+        typology=["offline"] * 3,
+        cost=[1000.0, 500.0, 200.0],
+        performance=[2.5, 800.0, 1.0],
+        performance_metric=["grp", "clicks", "grp"],
+    )
+
+    media, _ = transforms.build_media(df)
+    objectifs = set(media["objectif"].dropna())
+
+    assert objectifs == {"burst"}
+    assert "brand" not in objectifs
+    assert "radio" not in objectifs
+    # ...mais les valeurs plates restent accessibles dans `type`.
+    assert set(media["type"]) == {"burst||classique||TF1||30", "brand", "radio"}
 
 
 def test_split_type_duree_non_numerique():
@@ -134,11 +163,12 @@ def test_build_media_colonnes_et_ordre():
     assert list(media.columns) == transforms.MEDIA_COLUMNS
 
 
-def test_build_media_conserve_type_raw():
-    """La valeur d'origine est conservée pour permettre l'audit des transformations."""
+def test_build_media_conserve_le_type_source():
+    """La valeur d'origine reste disponible, éclatée ou non."""
     media, _ = transforms.build_media(media_source())
 
-    assert media.loc[0, "type_raw"] == "burst||classique||TF1||30"
+    assert media.loc[0, "type"] == "burst||classique||TF1||30"
+    assert media.loc[1, "type"] == "brand"
 
 
 def test_build_media_convertit_les_dates():

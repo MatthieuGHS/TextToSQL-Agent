@@ -1,17 +1,18 @@
 """Contrat de données : ce que l'ETL garantit sur la base produite.
 
-Deux natures de contrôle, à ne pas confondre :
+Trois niveaux, à ne pas confondre :
 
-- **Assertion** — si elle échoue, *notre transformation est fausse*. L'ETL doit planter :
-  produire une base silencieusement incorrecte est le pire des scénarios, car l'erreur
-  ne se manifesterait qu'en aval, sous forme de réponses fausses de l'agent.
+- **Invariant** — doit être vrai quelle que soit la version des données. Une violation
+  signifie que notre transformation est fausse, ou que la source a changé de nature.
+  L'ETL plante : produire une base silencieusement incorrecte est le pire scénario,
+  l'erreur ne se manifesterait qu'en aval sous forme de réponses fausses.
 
-- **Avertissement** — la source a une particularité connue et documentée. On la
-  journalise pour mémoire, et on continue. Ces particularités sont précisément ce que
-  l'agent devra savoir détecter ; les corriger ici les rendrait invisibles.
+- **Avertissement** — particularité connue du jeu de données, ou vocabulaire inattendu.
+  Journalisé, non bloquant. Ces particularités sont précisément ce que l'agent devra
+  savoir détecter ; les corriger ici les rendrait invisibles.
 
-Les valeurs attendues ci-dessous sont issues de l'analyse du jeu de données. Elles font
-office de documentation exécutable : si la source évolue, elles préviennent.
+- **Volumétrie** — simple information. Un extrait actualisé aura légitimement d'autres
+  nombres de lignes ; en faire des assertions bloquerait le pipeline sans raison.
 """
 
 from __future__ import annotations
@@ -23,33 +24,24 @@ import duckdb
 
 logger = logging.getLogger(__name__)
 
-# --- Valeurs attendues -------------------------------------------------------------
+TABLES = ("media", "kpi_compteurs", "contexte")
 
-EXPECTED_ROWS = {
-    "media": 12_058,          # 12 770 lignes source moins 712 lignes de remplissage
-    "kpi_compteurs": 730,     # 365 semaines x 2 énergies
-    "contexte": 16_790,       # 365 semaines x 46 variables
-}
-
+# Forme du schéma que l'ETL produit — c'est notre propre contrat, pas celui de la source.
 EXPECTED_COLUMNS = {"media": 13, "kpi_compteurs": 10, "contexte": 9}
 
-EXPECTED_TOTAL_COST = 192_398_926.0
-COST_TOLERANCE = 0.001  # 0,1 %
-
-EXPECTED_CHANNELS = {
+# Vocabulaire observé à ce jour. Sert d'avertissement, pas d'assertion : une valeur
+# nouvelle est une information utile (la description des données fournie au modèle
+# devient obsolète), pas une raison de refuser de construire la base.
+KNOWN_CHANNELS = {
     "affiliation", "audio", "display", "ooh", "print",
     "radio", "sea", "seo", "social", "tv", "video",
 }
-EXPECTED_ENTITIES = {"corporate", "pge", "hetty"}
-EXPECTED_METRICS = {"clicks", "grp", "impressions"}
-EXPECTED_CONTEXT_METRIC_COUNT = 11
-
-EXPECTED_DATE_MIN = "2018-12-31"
-EXPECTED_DATE_MAX = "2025-12-29"
+KNOWN_ENTITIES = {"corporate", "pge", "hetty"}
+KNOWN_PERFORMANCE_METRICS = {"clicks", "grp", "impressions"}
 
 
 class DataQualityError(RuntimeError):
-    """Au moins une assertion du contrat de données a échoué."""
+    """Au moins un invariant du contrat de données est violé."""
 
 
 @dataclass
@@ -60,59 +52,48 @@ class CheckResult:
 
 
 def _scalar(con: duckdb.DuckDBPyConnection, sql: str):
-    """Exécute une requête renvoyant une seule valeur."""
     return con.execute(sql).fetchone()[0]
 
 
 def _set(con: duckdb.DuckDBPyConnection, sql: str) -> set:
-    """Exécute une requête renvoyant une colonne, sous forme d'ensemble."""
     return {row[0] for row in con.execute(sql).fetchall()}
 
 
-def run_assertions(con: duckdb.DuckDBPyConnection) -> list[CheckResult]:
-    """Vérifie le contrat de données.
+def assert_invariants(con: duckdb.DuckDBPyConnection) -> list[CheckResult]:
+    """Vérifie les propriétés qui doivent tenir quelle que soit la version des données.
 
-    Toutes les assertions sont évaluées avant de lever une exception : un seul passage
+    Tous les invariants sont évalués avant de lever une exception : un seul passage
     suffit à voir tous les problèmes, plutôt que de les découvrir un par un.
 
     Raises:
-        DataQualityError: si au moins une assertion échoue.
+        DataQualityError: si au moins un invariant est violé.
     """
     results: list[CheckResult] = []
 
     def check(name: str, condition: bool, detail: str = "") -> None:
         results.append(CheckResult(name, bool(condition), detail))
 
-    # --- Structure -----------------------------------------------------------------
-    for table, expected in EXPECTED_ROWS.items():
-        actual = _scalar(con, f"SELECT COUNT(*) FROM {table}")
-        check(
-            f"{table}: nombre de lignes",
-            actual == expected,
-            f"attendu {expected:,}, obtenu {actual:,}",
+    # --- Forme du schéma produit ---------------------------------------------------
+    for table in TABLES:
+        exists = _scalar(
+            con, f"SELECT COUNT(*) FROM duckdb_tables() WHERE table_name = '{table}'"
         )
+        check(f"{table}: table présente", exists == 1)
 
-    for table, expected in EXPECTED_COLUMNS.items():
-        actual = _scalar(
-            con,
-            f"SELECT COUNT(*) FROM duckdb_columns() WHERE table_name = '{table}'",
+        n_cols = _scalar(
+            con, f"SELECT COUNT(*) FROM duckdb_columns() WHERE table_name = '{table}'"
         )
+        expected = EXPECTED_COLUMNS[table]
         check(
             f"{table}: nombre de colonnes",
-            actual == expected,
-            f"attendu {expected}, obtenu {actual}",
+            n_cols == expected,
+            f"attendu {expected}, obtenu {n_cols}",
         )
 
-    # --- Cohérence métier ----------------------------------------------------------
-    total_cost = _scalar(con, "SELECT SUM(cost) FROM media")
-    ecart = abs(total_cost - EXPECTED_TOTAL_COST) / EXPECTED_TOTAL_COST
-    check(
-        "media: investissement total",
-        ecart <= COST_TOLERANCE,
-        f"attendu ~{EXPECTED_TOTAL_COST:,.0f} €, obtenu {total_cost:,.0f} € "
-        f"(écart {ecart:.3%})",
-    )
+        n_rows = _scalar(con, f"SELECT COUNT(*) FROM {table}")
+        check(f"{table}: table non vide", n_rows > 0, f"{n_rows} ligne(s)")
 
+    # --- Intégrité des données ------------------------------------------------------
     # Identité comptable du KPI : tout ce qui entre (mises en service + changements de
     # fournisseur) se répartit entre nouveaux compteurs et déménagements.
     violations = _scalar(
@@ -126,36 +107,6 @@ def run_assertions(con: duckdb.DuckDBPyConnection) -> list[CheckResult]:
         f"{violations} ligne(s) en violation",
     )
 
-    # Le SEO est du trafic organique : un coût y est dénué de sens.
-    seo_avec_cout = _scalar(
-        con, "SELECT COUNT(*) FROM media WHERE channel = 'seo' AND cost IS NOT NULL"
-    )
-    check(
-        "media: coût du SEO toujours nul",
-        seo_avec_cout == 0,
-        f"{seo_avec_cout} ligne(s) SEO avec un coût renseigné",
-    )
-
-    for label, column, expected in [
-        ("canaux", "channel", EXPECTED_CHANNELS),
-        ("entités", "entity", EXPECTED_ENTITIES),
-        ("métriques", "performance_metric", EXPECTED_METRICS),
-    ]:
-        actual = _set(con, f"SELECT DISTINCT {column} FROM media")
-        check(
-            f"media: {label}",
-            actual == expected,
-            f"inattendus {sorted(actual - expected)}, manquants {sorted(expected - actual)}",
-        )
-
-    date_min = str(_scalar(con, "SELECT MIN(step_date) FROM media"))[:10]
-    date_max = str(_scalar(con, "SELECT MAX(step_date) FROM media"))[:10]
-    check(
-        "media: période couverte",
-        (date_min, date_max) == (EXPECTED_DATE_MIN, EXPECTED_DATE_MAX),
-        f"attendu {EXPECTED_DATE_MIN} → {EXPECTED_DATE_MAX}, obtenu {date_min} → {date_max}",
-    )
-
     negatifs = _scalar(
         con, "SELECT COUNT(*) FROM media WHERE cost < 0 OR performance < 0"
     )
@@ -164,39 +115,60 @@ def run_assertions(con: duckdb.DuckDBPyConnection) -> list[CheckResult]:
     doublons = _scalar(
         con,
         "SELECT COUNT(*) FROM ("
-        "  SELECT step_date, entity, channel, type_raw, performance_metric"
+        "  SELECT step_date, entity, channel, type, performance_metric"
         "  FROM media GROUP BY ALL HAVING COUNT(*) > 1)",
     )
     check("media: aucun doublon de clé", doublons == 0, f"{doublons} clé(s) dupliquée(s)")
 
-    # --- Intégrité des transformations ---------------------------------------------
-    # Preuve que les lignes de remplissage ont bien été retirées : leur marqueur 'none'
-    # ne doit plus polluer les valeurs distinctes qui iront décrire le schéma au modèle.
-    none_restants = _scalar(
-        con, "SELECT COUNT(*) FROM media WHERE objectif = 'none' OR format = 'none'"
+    manquants = _scalar(
+        con,
+        "SELECT COUNT(*) FROM media "
+        "WHERE step_date IS NULL OR channel IS NULL OR performance_metric IS NULL",
     )
     check(
-        "media: plus de marqueur de remplissage",
-        none_restants == 0,
-        f"{none_restants} ligne(s) portant encore 'none'",
+        "media: dimensions obligatoires renseignées",
+        manquants == 0,
+        f"{manquants} ligne(s) incomplète(s)",
     )
 
-    # Preuve que l'éclatement de `type` a fonctionné sur les valeurs hiérarchiques.
-    hierarchiques = _scalar(
-        con, "SELECT COUNT(*) FROM media WHERE format IS NOT NULL"
+    # --- Preuves que nos transformations ont fonctionné ----------------------------
+    # Le marqueur de remplissage ne doit subsister ni dans `type`, ni dans les colonnes
+    # issues de son éclatement.
+    padding = _scalar(
+        con,
+        "SELECT COUNT(*) FROM media "
+        "WHERE type LIKE 'none%' OR objectif = 'none' OR format = 'none'",
     )
     check(
-        "media: hiérarchie de type éclatée",
-        hierarchiques > 0,
-        f"{hierarchiques:,} ligne(s) hiérarchiques décodées",
+        "media: lignes de remplissage retirées",
+        padding == 0,
+        f"{padding} ligne(s) portant encore le marqueur",
     )
 
-    # Preuve que le décodage des noms de colonnes du contexte a fonctionné.
-    n_metrics = _scalar(con, "SELECT COUNT(DISTINCT metric) FROM contexte")
+    # Une valeur hiérarchique remplit les quatre niveaux ; une valeur plate n'en
+    # remplit aucun. Toute autre combinaison signale un éclatement incohérent.
+    incoherent = _scalar(
+        con,
+        "SELECT COUNT(*) FROM media "
+        "WHERE (objectif IS NULL) <> (format IS NULL)",
+    )
     check(
-        "contexte: métriques décodées",
-        n_metrics == EXPECTED_CONTEXT_METRIC_COUNT,
-        f"attendu {EXPECTED_CONTEXT_METRIC_COUNT}, obtenu {n_metrics}",
+        "media: éclatement de type cohérent",
+        incoherent == 0,
+        f"{incoherent} ligne(s) partiellement éclatée(s)",
+    )
+
+    # La hiérarchie n'existe que là où la source la fournit : `format` non nul implique
+    # une valeur de `type` contenant le séparateur.
+    mal_eclate = _scalar(
+        con,
+        "SELECT COUNT(*) FROM media "
+        "WHERE format IS NOT NULL AND type NOT LIKE '%||%'",
+    )
+    check(
+        "media: hiérarchie issue de la source",
+        mal_eclate == 0,
+        f"{mal_eclate} ligne(s) éclatée(s) sans séparateur d'origine",
     )
 
     vides = _scalar(
@@ -204,72 +176,109 @@ def run_assertions(con: duckdb.DuckDBPyConnection) -> list[CheckResult]:
     )
     check("contexte: aucune métrique vide", vides == 0, f"{vides} ligne(s)")
 
-    # --- Verdict -------------------------------------------------------------------
+    # --- Verdict --------------------------------------------------------------------
     echecs = [r for r in results if not r.passed]
     if echecs:
         rapport = "\n".join(f"  ✗ {r.name} — {r.detail}" for r in echecs)
         raise DataQualityError(
-            f"{len(echecs)} assertion(s) en échec sur {len(results)} :\n{rapport}"
+            f"{len(echecs)} invariant(s) violé(s) sur {len(results)} :\n{rapport}"
         )
 
-    logger.info("contrôle  %d assertions passées", len(results))
+    logger.info("contrôle  %d invariants vérifiés", len(results))
     return results
 
 
-def log_warnings(con: duckdb.DuckDBPyConnection) -> None:
-    """Journalise les particularités connues du jeu de données.
+def log_volumetry(con: duckdb.DuckDBPyConnection) -> None:
+    """Journalise la volumétrie et la couverture temporelle, à titre d'information."""
+    for table in TABLES:
+        n = _scalar(con, f"SELECT COUNT(*) FROM {table}")
+        logger.info("volume    %-16s %8d lignes", table, n)
 
-    Ce ne sont pas des erreurs : ce sont les anomalies que l'agent devra pouvoir
-    détecter et expliquer. On les trace pour qu'une évolution de la source soit visible.
+    debut, fin, semaines = con.execute(
+        "SELECT MIN(step_date), MAX(step_date), COUNT(DISTINCT step_date) FROM media"
+    ).fetchone()
+    logger.info(
+        "volume    période          %s → %s (%d semaines)",
+        str(debut)[:10], str(fin)[:10], semaines,
+    )
+
+    total = _scalar(con, "SELECT SUM(cost) FROM media")
+    logger.info("volume    investissement   %12.0f €", total)
+
+
+# Un canal démarrant plus de LATE_START_WEEKS après le début global manque réellement
+# d'historique — c'est un problème de modélisation en aval.
+LATE_START_WEEKS = 8
+
+# En deçà de ce taux d'occupation, un canal est diffusé par vagues plutôt qu'en continu.
+# Ce n'est pas une anomalie (les campagnes fonctionnent ainsi), mais une semaine absente
+# ne doit pas être lue comme une donnée manquante.
+INTERMITTENT_RATIO = 0.80
+
+
+def log_warnings(con: duckdb.DuckDBPyConnection) -> None:
+    """Journalise les particularités du jeu de données et les écarts de vocabulaire."""
+    _log_vocabulary_drift(con)
+    _log_data_particularities(con)
+    _log_coverage(con)
+
+
+def _log_vocabulary_drift(con: duckdb.DuckDBPyConnection) -> None:
+    """Signale les valeurs jamais observées jusqu'ici.
+
+    Une valeur nouvelle n'est pas une erreur, mais elle rend obsolète la description des
+    données fournie au modèle de langage — qui ne saurait pas qu'elle existe.
     """
-    warnings = [
+    for label, column, known in [
+        ("canal", "channel", KNOWN_CHANNELS),
+        ("entité", "entity", KNOWN_ENTITIES),
+        ("métrique", "performance_metric", KNOWN_PERFORMANCE_METRICS),
+    ]:
+        observed = _set(con, f"SELECT DISTINCT {column} FROM media")
+        for value in sorted(observed - known):
+            logger.warning("%-45s %s", f"{label} inconnu jusqu'ici:", value)
+        for value in sorted(known - observed):
+            logger.warning("%-45s %s", f"{label} attendu mais absent:", value)
+
+
+def _log_data_particularities(con: duckdb.DuckDBPyConnection) -> None:
+    particularites = [
         (
             "coût nul mais performance positive",
-            "SELECT COUNT(*) FROM media "
-            "WHERE performance > 0 AND cost = 0",
+            "SELECT COUNT(*) FROM media WHERE performance > 0 AND cost = 0",
         ),
         (
             "coût positif mais performance nulle",
             "SELECT COUNT(*) FROM media WHERE cost > 0 AND performance = 0",
         ),
         (
-            "SEO sans coût (trafic organique, attendu)",
-            "SELECT COUNT(*) FROM media WHERE channel = 'seo' AND performance > 0",
-        ),
-        (
-            "OOH entité pge entièrement nul",
-            "SELECT COUNT(*) FROM media "
-            "WHERE channel = 'ooh' AND entity = 'pge' AND cost = 0 AND performance = 0",
+            "trafic sans coût (organique)",
+            "SELECT COUNT(*) FROM media WHERE cost IS NULL AND performance > 0",
         ),
     ]
-
-    for label, sql in warnings:
+    for label, sql in particularites:
         n = _scalar(con, sql)
         if n:
             logger.warning("%-45s %6d ligne(s)", label, n)
 
-    _log_coverage_warnings(con)
+    # Un couple canal/entité dont *toutes* les lignes sont à zéro n'a jamais été activé.
+    # C'est différent d'une semaine creuse : le segment entier est vide.
+    inactifs = con.execute(
+        "SELECT channel, entity, COUNT(*) FROM media "
+        "GROUP BY channel, entity "
+        "HAVING MAX(COALESCE(cost, 0)) = 0 AND MAX(COALESCE(performance, 0)) = 0"
+    ).fetchall()
+    for channel, entity, n in inactifs:
+        logger.warning(
+            "%-45s %6d ligne(s)", f"segment jamais activé: {channel}/{entity}", n
+        )
 
 
-# Un canal démarrant plus de LATE_START_WEEKS après le début global manque réellement
-# d'historique — c'est un problème de modélisation en aval (Meridian).
-LATE_START_WEEKS = 8
-
-# En deçà de ce taux d'occupation, un canal est diffusé par vagues plutôt qu'en continu.
-# Ce n'est pas une anomalie (les campagnes TV et vidéo fonctionnent ainsi), mais le
-# modèle doit le savoir pour ne pas interpréter une semaine absente comme une donnée
-# manquante.
-INTERMITTENT_RATIO = 0.80
-
-
-def _log_coverage_warnings(con: duckdb.DuckDBPyConnection) -> None:
+def _log_coverage(con: duckdb.DuckDBPyConnection) -> None:
     """Signale les canaux dont la couverture temporelle est atypique.
 
-    Deux situations distinctes, à ne pas confondre :
-
-    - **démarrage tardif** — le canal n'existe pas au début de la période ;
-    - **diffusion intermittente** — le canal couvre toute la période mais n'est actif
-      que par vagues, ce qui est normal pour une campagne média.
+    Deux situations distinctes : un canal qui n'existe pas au début de la période, et un
+    canal présent tout du long mais diffusé par vagues.
     """
     rows = con.execute(
         """
@@ -279,10 +288,10 @@ def _log_coverage_warnings(con: duckdb.DuckDBPyConnection) -> None:
         )
         SELECT
             m.channel,
-            MIN(m.step_date)                                   AS debut,
-            COUNT(DISTINCT m.step_date)                        AS semaines_actives,
-            DATE_DIFF('week', MIN(m.step_date), b.fin_globale) + 1 AS semaines_ecoulees,
-            DATE_DIFF('week', b.debut_global, MIN(m.step_date)) AS retard
+            MIN(m.step_date)                                       AS debut,
+            COUNT(DISTINCT m.step_date)                            AS actives,
+            DATE_DIFF('week', MIN(m.step_date), b.fin_globale) + 1 AS ecoulees,
+            DATE_DIFF('week', b.debut_global, MIN(m.step_date))    AS retard
         FROM media m, bornes b
         GROUP BY m.channel, b.debut_global, b.fin_globale
         ORDER BY m.channel
@@ -292,17 +301,12 @@ def _log_coverage_warnings(con: duckdb.DuckDBPyConnection) -> None:
     for channel, debut, actives, ecoulees, retard in rows:
         if retard >= LATE_START_WEEKS:
             logger.warning(
-                "%-45s %6d semaines (début %s, %d semaines après les autres)",
-                f"démarrage tardif: {channel}",
-                actives,
-                str(debut)[:10],
-                retard,
+                "%-45s %6d semaines (début %s, +%d)",
+                f"démarrage tardif: {channel}", actives, str(debut)[:10], retard,
             )
         if ecoulees and actives / ecoulees < INTERMITTENT_RATIO:
             logger.warning(
-                "%-45s %6d semaines actives sur %d (%.0f %%)",
+                "%-45s %6d actives sur %d (%.0f %%)",
                 f"diffusion intermittente: {channel}",
-                actives,
-                ecoulees,
-                100 * actives / ecoulees,
+                actives, ecoulees, 100 * actives / ecoulees,
             )

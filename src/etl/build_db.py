@@ -113,7 +113,8 @@ def validate(path: pathlib.Path) -> None:
     """Ouvre la base en lecture seule et vérifie le contrat de données."""
     con = duckdb.connect(str(path), read_only=True)
     try:
-        checks.run_assertions(con)
+        checks.assert_invariants(con)
+        checks.log_volumetry(con)
         checks.log_warnings(con)
     finally:
         con.close()

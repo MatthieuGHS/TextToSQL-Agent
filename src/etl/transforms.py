@@ -26,7 +26,7 @@ TYPE_DEPTH = 4
 
 MEDIA_COLUMNS = [
     "step_date", "entity", "category", "typology", "channel",
-    "objectif", "format", "support", "duree_sec", "type_raw",
+    "type", "objectif", "format", "support", "duree_sec",
     "cost", "performance", "performance_metric",
 ]
 
@@ -53,17 +53,22 @@ class ContextColumnError(ValueError):
 
 
 def split_type_hierarchy(types: pd.Series) -> pd.DataFrame:
-    """Éclate la colonne `type` en quatre dimensions exploitables.
+    """Éclate la hiérarchie encodée dans la colonne `type`, là où elle existe.
 
-    La source encode deux formes différentes dans une même colonne :
+    La source utilise deux formes dans une même colonne :
 
-    - hiérarchique — ``"burst||classique||TF1||30"`` pour la TV et la vidéo ;
-    - plate — ``"brand"``, ``"nonbrand"``, ``"acq"``, ``"rtg"`` pour les autres canaux.
+    - hiérarchique — ``"burst||classique||TF1||30"`` : objectif, format, support, durée ;
+    - plate — ``"brand"``, ``"acq"``, ``"radio"``… : une valeur simple, sans structure.
 
-    Les deux atterrissent dans `objectif`. C'est ce qui permet à une requête
-    ``WHERE objectif = 'brand'`` de fonctionner sur le SEA comme
-    ``WHERE format = 'VOL'`` fonctionne sur la vidéo, sans recourir à un LIKE fragile
-    sur les 502 valeurs brutes.
+    Seule la forme hiérarchique est éclatée. Les valeurs plates laissent les quatre
+    colonnes à NULL : elles restent lisibles dans la colonne `type`, conservée telle
+    quelle.
+
+    Ce choix est délibéré. Faire retomber les valeurs plates dans `objectif` ferait
+    cohabiter quatre notions distinctes — rythme de diffusion (burst, pulse), intention
+    de recherche (brand, nonbrand), étape de tunnel (acq, rtg) et simple répétition du
+    canal (radio, print) — dans une colonne censée n'en porter qu'une. On décrit la
+    source telle qu'elle est plutôt que de lui inventer une structure.
 
     Returns:
         DataFrame de quatre colonnes (objectif, format, support, duree_sec),
@@ -76,13 +81,12 @@ def split_type_hierarchy(types: pd.Series) -> pd.DataFrame:
     for level in range(parts.shape[1], TYPE_DEPTH):
         parts[level] = None
 
-    # `parts[1]` non nul signale une valeur hiérarchique : on garde alors le premier
-    # niveau. Sinon la valeur était plate et doit être conservée entière.
+    # Une valeur plate n'a pas de second niveau : ses quatre colonnes restent nulles.
     is_hierarchical = parts[1].notna()
 
     return pd.DataFrame(
         {
-            "objectif": parts[0].where(is_hierarchical, types),
+            "objectif": parts[0].where(is_hierarchical),
             "format": parts[1],
             "support": parts[2],
             # Le 4e niveau vaut parfois "Non identifie" : `coerce` le transforme en NaN
@@ -138,9 +142,6 @@ def build_media(features_cost: pd.DataFrame) -> tuple[pd.DataFrame, int]:
         format=hierarchy["format"],
         support=hierarchy["support"],
         duree_sec=hierarchy["duree_sec"],
-        # Conservée pour la traçabilité : permet de remonter à la valeur source si un
-        # résultat surprend.
-        type_raw=df["type"],
     )
 
     return media[MEDIA_COLUMNS].reset_index(drop=True), n_padding
