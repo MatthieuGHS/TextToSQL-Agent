@@ -21,6 +21,7 @@ def base_saine() -> duckdb.DuckDBPyConnection:
     media = pd.DataFrame(
         {
             "step_date": pd.to_datetime(["2024-09-02", "2024-09-02", "2024-09-09"]),
+            "brand_name": ["te", "te", "te"],
             "entity": ["pge", "pge", "pge"],
             "category": ["paid", "paid", "paid"],
             "typology": ["offline", "online", "offline"],
@@ -87,6 +88,19 @@ def test_detecte_identite_kpi_violee():
     con.execute("UPDATE kpi_compteurs SET cdf = 999")
 
     with pytest.raises(checks.DataQualityError, match="identité"):
+        checks.assert_invariants(con)
+
+
+def test_detecte_annonceur_multiple():
+    """`media` ne doit décrire qu'un annonceur.
+
+    Sans cet invariant, un extrait mêlant l'annonceur et ses concurrents produirait des
+    SUM(cost) additionnant les deux, sans qu'aucune erreur ne soit levée.
+    """
+    con = base_saine()
+    con.execute("UPDATE media SET brand_name = 'edf' WHERE channel = 'sea'")
+
+    with pytest.raises(checks.DataQualityError, match="annonceur unique"):
         checks.assert_invariants(con)
 
 
@@ -203,6 +217,60 @@ def test_volumetrie_ne_bloque_pas_sur_un_volume_different(caplog):
     checks.assert_invariants(con)  # ne lève pas
     checks.log_volumetry(con)
     checks.log_warnings(con)
+
+
+def test_avertit_sur_hierarchie_trop_profonde(caplog):
+    """Un `type` à plus de 4 niveaux est signalé : l'éclatement en perdrait le surplus.
+
+    `split_type_hierarchy` ne lit que les quatre premiers niveaux. Comme `type` est
+    conservée telle quelle dans la table, le contrôle se fait a posteriori sur la base.
+    """
+    con = base_saine()
+    con.execute("UPDATE media SET type = 'a||b||c||d||e' WHERE channel = 'tv'")
+
+    checks.assert_invariants(con)  # ne lève pas : ce n'est pas une erreur de notre part
+    with caplog.at_level("WARNING"):
+        checks.log_warnings(con)
+
+    assert "au-delà de 4 niveaux" in caplog.text
+
+
+# --- Couverture de la source maîtresse ----------------------------------------------
+
+
+def master(metrics: list[str]) -> pd.DataFrame:
+    """Un features.csv minimal, réduit à la seule colonne qui nous intéresse."""
+    return pd.DataFrame({"performance_metric": metrics})
+
+
+def test_couverture_source_complete(caplog):
+    """Si chaque métrique de la source atterrit quelque part, rien n'est signalé.
+
+    Dans la base saine : `media` porte grp et clicks, `contexte` porte price.
+    """
+    con = base_saine()
+
+    manquantes = checks.log_source_coverage(con, master(["grp", "clicks", "price"]))
+
+    assert manquantes == []
+
+
+def test_couverture_source_metrique_perdue(caplog):
+    """Une métrique de la source qui n'atteint aucune table est signalée, sans bloquer.
+
+    C'est le scénario qui rendait l'hypothèse « on ne lit que les vues » risquée : le
+    client enrichit sa source, la métrique n'arrive jamais dans la base, et l'agent
+    affirme de bonne foi qu'elle n'existe pas.
+    """
+    con = base_saine()
+
+    with caplog.at_level("WARNING"):
+        manquantes = checks.log_source_coverage(
+            con, master(["grp", "clicks", "price", "nouvelle_metrique"])
+        )
+
+    assert manquantes == ["nouvelle_metrique"]
+    assert "nouvelle_metrique" in caplog.text
 
 
 def test_avertit_sur_vocabulaire_inconnu(caplog):

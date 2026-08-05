@@ -24,8 +24,14 @@ PADDING_TYPE = "none||none||none||none"
 # Nombre de niveaux dans la hiérarchie encodée.
 TYPE_DEPTH = 4
 
+# `brand_name` est constante (`te`) et ne porte donc aucune information statistique.
+# Elle est conservée parce qu'elle porte autre chose : le **périmètre**. Sans elle, rien
+# dans la table ne dit que ces investissements sont ceux d'un seul annonceur — alors que
+# `contexte` contient les coûts et GRP des concurrents, d'ordre de grandeur voisin. La
+# garder rend le périmètre lisible d'un `SELECT *` et rend les deux tables comparables
+# par UNION sur des colonnes de même nom.
 MEDIA_COLUMNS = [
-    "step_date", "entity", "category", "typology", "channel",
+    "step_date", "brand_name", "entity", "category", "typology", "channel",
     "type", "objectif", "format", "support", "duree_sec",
     "cost", "performance", "performance_metric",
 ]
@@ -100,18 +106,22 @@ def split_type_hierarchy(types: pd.Series) -> pd.DataFrame:
 def drop_padding_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     """Retire les lignes de remplissage de la source.
 
-    Ces lignes valent zéro en coût *et* en performance : elles ne décrivent aucune
-    activité média. Les conserver aurait trois effets indésirables :
+    Le marqueur ``none||none||none||none`` signale une ligne **sans segment
+    identifiable** : ni objectif, ni format, ni support, ni durée. C'est une ligne de
+    complétion de la grille de dates, pas une observation. La conserver ferait entrer
+    ``'none'`` dans les valeurs distinctes de `objectif` et `format`, donc dans la
+    description du schéma fournie au modèle de langage.
 
-    1. ``'none'`` apparaîtrait dans les valeurs distinctes de `objectif` et `format`,
-       donc dans la description du schéma fournie au modèle de langage ;
-    2. les moyennes seraient faussées (le coût moyen d'une ligne TV passe de 13 509 €
-       à 12 416 €, soit 8 % d'écart, à cause de 366 zéros artificiels) ;
-    3. les ``COUNT(*)`` seraient gonflés de 6 %.
+    C'est la seule raison, et elle suffit. Elle ne doit pas être confondue avec
+    l'argument « ces lignes valent zéro des deux côtés, elles faussent les moyennes » :
+    la source compte 4 697 lignes à coût nul *et* performance nulle, dont 712 seulement
+    portent le marqueur. Les 3 985 autres sont conservées — ce sont de vraies semaines
+    sans activité pour leur segment — et pèsent sur les moyennes exactement de la même
+    façon. Le critère appliqué ici est l'absence de segment, pas l'absence de valeur.
 
-    Ce filtrage ne doit pas être confondu avec un nettoyage des anomalies métier : les
-    lignes à coût nul mais performance positive (294 lignes) sont, elles, conservées —
-    ce sont de vraies anomalies de facturation que l'agent doit pouvoir détecter.
+    Ce filtrage n'est pas non plus un nettoyage des anomalies métier : les lignes à coût
+    nul mais performance positive (294 lignes) sont, elles, conservées — ce sont de
+    vraies anomalies de facturation que l'agent doit pouvoir détecter.
 
     Returns:
         Le DataFrame filtré, et le nombre de lignes retirées.

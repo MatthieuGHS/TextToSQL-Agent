@@ -21,13 +21,19 @@ import logging
 from dataclasses import dataclass
 
 import duckdb
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 TABLES = ("media", "kpi_compteurs", "contexte")
 
 # Forme du schéma que l'ETL produit — c'est notre propre contrat, pas celui de la source.
-EXPECTED_COLUMNS = {"media": 13, "kpi_compteurs": 10, "contexte": 9}
+EXPECTED_COLUMNS = {"media": 14, "kpi_compteurs": 10, "contexte": 9}
+
+# Nombre de niveaux que l'éclatement de `type` sait traiter. Doit rester aligné sur
+# `transforms.TYPE_DEPTH` ; répété ici parce que ce module vérifie le schéma produit,
+# sans dépendre du module qui le produit.
+TYPE_DEPTH = 4
 
 # Vocabulaire observé à ce jour. Sert d'avertissement, pas d'assertion : une valeur
 # nouvelle est une information utile (la description des données fournie au modèle
@@ -105,6 +111,16 @@ def assert_invariants(con: duckdb.DuckDBPyConnection) -> list[CheckResult]:
         "kpi: identité mes + cdf = new_counters + dem",
         violations == 0,
         f"{violations} ligne(s) en violation",
+    )
+
+    # `media` ne décrit qu'un annonceur. Si une livraison future en mêlait plusieurs,
+    # tout agrégat sans GROUP BY brand_name deviendrait faux sans lever d'erreur — un
+    # SUM(cost) additionnerait l'annonceur et ses concurrents. Invariant bloquant.
+    annonceurs = _scalar(con, "SELECT COUNT(DISTINCT brand_name) FROM media")
+    check(
+        "media: annonceur unique",
+        annonceurs == 1,
+        f"{annonceurs} annonceur(s) — la table ne doit en décrire qu'un",
     )
 
     negatifs = _scalar(
@@ -223,6 +239,53 @@ def log_warnings(con: duckdb.DuckDBPyConnection) -> None:
     _log_coverage(con)
 
 
+def log_source_coverage(
+    con: duckdb.DuckDBPyConnection, master: pd.DataFrame
+) -> list[str]:
+    """Vérifie que rien de la source maîtresse ne se perd en route.
+
+    L'ETL ne lit pas ``features.csv`` : il lit les vues qui en dérivent, plus complètes
+    pour notre usage. Ce choix repose sur une hypothèse — les vues couvrent l'intégralité
+    de la source — qui n'est vraie que tant que le client ne fait pas évoluer son extrait.
+
+    Le risque n'est pas qu'une ligne se perde, c'est qu'une **métrique entière** existe
+    dans la source sans jamais atteindre la base : l'agent affirmerait alors qu'elle
+    n'existe pas. Le contrôle porte donc sur le vocabulaire de `performance_metric`.
+
+    Les destinations sont déduites de la base produite, pas d'une liste écrite en dur :
+    une métrique est couverte si elle apparaît dans `media.performance_metric` ou dans
+    `contexte.metric`.
+
+    Avertissement et non invariant : une métrique nouvelle n'est pas une erreur de notre
+    transformation, c'est un enrichissement de la source. Mais elle rend obsolète la
+    description des données fournie au modèle de langage, qui les énumère.
+
+    Returns:
+        Les métriques non couvertes, vide si l'hypothèse tient.
+    """
+    couvertes = _set(con, "SELECT DISTINCT performance_metric FROM media") | _set(
+        con, "SELECT DISTINCT metric FROM contexte"
+    )
+    observees = set(master["performance_metric"].dropna().unique())
+
+    manquantes = sorted(observees - couvertes)
+    for metric in manquantes:
+        n = int((master["performance_metric"] == metric).sum())
+        logger.warning(
+            "%-45s %-22s %6d ligne(s) de la source",
+            "métrique source absente de la base:", metric, n,
+        )
+    for metric in sorted(couvertes - observees):
+        logger.info("couverture métrique produite hors source maîtresse: %s", metric)
+
+    if not manquantes:
+        logger.info(
+            "contrôle  %d métriques de la source maîtresse toutes couvertes",
+            len(observees),
+        )
+    return manquantes
+
+
 def _log_vocabulary_drift(con: duckdb.DuckDBPyConnection) -> None:
     """Signale les valeurs jamais observées jusqu'ici.
 
@@ -254,6 +317,16 @@ def _log_data_particularities(con: duckdb.DuckDBPyConnection) -> None:
         (
             "trafic sans coût (organique)",
             "SELECT COUNT(*) FROM media WHERE cost IS NULL AND performance > 0",
+        ),
+        (
+            # `type` est conservée telle quelle, on peut donc vérifier a posteriori que
+            # son éclatement n'a rien perdu. Un séparateur fait deux caractères : le
+            # nombre de niveaux vaut (longueur - longueur sans séparateurs) / 2 + 1.
+            # Au-delà de TYPE_DEPTH niveaux, l'éclatement ignore silencieusement le reste.
+            f"hiérarchie `type` au-delà de {TYPE_DEPTH} niveaux (surplus ignoré)",
+            "SELECT COUNT(*) FROM media "
+            "WHERE (LENGTH(type) - LENGTH(REPLACE(type, '||', ''))) / 2 + 1 "
+            f"> {TYPE_DEPTH}",
         ),
     ]
     for label, sql in particularites:

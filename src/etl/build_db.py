@@ -11,6 +11,14 @@ recoupent : le premier est la table maître dont les deux autres sont des vues d
 On ne lit donc que les vues, plus complètes pour notre usage (coût et performance côte
 à côte), afin d'éviter tout double comptage.
 
+``compteurs.csv`` fait exception : c'est une **source indépendante**, et non une vue de
+``features.csv``. La table maîtresse ne contient les compteurs que des fournisseurs
+alternatifs et de l'historique du marché, jamais ceux de l'annonceur suivi.
+
+Cette hypothèse de recouvrement n'est pas une supposition passive : elle est vérifiée à
+chaque construction par ``checks.log_source_coverage``, qui relit la source maîtresse et
+signale toute métrique qui n'atteindrait aucune des trois tables.
+
 Usage :
     python -m src.etl.build_db [--out CHEMIN] [--quiet] [--skip-checks]
 """
@@ -39,6 +47,11 @@ SOURCES = {
     "kpi_compteurs": "compteurs.csv",
     "contexte": "features_context.csv",
 }
+
+# Source maîtresse : jamais lue pour construire, seulement pour vérifier que les vues
+# ci-dessus la couvrent intégralement. Volontairement hors de SOURCES : ce n'est pas un
+# intrant du pipeline, c'est une pièce à conviction.
+MASTER_SOURCE = "features.csv"
 
 
 def configure_logging(quiet: bool = False) -> None:
@@ -110,12 +123,24 @@ def write_database(tables: dict[str, pd.DataFrame], out: pathlib.Path) -> pathli
 
 
 def validate(path: pathlib.Path) -> None:
-    """Ouvre la base en lecture seule et vérifie le contrat de données."""
+    """Ouvre la base en lecture seule et vérifie le contrat de données.
+
+    La source maîtresse est relue ici, et non dans ``build_tables`` : elle sert à
+    vérifier le résultat, pas à le produire.
+    """
     con = duckdb.connect(str(path), read_only=True)
     try:
         checks.assert_invariants(con)
         checks.log_volumetry(con)
         checks.log_warnings(con)
+
+        master_path = RAW_DIR / MASTER_SOURCE
+        if master_path.exists():
+            checks.log_source_coverage(con, pd.read_csv(master_path))
+        else:
+            logger.warning(
+                "%-45s %s", "couverture non vérifiée, source absente:", MASTER_SOURCE
+            )
     finally:
         con.close()
 

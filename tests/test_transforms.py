@@ -163,6 +163,19 @@ def test_build_media_colonnes_et_ordre():
     assert list(media.columns) == transforms.MEDIA_COLUMNS
 
 
+def test_build_media_conserve_l_annonceur():
+    """`brand_name` survit à la construction, bien qu'elle soit constante.
+
+    Elle ne porte pas d'information statistique mais le périmètre de la table : sans
+    elle, rien ne distingue ces investissements de ceux des concurrents, qui figurent
+    dans `contexte` avec des ordres de grandeur voisins.
+    """
+    media, _ = transforms.build_media(media_source())
+
+    assert "brand_name" in media.columns
+    assert set(media["brand_name"]) == {"te"}
+
+
 def test_build_media_conserve_le_type_source():
     """La valeur d'origine reste disponible, éclatée ou non."""
     media, _ = transforms.build_media(media_source())
