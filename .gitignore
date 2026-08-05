@@ -1,4 +1,5 @@
 # === Données client — ne jamais committer ===
+# Refus par défaut, quel que soit l'emplacement du fichier.
 data/raw/
 *.csv
 *.xlsx
@@ -6,9 +7,15 @@ data/raw/
 *.db
 *.sqlite
 
-# === Documents de travail contenant des chiffres client ===
-# À sortir de l'ignore une fois réécrits sur un jeu de données neutre.
-docs/
+# Exception : les jeux d'essai des tests, inventés et neutres par construction.
+# Sans cette ligne, le harnais d'évaluation (E5) verrait ses fichiers de référence
+# ignorés en silence — un fichier absent du dépôt sans qu'aucun message ne le dise.
+!tests/**/*.csv
+
+# === Documents contenant des chiffres client ===
+# Seul `docs/prive/` est exclu. Le reste de `docs/` est versionné : décisions de
+# conception et rationnel de schéma, écrits sans aucune valeur issue des données.
+docs/prive/
 *.pdf
 
 # === Secrets ===
