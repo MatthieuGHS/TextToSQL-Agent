@@ -43,6 +43,28 @@ def texte(con) -> str:
     return prompt.construire(con)
 
 
+@pytest.fixture(scope="module")
+def genere(con) -> str:
+    """La seule partie que la base est censée garantir.
+
+    Les tests de cohérence portent sur elle et non sur le prompt entier : chercher une
+    valeur dans le texte complet la trouverait aussi dans un fichier écrit à la main, et
+    le test resterait vert alors même que ce fichier serait devenu faux.
+    """
+    return schema.generer(con)
+
+
+# Longueur minimale d'un préfixe mis en cache, en tokens. Elle dépend du modèle et n'est
+# pas monotone d'une génération à l'autre (512, 1 024, 2 048 ou 4 096 selon le modèle) :
+# cette constante appartient donc au choix de modèle et devra le suivre quand E4 le figera.
+SEUIL_CACHE_TOKENS = 1024  # claude-sonnet-5
+
+# Un token vaut *au plus* ~4 caractères sur du français mêlé de Markdown et de SQL. C'est
+# bien ce sens-là qu'il faut : « un caractère vaut au plus un token » majore le nombre de
+# tokens et ne prouverait donc rien sur un plancher.
+CARACTERES_PAR_TOKEN = 4
+
+
 def valeurs(con: duckdb.DuckDBPyConnection, table: str, colonne: str) -> list[str]:
     return [
         str(r[0])
@@ -56,19 +78,42 @@ def valeurs(con: duckdb.DuckDBPyConnection, table: str, colonne: str) -> list[st
 
 
 @pytest.mark.parametrize("colonne", schema.COLONNES_ENUMEREES)
-def test_toutes_les_valeurs_de_la_base_sont_annoncees(con, texte, colonne):
+def test_toutes_les_valeurs_de_la_base_sont_annoncees(con, genere, colonne):
     """Le prompt n'omet rien.
 
     C'est le test qui protège de la péremption : si un extrait futur ajoute un canal, il
     échoue ici — avant que l'agent n'affirme de bonne foi que ce canal n'existe pas.
+
+    Il porte sur la partie **générée** seulement. Cherché dans le prompt entier, il
+    passerait au vert dès qu'un fichier écrit à la main mentionne la valeur au détour
+    d'une phrase — c'est-à-dire précisément quand la section générée a cessé de faire
+    son travail.
     """
     presentes = valeurs(con, "media", colonne)
     if len(presentes) > schema.SEUIL_ENUMERATION:
         pytest.skip(f"{colonne} n'est pas énumérée (trop de valeurs)")
 
-    manquantes = [v for v in presentes if v not in texte]
+    manquantes = [v for v in presentes if v not in genere]
 
-    assert not manquantes, f"absentes du prompt : {manquantes}"
+    assert not manquantes, f"absentes de la partie générée : {manquantes}"
+
+
+@pytest.mark.parametrize("colonne", schema.COLONNES_ENUMEREES)
+def test_les_enumerations_sont_triees(con, genere, colonne):
+    """Le tri est ce qui rend le préfixe reproductible, donc cacheable.
+
+    C'est le test qui manquait : comparer deux constructions successives ne prouve rien,
+    parce que dans un même processus DuckDB rendra très probablement le même ordre même
+    sans `ORDER BY`. Celui-ci échoue si on retire le tri.
+    """
+    prefixe = f"- `{colonne}` ("
+    ligne = next((l for l in genere.splitlines() if l.startswith(prefixe)), None)
+    if ligne is None:
+        pytest.skip(f"{colonne} n'est pas énumérée")
+
+    annoncees = re.search(r": (.+)$", ligne).group(1).split(", ")
+
+    assert annoncees == sorted(annoncees)
 
 
 def test_le_prompt_n_invente_aucun_canal(con, texte):
@@ -83,10 +128,48 @@ def test_le_prompt_n_invente_aucun_canal(con, texte):
     assert annonces == set(valeurs(con, "media", "channel"))
 
 
-def test_les_metriques_de_contexte_sont_completes(con, texte):
-    manquantes = [m for m in valeurs(con, "contexte", "metric") if f"`{m}`" not in texte]
+def test_les_metriques_de_contexte_sont_completes(con, genere):
+    manquantes = [m for m in valeurs(con, "contexte", "metric") if f"`{m}`" not in genere]
 
     assert not manquantes, f"métriques de contexte absentes : {manquantes}"
+
+
+def test_le_tableau_des_homonymes_reste_complet(con):
+    """Le piège n° 1 du jeu de données, gardé par un test plutôt que par la vigilance.
+
+    Le tableau est écrit à la main parce que `compteurs` ne se dérive pas — le lien passe
+    par le fait qu'une table nommée `kpi_compteurs` compte des compteurs, ce qu'aucune
+    requête ne dira. Mais la *part dérivable* se vérifie : toute variable de `contexte`
+    qui porte le nom d'une colonne, d'une table ou d'une métrique de performance des deux
+    autres tables est une collision, et doit figurer au tableau.
+
+    Ce test passe au rouge le jour où un rafraîchissement introduit une quatrième
+    collision — c'est-à-dire au moment exact où le piège s'aggrave sans prévenir.
+    """
+    metriques = set(valeurs(con, "contexte", "metric"))
+    noms_ailleurs = (
+        {
+            r[0]
+            for r in con.execute(
+                "SELECT column_name FROM duckdb_columns() "
+                "WHERE table_name IN ('media', 'kpi_compteurs')"
+            ).fetchall()
+        }
+        | set(valeurs(con, "media", "performance_metric"))
+        | {r[0] for r in con.execute("SELECT table_name FROM duckdb_tables()").fetchall()}
+    )
+
+    non_signalees = (metriques & noms_ailleurs) - set(schema.HOMONYMES)
+
+    assert not non_signalees, (
+        f"homonymies entre tables non signalées au modèle : {sorted(non_signalees)}. "
+        f"Une somme entre tables sur ces variables donnerait un résultat faux mais "
+        f"crédible."
+    )
+    assert set(schema.HOMONYMES) <= metriques, (
+        f"le tableau annonce des variables de contexte qui n'existent plus : "
+        f"{sorted(set(schema.HOMONYMES) - metriques)}"
+    )
 
 
 def test_les_bornes_temporelles_sont_exactes(con, texte):
@@ -109,17 +192,72 @@ def test_les_couples_canal_metrique_sont_exacts(con, texte):
         assert f"`{metric}` : {canaux}" in texte
 
 
-def test_l_annonceur_est_nomme(con, texte):
-    """Sans lui, rien ne distingue nos un montant à sept chiffres de ceux d'un concurrent dans `contexte`."""
+def test_l_annonceur_est_nomme(con, genere):
+    """Sans lui, rien ne distingue les investissements suivis de ceux d'un concurrent
+    présent dans `contexte`, dont les ordres de grandeur sont voisins."""
     (annonceur,) = valeurs(con, "media", "brand_name")
 
-    assert f"`{annonceur}`" in texte
+    assert f"`{annonceur}`" in genere
 
 
-def test_les_colonnes_a_forte_cardinalite_sont_signalees(texte):
-    """Le modèle doit savoir qu'il regarde un extrait, pas une liste complète."""
-    assert "`support` — N valeurs distinctes" in texte
-    assert "SELECT DISTINCT" in texte
+def test_les_colonnes_a_forte_cardinalite_sont_signalees(con, genere):
+    """Le modèle doit savoir qu'il regarde un extrait, pas une liste complète.
+
+    Le compte est lu dans la base, jamais écrit en dur : asserter une volumétrie ferait
+    d'un rafraîchissement légitime une panne de suite de tests, alors que rien n'est
+    cassé. C'est la même distinction invariant / volumétrie que côté ETL.
+    """
+    for colonne in ("support", "type"):
+        (n,) = con.execute(f"SELECT COUNT(DISTINCT {colonne}) FROM media").fetchone()
+
+        assert f"`{colonne}` — {n} valeurs distinctes" in genere
+
+    assert "SELECT DISTINCT" in genere
+
+
+# --- 1 bis. Cohérence des affirmations écrites à la main ------------------------------
+#
+# La partie générée ne peut pas mentir : elle vient de la base. La partie écrite, si —
+# et c'est elle que personne ne relit après un rafraîchissement. Ces tests couvrent les
+# affirmations de `metier.md` qu'une requête peut trancher.
+
+
+def test_l_affirmation_sur_le_canal_sans_cout_reste_vraie(con):
+    """`metier.md` explique au modèle qu'un seul canal est `owned`, ce qui justifie que
+    son coût soit NULL sans être gratuit.
+
+    Si un extrait futur en ajoute un second, la phrase devient fausse et le modèle
+    expliquera de travers un NULL qui n'a plus le même sens.
+    """
+    owned = [
+        r[0]
+        for r in con.execute(
+            "SELECT DISTINCT channel FROM media WHERE category = 'owned' ORDER BY 1"
+        ).fetchall()
+    ]
+    metier = (prompt.DOSSIER / "metier.md").read_text(encoding="utf-8")
+
+    assert len(owned) == 1, f"metier.md n'en décrit qu'un seul, la base en a {owned}"
+    assert f"`{owned[0]}`" in metier
+
+
+def test_metier_ne_decrit_aucune_variable_de_contexte_inexistante(con):
+    """L'inverse du test de complétude, et le plus grave des deux.
+
+    Un prompt qui omet une variable rend le modèle aveugle ; un prompt qui en invente une
+    le rend affirmatif à tort — il construira un `WHERE metric = …` qui ne renvoie rien
+    et pourra conclure à une absence dans les données.
+    """
+    reelles = set(valeurs(con, "contexte", "metric")) | set(
+        valeurs(con, "contexte", "brand_name")
+    )
+    metier = (prompt.DOSSIER / "metier.md").read_text(encoding="utf-8")
+    section = metier.split("**Variables de `contexte`.**")[1].split("## ")[0]
+    citees = set(re.findall(r"`([a-z_0-9]+)`", section))
+
+    assert citees <= reelles, (
+        f"décrites dans metier.md mais absentes de la base : {sorted(citees - reelles)}"
+    )
 
 
 # --- 2. Stabilité (le préfixe est mis en cache) ---------------------------------------
@@ -128,10 +266,16 @@ def test_les_colonnes_a_forte_cardinalite_sont_signalees(texte):
 def test_deux_constructions_donnent_les_memes_octets(con):
     """Un préfixe instable ne serait jamais mis en cache — sans erreur, à dix fois le prix.
 
-    `SELECT DISTINCT` ne garantit aucun ordre : sans `ORDER BY`, ce test échouerait
-    par intermittence.
+    Sur **deux connexions distinctes**, et non deux appels sur la même : le cache est une
+    correspondance d'octets entre deux exécutions du programme, pas entre deux lignes
+    d'une même fonction. La garantie de fond est ailleurs, dans
+    `test_les_enumerations_sont_triees` — celui-ci n'en est que le contrôle de bout en bout.
     """
-    assert prompt.construire(con) == prompt.construire(con)
+    autre = connexion.ouvrir()
+    try:
+        assert prompt.construire(con) == prompt.construire(autre)
+    finally:
+        autre.close()
 
 
 def test_aucun_element_variable_dans_le_prompt(texte):
@@ -232,9 +376,17 @@ def test_aucune_valeur_inexistante_n_est_nommee(texte):
 
 
 def test_le_prompt_est_au_dessus_du_seuil_de_cache(texte):
-    """Approximation prudente, la mesure exacte est faite hors tests (elle coûte un appel).
+    """Approximation prudente ; la mesure exacte est faite hors tests, elle coûte un appel
+    API — et le comptage du connecteur a ses propres pièges (voir `docs/decisions.md`).
 
-    Le seuil de Sonnet 5 est de 1 024 tokens. Un caractère valant au plus un token, un
-    prompt de plus de 4 096 caractères est nécessairement au-dessus.
+    Le raisonnement va dans ce sens et pas dans l'autre : c'est parce qu'un token vaut au
+    plus ~4 caractères qu'un texte assez long est nécessairement assez riche en tokens.
+    Partir de « un caractère vaut au plus un token » majorerait le nombre de tokens, ce
+    qui ne dirait rien d'un plancher.
     """
-    assert len(texte) > 4096, f"{len(texte)} caractères — risque de passer sous le seuil"
+    plancher = SEUIL_CACHE_TOKENS * CARACTERES_PAR_TOKEN
+
+    assert len(texte) > plancher, (
+        f"{len(texte)} caractères pour un plancher de {plancher} — le préfixe risque de "
+        f"passer sous le seuil de mise en cache et d'être repayé plein tarif."
+    )

@@ -35,9 +35,18 @@ logger = logging.getLogger(__name__)
 LIMITE_LIGNES = 200
 DELAI_SECONDES = 15.0
 
-# Seul type d'instruction autorisé. `WITH … SELECT`, `DESCRIBE`, `SUMMARIZE` et `PRAGMA`
-# sont tous typés SELECT par le parseur — lectures sans danger une fois l'accès externe
-# fermé. Tout le reste (DROP, INSERT, ATTACH, INSTALL, COPY, SET, CALL…) est refusé.
+# Borne d'affichage, en caractères. Le plafond en lignes borne ce que la base renvoie ;
+# celui-ci borne ce que ça coûte. 200 lignes larges pèsent plusieurs milliers de tokens,
+# payés sur chaque question qui les produit — c'est la partie volatile du contexte, celle
+# que le cache ne rattrape pas.
+BUDGET_CARACTERES = 8000
+
+# Seul type d'instruction autorisé. `WITH … SELECT`, `DESCRIBE` et `SUMMARIZE` sont
+# typés SELECT par le parseur — lectures de métadonnées sans danger une fois l'accès
+# externe fermé, et vérifiées comme telles. `PRAGMA` l'est aussi, mais échoue en pratique
+# à l'enveloppement de plafonnement (`PRAGMA x(...)` n'est pas une source de données
+# valide) : il est donc refusé de fait, sans qu'on ait eu à l'interdire.
+# Tout le reste (DROP, INSERT, ATTACH, INSTALL, COPY, SET, CALL…) est refusé par le type.
 TYPE_AUTORISE = duckdb.StatementType.SELECT
 
 
@@ -105,21 +114,27 @@ def _colonnes_de(con: duckdb.DuckDBPyConnection, table: str) -> list[str]:
 
 
 def _sans_enveloppe(message: str, query: str) -> str:
-    """Retire l'enveloppe de plafonnement des extraits cités par le moteur.
+    """Retire de l'erreur tout ce que le modèle n'a pas écrit.
 
-    DuckDB recopie la requête fautive dans son message. Telle quelle, elle contiendrait
-    le `SELECT * FROM (…) LIMIT n` que nous avons ajouté — le modèle verrait une requête
-    qu'il n'a pas écrite et pourrait chercher à corriger un LIMIT qui n'est pas de lui.
+    DuckDB recopie dans son message la ligne fautive de la requête **qu'il a exécutée**,
+    c'est-à-dire l'enveloppe de plafonnement. Selon l'erreur, l'extrait cité tombe sur la
+    requête du modèle ou sur le `SELECT * FROM (…) LIMIT n` que nous avons ajouté — et
+    dans ce second cas il l'enverrait corriger une clause qui n'est pas de lui.
+
+    Plutôt que de deviner à quel cas on a affaire, on retire tous les extraits et on
+    rappelle sa requête telle qu'il l'a envoyée. Il n'y a alors rien à mal interpréter.
     """
-    lignes = []
+    garde, cite = [], False
     for ligne in message.splitlines():
-        if ligne.startswith("LINE ") and query.split()[0] in ligne:
-            lignes.append(f"Requête : {' '.join(query.split())}")
-        elif ligne.strip().startswith("^"):
-            continue
-        else:
-            lignes.append(ligne)
-    return "\n".join(lignes).strip()
+        if ligne.startswith("LINE "):
+            cite = True
+        elif not ligne.strip().startswith("^"):
+            garde.append(ligne)
+
+    texte = "\n".join(garde).strip()
+    if cite:
+        texte += f"\nRequête : {' '.join(query.split())}"
+    return texte
 
 
 def _enrichir_erreur(
@@ -176,11 +191,16 @@ def _executer_borne(
     if fil.is_alive():
         con.interrupt()
         fil.join(timeout=5.0)
-        raise SqlTropLong(
+        trop_long = SqlTropLong(
             f"Requête interrompue après {delai:.0f} s. Elle croise probablement deux "
             f"tables sans condition de jointure, ou balaie trop de lignes : ajouter une "
             f"condition sur step_date, ou agréger."
         )
+        # Si le fil n'a pas rendu la main, il exécute encore *sur cette connexion*.
+        # La refermer sous lui ne lève pas d'exception : ça plante le moteur. Mieux vaut
+        # laisser filer une connexion que faire tomber le processus.
+        trop_long.connexion_liberee = not fil.is_alive()
+        raise trop_long
 
     if "erreur" in resultat:
         erreur = resultat["erreur"]
@@ -199,8 +219,11 @@ def run_sql(
     """Valide, borne et exécute une requête de lecture.
 
     Args:
-        con: connexion déjà ouverte. Si absente, une connexion durcie est ouverte pour
-            l'appel puis refermée — pratique en ligne de commande, coûteux en boucle.
+        con: connexion déjà ouverte, **qui doit venir de `connexion.ouvrir()`** — la
+            couche 1 (accès externe fermé) est une prémisse de ce module, pas quelque
+            chose qu'il vérifie. `tests/test_db_point_unique.py` en fait une propriété
+            du dépôt. Si absente, une connexion durcie est ouverte pour l'appel puis
+            refermée — pratique en ligne de commande, coûteux en boucle.
 
     Raises:
         SqlRefuse: la requête n'est pas une lecture unique.
@@ -211,19 +234,30 @@ def run_sql(
 
     propre = con is None
     con = con or connexion.ouvrir()
+    fermable = True
     try:
         # Envelopper plutôt qu'injecter : un LIMIT ajouté à la main casserait sur une
         # requête qui en contient déjà un, ou dont la dernière clause est un ORDER BY
         # dans une CTE. `limite + 1` sert à détecter la troncature — une troncature
         # silencieuse ferait croire au modèle qu'il a tout vu, et il énoncerait un
         # total faux.
-        enveloppe = f"SELECT * FROM ({query.rstrip().rstrip(';')}) LIMIT {limite + 1}"
+        #
+        # Les sauts de ligne autour de la requête ne sont pas cosmétiques : un modèle
+        # termine souvent son SQL par un commentaire `-- …`, et sans eux la parenthèse
+        # fermante et le LIMIT se retrouveraient commentés. L'erreur produite était une
+        # erreur de syntaxe sur une requête pourtant correcte, sans rien pour se
+        # reprendre.
+        interieur = query.rstrip().rstrip(";")
+        enveloppe = f"SELECT * FROM (\n{interieur}\n) LIMIT {limite + 1}"
 
         debut = time.monotonic()
         colonnes, lignes = _executer_borne(con, enveloppe, delai, query)
         duree_ms = int((time.monotonic() - debut) * 1000)
+    except SqlTropLong as exc:
+        fermable = getattr(exc, "connexion_liberee", True)
+        raise
     finally:
-        if propre:
+        if propre and fermable:
             con.close()
 
     tronque = len(lignes) > limite
@@ -236,12 +270,21 @@ def run_sql(
     return ResultatSql(colonnes, lignes[:limite], tronque, duree_ms)
 
 
-def en_texte(resultat: ResultatSql, largeur_max: int = 40) -> str:
+def en_texte(
+    resultat: ResultatSql,
+    largeur_max: int = 40,
+    budget: int = BUDGET_CARACTERES,
+) -> str:
     """Rend le résultat lisible par le modèle.
 
     Volontairement séparé de l'exécution : le harnais d'évaluation a besoin des valeurs,
     l'agent d'un tableau. Les mélanger obligerait à analyser du texte pour retrouver des
     nombres.
+
+    Deux bornes, et non une : `LIMITE_LIGNES` borne ce que la base renvoie, `budget`
+    borne ce que l'affichage coûte. Un plafond en lignes ne dit rien du poids réel —
+    200 lignes de deux colonnes et 200 lignes de douze n'ont pas le même prix. Comme la
+    troncature, l'omission est **annoncée** : le modèle doit savoir qu'il n'a pas tout vu.
     """
     if not resultat.lignes:
         return "Résultat vide : aucune ligne ne correspond."
@@ -256,15 +299,27 @@ def en_texte(resultat: ResultatSql, largeur_max: int = 40) -> str:
         for i in range(len(resultat.colonnes))
     ]
 
-    rendu = [
+    entete = [
         " | ".join(c.ljust(largeurs[i]) for i, c in enumerate(resultat.colonnes)),
         "-+-".join("-" * w for w in largeurs),
-        *(" | ".join(c.ljust(largeurs[i]) for i, c in enumerate(l)) for l in lignes),
     ]
+    corps = [" | ".join(c.ljust(largeurs[i]) for i, c in enumerate(l)) for l in lignes]
 
-    if resultat.tronque:
+    restant = budget - sum(len(l) + 1 for l in entete)
+    gardees: list[str] = []
+    for ligne in corps:
+        restant -= len(ligne) + 1
+        if restant < 0 and gardees:  # au moins une ligne, même hors budget
+            break
+        gardees.append(ligne)
+
+    rendu = entete + gardees
+
+    # Un seul message pour les deux causes : la conduite à tenir est la même, et le
+    # modèle n'a pas à savoir laquelle des deux bornes a mordu.
+    if resultat.tronque or len(gardees) < len(corps):
         rendu.append(
-            f"\n({len(resultat.lignes)} premières lignes affichées, il y en a davantage — "
+            f"\n({len(gardees)} premières lignes affichées, il y en a davantage — "
             f"affiner la requête ou agréger avant de conclure.)"
         )
     return "\n".join(rendu)

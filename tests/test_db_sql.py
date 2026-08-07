@@ -154,6 +154,35 @@ def test_point_virgule_final_tolere(con):
     assert r.lignes[0][0] == 3
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT channel, cost FROM media -- total par canal\n",
+        "SELECT channel, cost FROM media -- total par canal",
+        "SELECT COUNT(*) FROM media\n-- on ne compte que l'annonceur",
+    ],
+)
+def test_commentaire_final_ne_casse_pas_la_requete(con, query):
+    """Un modèle commente son SQL en fin de ligne — c'est un motif courant, pas un cas
+    tordu.
+
+    Sans saut de ligne dans l'enveloppe, la parenthèse fermante et le `LIMIT` se
+    retrouvaient commentés : le modèle recevait une erreur de syntaxe sur une requête
+    pourtant correcte, et rien pour s'en sortir.
+    """
+    assert len(sql.run_sql(query, con)) > 0
+
+
+def test_describe_passe(con):
+    """Typé SELECT, et utile à un agent qui veut vérifier une colonne."""
+    assert len(sql.run_sql("DESCRIBE media", con)) == 3
+
+
+def test_commentaire_seul_refuse(con):
+    with pytest.raises((sql.SqlInvalide, sql.SqlRefuse)):
+        sql.run_sql("-- rien que du commentaire", con)
+
+
 def test_ouvre_sa_connexion_si_besoin(base, monkeypatch):
     """En ligne de commande, on ne veut pas avoir à gérer la connexion soi-même."""
     monkeypatch.setattr(connexion, "chemin_base", lambda: base)
@@ -266,3 +295,27 @@ def test_rendu_des_nulls(con):
     texte = sql.en_texte(sql.run_sql("SELECT NULL AS vide", con))
 
     assert "NULL" in texte
+
+
+def test_rendu_borne_en_caracteres(con):
+    """Le plafond en lignes ne borne pas le coût : 200 lignes larges pèsent lourd.
+
+    Contre-épreuve : sans budget, le même résultat dépasse la borne. Un test qui ne
+    montrerait que le cas borné ne prouverait pas que la borne sert à quelque chose.
+    """
+    resultat = sql.run_sql("SELECT n, n * 1000 AS large FROM range(200) t(n)", con)
+
+    borne = sql.en_texte(resultat, budget=400)
+    libre = sql.en_texte(resultat, budget=10**6)
+
+    assert len(borne) <= 400 + 200  # la ligne d'annonce s'ajoute après la coupe
+    assert len(libre) > 400
+    assert "davantage" in borne
+    assert "davantage" not in libre
+
+
+def test_rendu_garde_une_ligne_meme_hors_budget(con):
+    """Un budget absurde ne doit pas produire un tableau sans données."""
+    texte = sql.en_texte(sql.run_sql("SELECT * FROM media", con), budget=1)
+
+    assert "tv" in texte or "sea" in texte

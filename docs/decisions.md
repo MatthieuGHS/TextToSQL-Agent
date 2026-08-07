@@ -146,6 +146,15 @@ base délibérément corrompue.
 Contrôle occasionnel utile : neutraliser volontairement un contrôle et vérifier que le test
 correspondant échoue. Un test qui reste vert dans ce cas ne prouve rien.
 
+**La règle s'applique aux tests eux-mêmes, et c'est là qu'on l'oublie.** Trois exemples
+trouvés en relecture, tous dans `tests/` : un test de déterminisme qui comparait deux appels
+dans le même processus — il aurait passé sans le tri qu'il prétendait garder ; une assertion
+sur une volumétrie écrite en dur, qui fait d'un rafraîchissement légitime une panne de suite
+de tests ; un raisonnement de majoration pris à l'envers, dont la conclusion était juste par
+accident. L'attention se porte naturellement sur le code testé, pas sur le test. Le harnais
+d'évaluation étant lui aussi du code de test — et celui qui produira les chiffres montrés au
+client — la vigilance doit y être la même.
+
 ---
 
 ## Accès à la base
@@ -182,9 +191,24 @@ Ajouter une clause de limite à la fin d'une requête casse dès qu'elle en cont
 ou qu'elle se termine par un tri dans une sous-requête. L'envelopper comme sous-requête
 fonctionne toujours : toute requête valide est une source de données valide.
 
+L'enveloppe met la requête **sur sa propre ligne**. Ce détail n'en est pas un : un modèle
+termine souvent son SQL par un commentaire `-- …`, et sans saut de ligne la parenthèse
+fermante et la clause de limite se retrouvent commentées. La requête du modèle était
+correcte, l'erreur renvoyée parlait de syntaxe, et rien dans le message ne permettait de
+comprendre. Un défaut de ce genre ne se voit pas en relisant : il se voit en exécutant ce
+que le modèle écrit réellement.
+
 On demande une ligne de plus que la limite, ce qui permet de détecter la troncature — et
 elle est **annoncée dans le résultat**. Une troncature silencieuse est pire qu'une erreur :
 le modèle croirait avoir tout vu et énoncerait un total faux avec assurance.
+
+### Deux bornes sur un résultat : ce qu'il contient, ce qu'il coûte
+
+Le plafond en lignes borne ce que la base renvoie. Il ne dit rien du prix : deux cents
+lignes de deux colonnes et deux cents lignes de douze ne pèsent pas la même chose, et ce
+poids-là est payé à chaque question, dans la partie du contexte que le cache ne rattrape
+pas. Le rendu est donc borné une seconde fois, en caractères, et l'omission est annoncée
+au même titre que la troncature.
 
 ### Les messages d'erreur font partie du produit
 
@@ -214,6 +238,21 @@ Bénéfice second, inhabituel pour un prompt : il devient **vérifiable contre s
 tests contrôlent que chaque valeur énoncée existe et que chaque valeur de la base est
 énoncée. Ils échouent au lendemain d'un rafraîchissement, avant que l'agent ne se mette à
 mentir.
+
+Deux précautions, apprises en relecture, sans lesquelles cette garantie est fictive :
+
+**Ces tests portent sur la partie générée seule.** Cherchée dans le prompt entier, une
+valeur se trouve aussi dans une phrase écrite à la main — et le test passe au vert
+précisément quand la génération a cessé de faire son travail.
+
+**Les affirmations écrites qu'une requête peut trancher ont leurs propres tests.** La
+frontière généré / écrit sépare deux origines, pas deux niveaux d'exigence : « un seul canal
+est *owned*, d'où son coût nul » est une phrase de prompt, mais c'est un fait sur les
+données, et un extrait futur peut la rendre fausse en silence. Ce qu'on ne peut pas générer,
+on le garde par un test.
+
+Il reste des affirmations que ni l'un ni l'autre n'atteint — le sens d'un GRP, ce que le jeu
+de données ne permet pas. Celles-là ne périment pas avec les données : elles se relisent.
 
 Le texte écrit vit dans des fichiers Markdown hors du code : il se relit et se corrige sans
 toucher au langage de programmation, et un diff reste lisible.

@@ -11,9 +11,15 @@ Le prompt est fait de deux matières :
 Le texte écrit vit dans des fichiers Markdown plutôt que dans des chaînes Python : il se
 relit et se corrige sans toucher au code, et un `git diff` reste lisible.
 
-**Ordre des sections.** Du plus stable au plus volatile, ce qui prépare un éventuel second
-point de coupe de cache. L'ordre a aussi un effet pédagogique : le modèle lit le périmètre
-des tables avant leurs valeurs, donc avant de pouvoir écrire une agrégation fausse.
+**Ordre des sections.** Il est pédagogique, pas économique : le modèle lit le périmètre des
+tables avant leurs valeurs, donc avant de pouvoir écrire une agrégation fausse.
+
+Ce n'est délibérément *pas* un ordre du plus stable au plus volatile — ce serait l'inverse,
+la partie générée étant la seule qui bouge à un rafraîchissement des données, alors que les
+`.md` ne changent que sous une main humaine. Poser un jour un second point de coupe de cache
+demanderait donc de réordonner d'abord, et de mesurer : tout le prompt tient aujourd'hui
+dans un seul bloc, et le découper pour économiser sur une partie qui ne change presque
+jamais coûterait plus en complexité qu'en tokens.
 
 **Déterminisme.** Ce texte est le préfixe mis en cache. Il ne doit contenir ni horodatage,
 ni identifiant variable — voir `tests/test_prompt.py`, qui vérifie que deux constructions

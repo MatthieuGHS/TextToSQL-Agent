@@ -25,18 +25,35 @@ import duckdb
 TABLES = ("media", "kpi_compteurs", "contexte")
 
 # Au-delà de ce nombre de valeurs distinctes, une colonne n'est pas énumérée : le modèle
-# la découvre par `SELECT DISTINCT`. Le seuil est un arbitrage de coût — lister les
-# les valeurs de `support` coûterait plusieurs centaines de tokens sur chaque question, contre un aller-retour
-# d'outil sur les seules questions concernées.
+# la découvre par `SELECT DISTINCT`. Le seuil est un arbitrage de coût — énumérer une
+# colonne à forte cardinalité se paie sur *chaque* question, alors que la découvrir ne se
+# paie qu'un aller-retour d'outil, sur les seules questions concernées. La mesure qui a
+# fixé ce seuil est consignée hors dépôt, avec les chiffres.
 SEUIL_ENUMERATION = 20
 
 # Colonnes de `media` dont les valeurs sont énumérées si elles restent sous le seuil.
-# `type` en est volontairement absente : ses nombreuses valeurs mêlent deux formes, et les quatre
+# `type` en est volontairement absente : ses valeurs mêlent deux formes, et les quatre
 # colonnes qui en dérivent la décrivent mieux.
 COLONNES_ENUMEREES = (
     "entity", "category", "typology", "channel",
     "performance_metric", "objectif", "format",
 )
+
+# Variables de `contexte` qui portent le même nom qu'une donnée des deux autres tables,
+# avec un périmètre différent. C'est le seul piège du jeu de données qui produit une
+# réponse fausse *mais crédible*.
+#
+# Pourquoi écrit et non généré, alors que la règle du module est l'inverse : deux de ces
+# trois collisions se dérivent (`cost` est une colonne de `media`, `grp` une valeur de
+# `performance_metric`), mais `compteurs` non — le lien passe par le fait qu'une table
+# nommée `kpi_compteurs` compte des compteurs, ce qu'aucune requête ne dira. La partie
+# dérivable est donc couverte par un test de complétude (`tests/test_prompt.py`) qui
+# passe au rouge si un rafraîchissement introduit une quatrième collision.
+HOMONYMES = {
+    "cost": ("l'annonceur (`media.cost`)", "les concurrents"),
+    "grp": ("l'annonceur (`media.performance`)", "les concurrents"),
+    "compteurs": ("l'annonceur (`kpi_compteurs`)", "les fournisseurs du marché"),
+}
 
 
 def _lignes(con: duckdb.DuckDBPyConnection, sql: str) -> list[tuple]:
@@ -203,14 +220,16 @@ def perimetres(con: duckdb.DuckDBPyConnection) -> str:
             "",
             *(f"- `{metric}` : {marques}" for metric, marques in metriques),
             "",
-            "**Trois de ces variables portent le même nom que des données des deux autres "
-            "tables, avec un périmètre différent et des ordres de grandeur voisins :**",
+            f"**{len(HOMONYMES)} de ces variables portent le même nom que des données "
+            "des deux autres tables, avec un périmètre différent et des ordres de "
+            "grandeur voisins :**",
             "",
             "| Variable | Dans `media` / `kpi_compteurs` | Dans `contexte` |",
             "|---|---|---|",
-            "| `cost` | l'annonceur (`media.cost`) | les concurrents |",
-            "| `grp` | l'annonceur (`media.performance`) | les concurrents |",
-            "| `compteurs` | l'annonceur (`kpi_compteurs`) | les fournisseurs du marché |",
+            *(
+                f"| `{nom}` | {ici} | {la} |"
+                for nom, (ici, la) in sorted(HOMONYMES.items())
+            ),
             "",
             "Ne jamais additionner ces colonnes entre tables : elles décrivent des acteurs "
             "différents. Toujours indiquer dans la réponse de quel périmètre il s'agit.",

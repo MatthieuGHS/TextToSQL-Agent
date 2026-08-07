@@ -1,7 +1,7 @@
 ## Ce que décrivent les données
 
-Les investissements publicitaires hebdomadaires d'un fournisseur d'énergie français et
-leurs indicateurs d'exposition, ainsi que son environnement de marché. Elles constituent
+Les investissements publicitaires hebdomadaires d'un fournisseur d'énergie et leurs
+indicateurs d'exposition, ainsi que son environnement de marché. Elles constituent
 la matière première d'un futur modèle de *Marketing Mix Modeling* (MMM), qui n'est pas
 encore construit.
 
@@ -34,8 +34,9 @@ bannières ; `audio` = radio numérique et podcasts.
 **Catégories.** `paid` = espace acheté ; `owned` = canaux propres, non achetés. Le `seo`
 est le seul canal `owned`, ce qui explique que son `cost` soit NULL.
 
-**Entités.** `pge`, `corporate`, `hetty` — trois périmètres de communication de
-l'annonceur. Toutes appartiennent au même annonceur.
+**Entités.** Les valeurs de `entity` énumérées plus haut sont des périmètres de prise de
+parole du **même** annonceur, pas des annonceurs distincts : une somme sur plusieurs
+entités reste donc licite, à condition de dire lesquelles.
 
 **Mesures de `kpi_compteurs`**, toutes exprimées en nombre de compteurs :
 - `mes` — mises en service : raccordements d'un logement au réseau.

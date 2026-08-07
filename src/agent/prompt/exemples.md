@@ -86,3 +86,7 @@ ORDER BY brand_name, channel
 Dans `contexte`, une ligne porte **une seule variable** : le filtre sur `metric` n'est pas
 optionnel. Sans lui, la requête moyennerait des prix avec des parts de marché et des
 compteurs — des grandeurs sans rapport, dans des unités différentes.
+
+Noter que la borne se calcule sur `MAX(step_date)` **de `contexte`**, pas de `media` : les
+trois tables ne s'arrêtent pas à la même date, et prendre la borne de la mauvaise table
+décale la fenêtre sans rien signaler.
