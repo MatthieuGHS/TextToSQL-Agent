@@ -148,7 +148,99 @@ correspondant échoue. Un test qui reste vert dans ce cas ne prouve rien.
 
 ---
 
+## Accès à la base
+
+### Le moindre privilège plutôt que le filtrage
+
+Ouvrir la base en lecture seule protège **les données**, pas **la machine** : le SQL peut
+encore écrire un fichier sur le disque, en lire un, énumérer un répertoire, installer une
+extension qui ouvrirait ensuite le réseau. Quatre échappatoires mesurées, toutes passantes.
+
+Le réglage qui les ferme agit au niveau du moteur, à l'ouverture de la connexion, et n'est
+pas désactivable depuis le SQL. C'est ce qui le distingue d'un filtre : on ne cherche pas à
+reconnaître ce qui est mauvais, on retire la capacité. Une liste de mots-clés interdits
+aurait donné une fausse impression d'exhaustivité — on n'y pense jamais tous.
+
+Cette distinction vaut d'être tenue : *garde-fou* = inspecter et décider, avec un problème
+de couverture ; *moindre privilège* = ce qui n'est pas accordé est impossible, y compris ce
+à quoi on n'a pas pensé.
+
+### Valider avec le parseur du moteur, pas avec une expression régulière
+
+Une expression régulière se fait berner dans les deux sens : elle laisse passer un
+`DROP` précédé d'un commentaire, et refuse un mot-clé présent dans une chaîne littérale. Le
+parseur du moteur découpe le texte en instructions et donne leur type — c'est exactement le
+code qui exécutera la requête ensuite.
+
+La validation est une **liste blanche** : un seul type d'instruction est autorisé. Elle
+hérite ainsi de la propriété du moindre privilège — ce qui n'est pas explicitement permis
+est refusé.
+
+### Borner en enveloppant, et annoncer la troncature
+
+Ajouter une clause de limite à la fin d'une requête casse dès qu'elle en contient déjà une,
+ou qu'elle se termine par un tri dans une sous-requête. L'envelopper comme sous-requête
+fonctionne toujours : toute requête valide est une source de données valide.
+
+On demande une ligne de plus que la limite, ce qui permet de détecter la troncature — et
+elle est **annoncée dans le résultat**. Une troncature silencieuse est pire qu'une erreur :
+le modèle croirait avoir tout vu et énoncerait un total faux avec assurance.
+
+### Les messages d'erreur font partie du produit
+
+L'agent relit l'erreur pour corriger sa requête et réessayer. Un message inexploitable
+transforme une erreur récupérable en échec. Une colonne inconnue renvoie donc la liste
+réelle des colonnes de la table visée, et un refus dit ce qui est permis.
+
+Deux règles de rédaction : ne jamais expliquer *pourquoi* en termes de sécurité — ça
+apprendrait à contourner ; et ne jamais montrer au modèle une requête qu'il n'a pas écrite —
+l'enveloppe de plafonnement est retirée des extraits cités, sinon il chercherait à corriger
+une clause qui n'est pas de lui.
+
 ## Agent
+
+### Générer la description des données, écrire ce qu'elles signifient
+
+Un prompt écrit à la main énonce des faits — liste des valeurs possibles, bornes
+temporelles, métriques existantes — qui deviennent faux au premier rafraîchissement de
+l'extrait. L'agent affirmerait alors, de bonne foi, qu'une valeur existe alors qu'elle a
+disparu.
+
+Ligne de partage : **tout ce qu'une requête SQL peut établir est généré depuis la base** ;
+ce que les données *signifient*, et ce qu'elles ne permettent pas, est écrit à la main —
+aucune requête ne le dira.
+
+Bénéfice second, inhabituel pour un prompt : il devient **vérifiable contre sa source**. Les
+tests contrôlent que chaque valeur énoncée existe et que chaque valeur de la base est
+énoncée. Ils échouent au lendemain d'un rafraîchissement, avant que l'agent ne se mette à
+mentir.
+
+Le texte écrit vit dans des fichiers Markdown hors du code : il se relit et se corrige sans
+toucher au langage de programmation, et un diff reste lisible.
+
+### La génération doit être déterministe, sous peine de perdre le cache
+
+Le prompt est le préfixe mis en cache, et le cache est une correspondance d'octets : une
+seule différence, et tout est recalculé au prix fort — sans erreur, sans avertissement.
+
+Or l'ordre des lignes d'une requête n'est pas garanti sans tri explicite. Trois règles :
+trier toute énumération, n'introduire aucun horodatage ni identifiant variable, et
+**tester** que deux constructions successives produisent les mêmes octets. C'est le seul
+moyen de s'en apercevoir avant la facture.
+
+### Les exemples enseignent une forme, jamais un contenu
+
+Quelques exemples question → requête valent mieux qu'un paragraphe pour montrer une
+convention. C'est aussi l'endroit où le sur-apprentissage entre sans se voir : personne ne
+remarque qu'un exemple ressemble à une question du jeu d'évaluation.
+
+Constat fait en les écrivant : les exemples « évidents » **sont** les questions de la
+grille. Les premières idées venues correspondaient à trois d'entre elles. La grille se relit
+donc pour s'en écarter, pas pour s'en inspirer, et les contenus retenus sont délibérément
+orthogonaux.
+
+Chaque exemple s'exécute réellement et renvoie des lignes — un exemple faux enseigne une
+erreur, un exemple vide enseigne le doute. Les deux sont testés.
 
 ### Noyau découplé de l'interface
 

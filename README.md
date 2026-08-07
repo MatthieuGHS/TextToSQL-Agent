@@ -35,37 +35,53 @@ Génère `data/mmm.duckdb` avec trois tables :
 deux autres tables, avec des périmètres différents et des ordres de grandeur voisins. Ne
 jamais les additionner entre tables : la colonne `brand_name` indique de qui l'on parle.
 
-## Utilisation
+## État d'avancement
 
-> À venir — ces commandes ne sont pas encore implémentées (étapes E4 et E9).
+| Brique | État |
+|---|---|
+| ETL et contrat de données | fait |
+| Accès SQL sécurisé | fait |
+| Description des données fournie au modèle | fait |
+| Dispositif de mesure (corpus, assertions, rapport) | outillage prêt |
+| Boucle agentique | à venir |
+| Graphiques · interface | à venir |
 
-```bash
-python -m src.agent.cli "quel est le budget par canal ?"   # ligne de commande
-streamlit run src/app/streamlit_app.py                     # interface web
-```
-
-Seul l'ETL est fonctionnel à ce stade.
+La boucle qui relie le tout n'existe pas encore : il n'y a donc pas de commande pour poser
+une question. Les briques en dessous sont fonctionnelles et testées.
 
 ## Architecture
 
 ```
 src/
 ├── etl/      construction de la base depuis les fichiers sources
-├── db/       connexion en lecture seule + validation des requêtes
-├── agent/    prompt système, boucle agentique, outils
-├── charts/   spécification de graphique + règles de lisibilité
-└── app/      interface Streamlit (coquille mince, sans logique métier)
+│   ├── transforms.py   fonctions pures, testables sans base ni fichier
+│   ├── checks.py       contrat de données
+│   └── build_db.py     orchestration, écriture atomique
+├── db/       seul accès à la base
+│   ├── connexion.py    ouverture en lecture seule et durcie
+│   └── sql.py          run_sql() : valide, borne, exécute
+├── agent/
+│   └── prompt/         description des données : générée + écrite
+├── charts/   (à venir) spécification de graphique + règles de lisibilité
+└── app/      (à venir) interface — coquille mince, sans logique métier
 ```
 
-Le cœur expose `ask(question, history) -> AgentResponse`. L'interface n'est qu'une couche
-de présentation : la remplacer ne touche pas au moteur.
+Le cœur exposera `ask(question, historique) -> AgentResponse`. L'interface n'est qu'une
+couche de présentation : la remplacer ne touche pas au moteur.
+
+**Aucun module n'ouvre la base hors de `src/db/connexion.py`** — vérifié par un test qui
+parcourt les sources. Les protections de `sql.py` reposent sur cette prémisse : lecture
+seule, aucun accès disque ni réseau, une seule instruction de lecture par appel, plafond de
+lignes annoncé, délai maximal.
 
 ## Tests
 
 ```bash
-pytest tests/              # unitaires
-pytest tests/eval/         # harnais d'évaluation (consomme des appels API)
+pytest tests/ -q     # suite complète, ~5 s, aucun appel API
 ```
+
+Le harnais d'évaluation (`tests/eval/`) fournit le corpus, les assertions et le rapport ; il
+consommera des appels API une fois la boucle agentique en place.
 
 ## Conventions
 
