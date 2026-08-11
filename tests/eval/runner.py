@@ -18,23 +18,37 @@ rend exerçable avec un bouchon avant que l'agent existe.
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
+import logging
 import pathlib
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
-from typing import Protocol
+from typing import Protocol, Sequence
 
 import duckdb
 
+from src.agent.reponse import Arret
 from tests.eval.assertions import Resultat, Verdict
 from tests.eval.corpus import ASSERTIONS_UNIVERSELLES, Cas
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class ReponseAgent:
     resultat: Resultat
     usage: dict = field(default_factory=dict)
+
+
+class ErreurApi(Exception):
+    """Le service de modèle n'a pas répondu.
+
+    Définie ici et non chez l'adaptateur parce qu'elle fait partie du contrat : c'est la
+    seule chose qu'un agent a le droit de lever, et le runner sait quoi en faire. Toute
+    autre exception traverse et arrête la campagne — c'est voulu.
+    """
 
 
 class Agent(Protocol):
@@ -112,12 +126,15 @@ def executer(
     k: int = 3,
     cache: Cache | None = None,
     a_blanc: bool = False,
+    ecartees: list[str] | None = None,
 ) -> list[Execution]:
     """Joue le corpus k fois et vérifie les assertions.
 
     Args:
         a_blanc: n'appelle jamais l'agent. Une exécution absente du cache est ignorée,
             ce qui permet d'itérer sur les assertions sans repayer le corpus.
+        ecartees: reçoit les questions dont l'appel a échoué côté service. Une liste et
+            non un compteur : savoir *lesquelles* permet de les rejouer.
     """
     executions: list[Execution] = []
 
@@ -131,7 +148,17 @@ def executer(
             elif a_blanc:
                 continue
             else:
-                reponse = agent(c.question)
+                try:
+                    reponse = agent(c.question)
+                except ErreurApi:
+                    # Écartée, pas comptée en échec : une panne de service n'est pas un
+                    # défaut de l'agent, et l'inscrire au score le ferait varier avec la
+                    # météo de l'infrastructure. Rien n'est mis en cache non plus — sinon
+                    # la panne se figerait dans la mesure et se rejouerait à blanc.
+                    logger.warning("appel écarté · %s", c.question[:80])
+                    if ecartees is not None:
+                        ecartees.append(c.question)
+                    continue
                 if cache:
                     cache.ecrire(agent, c.question, i, reponse)
 
@@ -197,24 +224,89 @@ def par_question(executions: list[Execution]) -> dict[str, Score]:
 
 
 def cout(executions: list[Execution]) -> dict[str, float]:
-    """Coût cumulé et taux de lecture de cache.
+    """Coût cumulé, par question, et taux de lecture de cache.
 
     Piège mesuré au lot 0 : le champ « tokens d'entrée » du connecteur est un **total**
     (caché compris), celui de l'API brute est le **reste non caché**. Ce module attend le
     format du connecteur ; l'agent est responsable de ne pas mélanger les deux.
+
+    Le coût **par question** est le chiffre qui se compare d'une campagne à l'autre : un
+    total dépend du nombre de questions et du nombre de répétitions, donc il ne dit rien
+    tout seul. Il se calcule sur les exécutions réellement appelées — celles relues du
+    cache n'ont rien coûté et dilueraient la moyenne vers le bas.
     """
     entree = sum(e.reponse.usage.get("input_tokens", 0) for e in executions)
     sortie = sum(e.reponse.usage.get("output_tokens", 0) for e in executions)
     relus = sum(e.reponse.usage.get("cache_read", 0) for e in executions)
+    appelees = [e for e in executions if not e.depuis_le_cache] or executions
+    n = len(appelees)
     return {
         "tokens_entree": entree,
         "tokens_sortie": sortie,
         "tokens_relus_du_cache": relus,
         "taux_de_cache": relus / entree if entree else 0.0,
+        "entree_par_question": (
+            sum(e.reponse.usage.get("input_tokens", 0) for e in appelees) / n
+        ),
+        "sortie_par_question": (
+            sum(e.reponse.usage.get("output_tokens", 0) for e in appelees) / n
+        ),
     }
 
 
-def rapport(executions: list[Execution], agent: Agent, k: int) -> str:
+def par_arret(executions: list[Execution]) -> dict[str, int]:
+    """Répartition des motifs d'arrêt.
+
+    Un taux d'arrêts anormaux est un indicateur de qualité au même titre que l'exactitude,
+    et il se lit autrement : un plafond d'itérations atteint souvent signale une boucle
+    trop courte, une réponse tronquée un plafond de sortie trop bas. Le score seul ne
+    distingue pas ces causes.
+    """
+    compteur: dict[str, int] = defaultdict(int)
+    for e in executions:
+        compteur[e.reponse.resultat.arret] += 1
+    return dict(sorted(compteur.items()))
+
+
+def tatonnements(executions: list[Execution]) -> tuple[int, int]:
+    """Requêtes en échec, et nombre d'exécutions qui en comptent au moins une.
+
+    Elles ne sont pas des fautes — la boucle est faite pour se reprendre — mais leur
+    fréquence mesure la clarté du schéma décrit au modèle. Elle baisse quand la
+    description s'améliore, ce qui en fait un signal utilisable en E8.
+    """
+    total = sum(e.reponse.usage.get("tatonnements", 0) for e in executions)
+    concernees = sum(1 for e in executions if e.reponse.usage.get("tatonnements", 0))
+    return total, concernees
+
+
+def _sha_du_depot() -> str:
+    """Version exacte du code qui a produit la mesure.
+
+    Le modèle et le prompt sont déjà épinglés, mais pas la boucle ni les assertions — or
+    elles bougent d'un lot à l'autre. Sans ce repère, deux rapports peuvent différer sans
+    qu'on sache si c'est le modèle, le prompt, ou nous.
+    """
+    import subprocess
+
+    try:
+        sortie = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "inconnu"
+    return sortie.stdout.strip() or "inconnu"
+
+
+def rapport(
+    executions: list[Execution],
+    agent: Agent,
+    k: int,
+    *,
+    effort: str = "",
+    ecartees: Sequence[str] = (),
+) -> str:
     """Rapport lisible. Le modèle et l'empreinte du prompt y figurent toujours."""
     if not executions:
         return "Aucune exécution — cache vide en mode à blanc ?"
@@ -222,11 +314,25 @@ def rapport(executions: list[Execution], agent: Agent, k: int) -> str:
     lignes = [
         "# Rapport d'évaluation",
         "",
+        f"- date : {datetime.date.today()}",
         f"- modèle : `{agent.identifiant}`",
         f"- empreinte du prompt : `{agent.empreinte_prompt}`",
+        f"- version du code : `{_sha_du_depot()}`",
+        *([f"- effort de raisonnement : `{effort}`"] if effort else []),
         f"- répétitions par question : {k}",
         f"- exécutions : {len(executions)}"
         f" (dont {sum(e.depuis_le_cache for e in executions)} depuis le cache)",
+    ]
+
+    if ecartees:
+        # Écarté n'est pas échoué, mais une campagne trop trouée n'est pas une mesure :
+        # le dire en tête plutôt que de laisser lire un score amputé comme s'il était plein.
+        lignes += [
+            f"- **{len(ecartees)} exécution(s) écartée(s)** pour panne du service, "
+            f"non comptées dans les scores — à rejouer avant de conclure.",
+        ]
+
+    lignes += [
         "",
         "## Par propriété",
         "",
@@ -261,12 +367,26 @@ def rapport(executions: list[Execution], agent: Agent, k: int) -> str:
         for question, noms in sorted(echecs.items()):
             lignes.append(f"| {question} | {', '.join(sorted(noms))} |")
 
+    arrets = par_arret(executions)
+    if len(arrets) > 1 or Arret.REPONSE_DONNEE.value not in arrets:
+        lignes += ["", "## Motifs d'arrêt", "", "| Motif | Exécutions |", "|---|---|"]
+        for motif, n in arrets.items():
+            lignes.append(f"| {motif} | {n} |")
+
+    total_tatonnements, avec_tatonnement = tatonnements(executions)
     c = cout(executions)
     lignes += [
         "", "## Coût", "",
-        f"- tokens d'entrée : {c['tokens_entree']:,}".replace(",", " "),
-        f"- tokens de sortie : {c['tokens_sortie']:,}".replace(",", " "),
+        f"- entrée par question : {c['entree_par_question']:,.0f} tokens "
+        f"(total {c['tokens_entree']:,})".replace(",", " "),
+        f"- sortie par question : {c['sortie_par_question']:,.0f} tokens "
+        f"(total {c['tokens_sortie']:,})".replace(",", " "),
         f"- taux de lecture de cache : {c['taux_de_cache']:.0%}",
+        f"- requêtes en échec : {total_tatonnements} "
+        f"sur {avec_tatonnement} exécution(s) concernée(s)",
+        "",
+        "> Les tâtonnements ne sont pas des fautes — la boucle est faite pour se "
+        "reprendre. Leur fréquence mesure la clarté du schéma décrit au modèle.",
         "",
         "> Quelques dizaines de questions, k répétitions : un écart de quelques points "
         "entre deux itérations n'est pas significatif. Seules les tendances franches "

@@ -21,6 +21,19 @@ AUTORISES_MODELE = {"src/agent/boucle.py"}
 # qui appellerait la base ou le modèle rendrait le noyau très coûteux à en extraire.
 MARQUEURS_PRESENTATION = ("import streamlit", "import plotly", "st.write", "st.markdown")
 
+# Les trois façons d'obtenir un agent qui parle réellement à l'API. Aucun fichier de test
+# ne doit les appeler ; les modules du harnais, eux, sont faits pour ça.
+MARQUEURS_APPEL_REEL = (
+    "boucle.construire(",
+    "agent_par_defaut(",
+    "agent_reel.construire(",
+    "identifiant_exact(",
+)
+
+# Ce fichier-ci énumère les marqueurs, il ne les appelle pas. Sans cette exception il se
+# détecterait lui-même — même raison que `AUTORISES_MODELE` un peu plus haut.
+AUTORISES_APPEL_REEL = {"tests/test_agent_structure.py"}
+
 
 def sources(dossier: str) -> list[tuple[str, str]]:
     return [
@@ -62,3 +75,30 @@ def test_le_noyau_ne_contient_aucune_logique_de_presentation():
     ]
 
     assert not fautifs, f"logique de présentation dans le noyau : {fautifs}"
+
+
+def test_aucun_test_ne_declenche_un_appel_api():
+    """La suite complète doit rester gratuite, et ça vient de se jouer.
+
+    Jusqu'à E5, aucun code de `tests/` ne savait joindre l'API : l'invariant tenait tout
+    seul. Le harnais y ouvre le chemin, et `tests/eval/agent_reel.py` est fait pour
+    l'emprunter — mais depuis un point d'entrée en ligne de commande, jamais depuis un
+    fichier collecté par pytest.
+
+    Un `construire()` glissé dans un test ne lèverait aucune erreur : il partirait
+    consommer des tokens à chaque exécution de la suite, y compris à chaque sauvegarde.
+    C'est exactement le genre de coût qu'on ne remarque que sur la facture.
+    """
+    fautifs = [
+        (chemin, marqueur)
+        for chemin, code in sources("tests")
+        if pathlib.Path(chemin).name.startswith("test_")
+        and chemin not in AUTORISES_APPEL_REEL
+        for marqueur in MARQUEURS_APPEL_REEL
+        if marqueur in code
+    ]
+
+    assert not fautifs, (
+        f"Ces fichiers de test construisent un agent qui appelle réellement l'API : "
+        f"{fautifs}. Injecter un faux modèle, comme le fait tests/test_eval_agent_reel.py."
+    )

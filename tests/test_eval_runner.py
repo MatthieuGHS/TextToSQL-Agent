@@ -61,7 +61,9 @@ def test_execute_k_fois(con):
 
 
 def test_un_echec_d_assertion_fait_echouer_l_execution(con):
-    agent = AgentBouchon([Resultat(reponse="je ne sais pas", sql=[])])
+    agent = AgentBouchon(
+        [Resultat(reponse="je ne sais pas", sql=["SELECT * FROM inexistante"])]
+    )
 
     executions = r.executer((CAS,), agent, con, k=1)
 
@@ -151,14 +153,21 @@ def test_le_mode_a_blanc_sans_cache_ne_produit_rien(con, tmp_path):
 
 
 def test_les_assertions_universelles_s_appliquent_partout(con):
-    """Un vocabulaire de performance attribuée est un échec, quelle que
-    soit la propriété."""
-    agent = AgentBouchon([Resultat(reponse="total 1000, ROI de 3", sql=["SELECT 1"])])
+    """Un cas qui ne demande rien sur l'arrêt le subit quand même.
+
+    C'est la propriété des assertions universelles : elles ne dépendent d'aucune
+    caractéristique du cas. Ici `CAS` n'en parle pas, et pourtant une réponse rendue
+    après un abandon de la boucle échoue — sans quoi le harnais compterait un succès
+    sur un texte que l'agent n'a pas fini d'écrire.
+    """
+    agent = AgentBouchon(
+        [Resultat(reponse="total 1000", sql=["SELECT 1"], arret="reponse_tronquee")]
+    )
 
     executions = r.executer((CAS,), agent, con, k=1)
 
     assert not executions[0].ok
-    assert any("évite" in v.nom for v in executions[0].echecs)
+    assert {v.nom for v in executions[0].echecs} == {"arrêt normal"}
 
 
 # --- Rapport --------------------------------------------------------------------------

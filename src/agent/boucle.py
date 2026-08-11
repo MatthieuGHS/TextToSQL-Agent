@@ -195,6 +195,33 @@ def agent_par_defaut() -> Agent:
     return _defaut
 
 
+def identifiant_exact(agent: Agent) -> str:
+    """Résout l'identifiant exact du modèle, par un appel volontairement minimal.
+
+    `MODELE` est un **alias** : il désigne aujourd'hui une génération précise, il en
+    désignera une autre demain, sans que rien ne change dans le code. Or le harnais
+    d'évaluation indexe son cache sur l'identifiant du modèle, et compare des mesures
+    entre elles. Indexer sur l'alias laisserait un basculement silencieux réutiliser des
+    réponses produites par un autre modèle — et personne ne verrait la différence.
+
+    L'identifiant exact ne descend que dans les métadonnées d'une réponse. Il faut donc
+    appeler pour le connaître, et c'est le seul but de cet appel : ni prompt système, ni
+    question réelle, une poignée de tokens. Il vérifie du même coup que la clé répond,
+    avant d'engager une campagne entière.
+
+    Placé ici et non dans le harnais : c'est le seul module dont le métier est de parler
+    au modèle, et l'y garder évite d'ouvrir un second jeu de réglages ailleurs.
+    """
+    reponse = agent.modele.invoke([HumanMessage("ping")])
+    identifiant = reponse.response_metadata.get("model")
+    if not identifiant:
+        raise RuntimeError(
+            "le modèle n'a pas renvoyé son identifiant : impossible d'épingler une "
+            "mesure sur une version précise."
+        )
+    return identifiant
+
+
 def ask(
     question: str,
     historique: Sequence[Echange] = (),

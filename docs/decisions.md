@@ -361,6 +361,56 @@ génération est stochastique, un score sur un tirage n'est pas une mesure) et �
 l'identifiant exact du modèle dans chaque rapport (les alias évoluent, et deux mesures prises
 sous le même alias à des dates différentes ne sont pas comparables).
 
+### L'ordre d'une campagne est la méthode, pas un détail d'exécution
+
+Les assertions sont écrites **avant** l'agent, pour qu'aucune ne se calque sur une sortie
+observée. Le revers est qu'elles n'ont jamais rien vu de réel : elles seront fausses
+plusieurs fois avant d'être justes. D'où trois passes, dans cet ordre.
+
+1. **Peuplement** — une répétition, corpus seul. On paie une fois de vraies réponses, et on
+   les archive.
+2. **À blanc** — les assertions se corrigent en rejouant l'archive, sans un seul appel.
+3. **Référence** — la campagne complète, qui devient la ligne de base.
+
+**Entre 2 et 3, on ne touche ni au prompt ni à l'agent.** Sinon la ligne de base mesure un
+système qu'on a bougé pendant qu'on le regardait, et toutes les comparaisons d'E8 partent
+faussées. Corollaire : en passe 2, un échec n'autorise une correction que sur l'assertion,
+jamais sur ce qu'elle mesure.
+
+Le mode à blanc n'est pas une intention mais une propriété : l'agent y est remplacé par un
+objet qui porte les clés du cache et **lève si on l'appelle**. Une exécution absente du
+cache est ignorée ; elle ne peut pas partir en appel.
+
+### Trois choses que le score ne doit pas compter
+
+Un harnais mesure ce qu'on lui donne à mesurer. Trois exclusions décidées avant la première
+campagne, chacune parce qu'inclure fausserait la mesure dans un sens identifiable.
+
+**Les requêtes en échec ne sont pas transmises aux assertions.** Une requête fautive suivie
+d'une requête juste est une reprise — le comportement pour lequel la boucle a été écrite.
+La transmettre ferait échouer le contrôle d'exécutabilité sur une auto-correction réussie.
+Leur nombre part dans le rapport comme indicateur de clarté du schéma, pas comme faute.
+
+**Une panne du service est écartée, pas comptée en échec.** Sinon le score varie avec la
+météo du réseau, et deux campagnes prises à deux moments cessent d'être comparables. Rien
+n'est mis en cache non plus : une panne figée dans l'archive se rejouerait indéfiniment.
+
+**Une réponse produite après un abandon de la boucle n'est pas une réponse.** Ni le texte ni
+le SQL ne le disent — une réponse coupée au plafond de sortie paraît complète. Le motif
+d'arrêt voyage donc jusqu'aux assertions, et tout arrêt anormal est un échec.
+
+### L'alias n'est pas l'identifiant
+
+Le nom de modèle écrit dans le code est un **alias** : il désigne aujourd'hui une génération
+précise, il en désignera une autre demain sans qu'une ligne change. Or le cache du harnais
+est indexé sur l'identifiant du modèle, et sert précisément à ne pas repayer.
+
+Indexer sur l'alias laisserait un basculement resservir des réponses produites par un autre
+modèle, en silence. L'identifiant exact ne descend que dans les métadonnées d'une réponse :
+il faut donc appeler pour le connaître. Une campagne commence par un appel minimal — sans
+prompt système, quelques tokens — dont c'est le seul but, et qui vérifie du même coup que la
+clé répond avant d'engager le reste.
+
 ---
 
 ## Vérifications faites, à ne pas refaire de mémoire

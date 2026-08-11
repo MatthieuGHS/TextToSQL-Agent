@@ -17,11 +17,13 @@ import random
 from dataclasses import dataclass, field
 
 from tests.eval.assertions import (
+    ArretNormal,
     Assertion,
     PasDeGraphiqueSurResultatVide,
     SqlExecutable,
     SqlJointureSurSemaine,
     SqlNeTouchePas,
+    SqlProduit,
     SqlSansDateCourante,
     SqlUtiliseTable,
     TexteContient,
@@ -63,6 +65,7 @@ _GRAIN = (
         note="deux tables, deux grains : la jointure doit porter sur la semaine",
         assertions=(
             SqlExecutable(),
+            SqlProduit(),
             SqlJointureSurSemaine(),
             SqlUtiliseTable("kpi_compteurs"),
         ),
@@ -94,6 +97,7 @@ _ABSENT_FORT = (
         note="`support` n'est pas énumérée : il faut vérifier avant de conclure",
         assertions=(
             SqlExecutable(),
+            SqlProduit(),
             SqlUtiliseTable("media"),
             TexteContient(MOTS_ABSENCE),
         ),
@@ -110,6 +114,7 @@ _MAUVAISE_COLONNE = (
              "en nommant la bonne colonne",
         assertions=(
             SqlExecutable(),
+            SqlProduit(),
             ValeurAttendue(
                 "SELECT SUM(cost) FROM media WHERE support = 'Twitch'"
             ),
@@ -180,6 +185,7 @@ _HOMONYMIE = (
         note="ici les deux tables sont légitimes — c'est le cas symétrique du précédent",
         assertions=(
             SqlExecutable(),
+            SqlProduit(),
             SqlUtiliseTable("contexte"),
             TracabiliteNumerique(),
         ),
@@ -233,6 +239,7 @@ _NULL_NEST_PAS_ZERO = (
         note="`cost` est NULL sur tout le SEO : non acheté, ce qui n'est pas gratuit",
         assertions=(
             SqlExecutable(),
+            SqlProduit(),
             TexteContient(("null", "non renseign", "pas de coût", "n'est pas",
                            "non acheté", "organique")),
         ),
@@ -276,6 +283,7 @@ _CAUSALITE = (
         question="Y a-t-il un lien entre nos investissements TV et les mises en service ?",
         assertions=(
             SqlExecutable(),
+            SqlProduit(),
             SqlJointureSurSemaine(),
             TexteContient(("causalité", "cause", "corrélation n'implique")),
         ),
@@ -291,6 +299,7 @@ _RESULTAT_VIDE = (
         note="segment jamais activé : rapporter l'absence, ne pas tracer de graphique",
         assertions=(
             SqlExecutable(),
+            SqlProduit(),
             PasDeGraphiqueSurResultatVide(),
             TexteContient(MOTS_ABSENCE),
         ),
@@ -304,9 +313,24 @@ CORPUS: tuple[Cas, ...] = (
     *_ABSENCE_VS_MANQUANT, *_PERFORMANCE, *_CAUSALITE, *_RESULTAT_VIDE,
 )
 
-# Toute réponse doit rester traçable et exécutable, quelle que soit la propriété testée.
+# Une réponse produite après un abandon de la boucle n'est pas une réponse, quel que soit
+# son contenu : aucune propriété du jeu de données n'en dispense. C'est la seule assertion
+# qui s'applique partout.
+#
+# `TexteNeContientPas(MOTS_PERFORMANCE)` y figurait, et n'y figure plus. La mesure a
+# tranché : sur la grille client, il condamnait les meilleures réponses — celles qui
+# *expliquent* qu'un retour sur investissement ne se calcule pas avec ces données, et qui
+# doivent forcément nommer la chose pour le dire. Un contrôle sur le vocabulaire ne
+# distingue pas l'affirmation de sa réfutation, et se trompe précisément là où l'agent
+# excelle.
+#
+# La propriété visée — aucune performance attribuée — reste tenue, et mieux : par
+# `TracabiliteNumerique`, puisqu'un chiffre de ROI n'a aucune source possible dans ces
+# données, et par les assertions de forme des cas d'attribution, qui exigent l'explication
+# au lieu d'interdire le mot. Une propriété portée par les données plutôt que par une
+# liste de mots.
 ASSERTIONS_UNIVERSELLES: tuple[Assertion, ...] = (
-    TexteNeContientPas(MOTS_PERFORMANCE),
+    ArretNormal(),
 )
 
 

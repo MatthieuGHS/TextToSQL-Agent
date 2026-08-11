@@ -12,6 +12,11 @@ data/raw/
 # ignorés en silence — un fichier absent du dépôt sans qu'aucun message ne le dise.
 !tests/**/*.csv
 
+# Le harnais d'évaluation archive chaque exécution — question, SQL, réponse verbatim —
+# et en tire des rapports chiffrés. Ce sont des données client au même titre que la base,
+# et rien au-dessus ne les couvrait : ce sont des `.json` et des `.md` dans `data/`.
+data/eval/
+
 # === Documents contenant des chiffres client ===
 # Seul `docs/prive/` est exclu. Le reste de `docs/` est versionné : décisions de
 # conception et rationnel de schéma, écrits sans aucune valeur issue des données.

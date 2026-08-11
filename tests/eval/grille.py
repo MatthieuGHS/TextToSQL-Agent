@@ -24,7 +24,7 @@ import pathlib
 
 import pandas as pd
 
-from tests.eval.assertions import SqlExecutable
+from tests.eval.assertions import SqlExecutable, TracabiliteNumerique
 from tests.eval.corpus import Cas
 
 FICHIER = "grille_evaluation_agent_data.xlsx"
@@ -86,9 +86,21 @@ def charger(chemin: pathlib.Path) -> tuple[Cas, ...]:
             Cas(
                 propriete=f"grille/{type_client}",
                 question=question,
-                # Seul l'exécutabilité est automatisable ici. Le reste relève du
-                # jugement, sur les colonnes du client.
-                assertions=(SqlExecutable(),),
+                # Deux contrôles seulement, et ce sont les deux qui ne présument
+                # rien de la question — indispensable ici, puisqu'on ne sait pas
+                # d'avance si elle appelle une requête, un refus ou une précision.
+                #
+                # `SqlExecutable` seul ne suffisait pas : depuis qu'une réponse sans
+                # requête le passe — à juste titre, la moitié des questions du client
+                # sont des pièges — une question de grille ne subissait plus aucun
+                # contrôle qui puisse échouer. Un instrument qui ne peut pas échouer ne
+                # mesure rien, et le 18/18 obtenu ainsi n'aurait rien voulu dire.
+                #
+                # `TracabiliteNumerique` comble ça sans rien supposer : quelle que soit
+                # la question, un chiffre de la réponse doit venir d'un résultat ou de
+                # la description des données. Le reste relève du jugement, sur les
+                # colonnes que le client a définies.
+                assertions=(SqlExecutable(), TracabiliteNumerique()),
                 source="grille",
                 note=str(ligne.get("Ce qu'on vérifie", "")).strip(),
             )
