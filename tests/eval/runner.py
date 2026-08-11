@@ -60,6 +60,17 @@ class Agent(Protocol):
     empreinte_prompt: str
     """Hachage du prompt système : un prompt modifié invalide le cache."""
 
+    empreinte_reglages: str
+    """Hachage des réglages qui changent ce que le modèle produit.
+
+    Effort de raisonnement, plafond de sortie, plafonds de boucle. Ils n'apparaissent ni
+    dans l'identifiant du modèle ni dans le prompt, et ce sont pourtant les premières
+    choses qu'on fera varier — le balayage d'effort, puis chaque itération de réglage.
+    Sans eux dans la clé, relancer sous un réglage différent resservirait les réponses de
+    l'ancien : deux rapports identiques, et la conclusion « ça ne change rien » énoncée
+    avec assurance. Aucune erreur, aucun avertissement.
+    """
+
     def __call__(self, question: str) -> ReponseAgent: ...
 
 
@@ -81,10 +92,14 @@ class Execution:
 
 
 class Cache:
-    """Trace des exécutions, indexée par prompt, modèle, question et répétition.
+    """Trace des exécutions, indexée par tout ce qui change une réponse.
 
-    Un changement de prompt ou de modèle change la clé : le cache se périme de lui-même,
-    sans invalidation manuelle à oublier.
+    Modèle, prompt, **réglages**, question, numéro de répétition. Changer l'un d'eux change
+    la clé : le cache se périme de lui-même, sans invalidation manuelle à oublier.
+
+    La règle qui décide de ce qui entre dans la clé : *si ça peut faire répondre autrement,
+    ça y est*. L'oubli des réglages a été un vrai défaut — il rendait le balayage d'effort
+    silencieusement faux, ce qui était précisément la mesure suivante au programme.
     """
 
     def __init__(self, racine: pathlib.Path):
@@ -92,7 +107,15 @@ class Cache:
         self.racine.mkdir(parents=True, exist_ok=True)
 
     def _clef(self, agent: Agent, question: str, repetition: int) -> pathlib.Path:
-        brut = f"{agent.identifiant}|{agent.empreinte_prompt}|{question}|{repetition}"
+        brut = "|".join(
+            (
+                agent.identifiant,
+                agent.empreinte_prompt,
+                agent.empreinte_reglages,
+                question,
+                str(repetition),
+            )
+        )
         return self.racine / f"{hashlib.sha256(brut.encode()).hexdigest()[:24]}.json"
 
     def lire(self, agent: Agent, question: str, repetition: int) -> ReponseAgent | None:
@@ -108,6 +131,7 @@ class Cache:
         charge = {
             "modele": agent.identifiant,
             "empreinte_prompt": agent.empreinte_prompt,
+            "empreinte_reglages": agent.empreinte_reglages,
             "question": question,
             "repetition": repetition,
             "resultat": asdict(reponse.resultat),
@@ -299,10 +323,23 @@ def _sha_du_depot() -> str:
     return sortie.stdout.strip() or "inconnu"
 
 
+def repetitions_par_source(executions: list[Execution]) -> dict[str, int]:
+    """Combien de fois chaque origine a réellement été jouée.
+
+    Lu dans les exécutions, jamais dans les arguments d'appel : le corpus et la grille
+    tournent à des k différents — la grille se note à la main, y répéter les questions ne
+    mesure rien. Un rapport qui annoncerait un k unique serait faux pour l'une des deux, et
+    relu dans trois semaines il induirait en erreur sans que rien ne le signale.
+    """
+    compteur: dict[str, int] = defaultdict(int)
+    for e in executions:
+        compteur[e.cas.source] = max(compteur[e.cas.source], e.repetition + 1)
+    return dict(sorted(compteur.items()))
+
+
 def rapport(
     executions: list[Execution],
     agent: Agent,
-    k: int,
     *,
     effort: str = "",
     ecartees: Sequence[str] = (),
@@ -319,7 +356,9 @@ def rapport(
         f"- empreinte du prompt : `{agent.empreinte_prompt}`",
         f"- version du code : `{_sha_du_depot()}`",
         *([f"- effort de raisonnement : `{effort}`"] if effort else []),
-        f"- répétitions par question : {k}",
+        f"- réglages : `{agent.empreinte_reglages}`",
+        "- répétitions par question : "
+        + " · ".join(f"{s} {n}" for s, n in repetitions_par_source(executions).items()),
         f"- exécutions : {len(executions)}"
         f" (dont {sum(e.depuis_le_cache for e in executions)} depuis le cache)",
     ]

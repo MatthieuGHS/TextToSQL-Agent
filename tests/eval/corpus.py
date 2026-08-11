@@ -40,10 +40,8 @@ FIN_DONNEES = "(SELECT MAX(step_date) FROM media)"
 MOTS_ABSENCE = ("n'existe pas", "aucune", "aucun", "absent", "pas de", "ne figure pas",
                 "n'apparaît pas", "introuvable", "non disponible", "ne contient pas")
 
-# Vocabulaire de performance attribuée : ces données ne permettent aucune de ces
-# affirmations. Leur présence est un échec, quelle que soit la qualité du reste.
-MOTS_PERFORMANCE = ("roi", "retour sur investissement", "coût par acquisition",
-                    "cpa", "rentabilité", "a rapporté", "ont rapporté")
+# Il y avait ici un `MOTS_PERFORMANCE`, liste de vocabulaire interdit partout. Retiré le
+# 11/08/2026 : voir la note sur `ASSERTIONS_UNIVERSELLES` en bas de fichier.
 
 
 @dataclass(frozen=True)
@@ -317,7 +315,7 @@ CORPUS: tuple[Cas, ...] = (
 # son contenu : aucune propriété du jeu de données n'en dispense. C'est la seule assertion
 # qui s'applique partout.
 #
-# `TexteNeContientPas(MOTS_PERFORMANCE)` y figurait, et n'y figure plus. La mesure a
+# Une liste de vocabulaire interdit y figurait, et n'y figure plus. La mesure a
 # tranché : sur la grille client, il condamnait les meilleures réponses — celles qui
 # *expliquent* qu'un retour sur investissement ne se calcule pas avec ces données, et qui
 # doivent forcément nommer la chose pour le dire. Un contrôle sur le vocabulaire ne

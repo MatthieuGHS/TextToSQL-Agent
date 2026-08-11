@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import hashlib
 import json
 import pathlib
 
@@ -23,7 +24,10 @@ from tests.eval.assertions import Resultat
 # lever. Elle vit chez lui parce qu'elle fait partie du contrat, pas de l'adaptateur.
 from tests.eval.runner import ErreurApi, ReponseAgent
 
-__all__ = ["AgentReel", "ErreurApi", "ModeleInattendu", "construire", "hors_ligne"]
+__all__ = [
+    "AgentReel", "AgentHorsLigne", "ErreurApi", "ModeleInattendu",
+    "construire", "empreinte_reglages", "hors_ligne",
+]
 
 
 class ModeleInattendu(Exception):
@@ -51,6 +55,10 @@ class AgentReel:
     def empreinte_prompt(self) -> str:
         return self.agent.empreinte_prompt
 
+    @property
+    def empreinte_reglages(self) -> str:
+        return empreinte_reglages(self.agent, self.effort)
+
     def __call__(self, question: str) -> ReponseAgent:
         reponse = boucle.ask(question, agent=self.agent)
 
@@ -64,6 +72,29 @@ class AgentReel:
             )
 
         return ReponseAgent(resultat=_resultat(reponse), usage=_usage(reponse))
+
+
+def empreinte_reglages(agent: boucle.Agent, effort: str) -> str:
+    """Hachage de tout ce qui, hors modèle et prompt, change la réponse produite.
+
+    Deux règles pour décider de son contenu. **Y mettre ce qui peut faire répondre
+    autrement** : l'effort et le raisonnement changent la génération, le plafond de sortie
+    décide des troncatures, les plafonds de boucle décident du nombre d'allers-retours.
+    **N'y mettre que ça** : y ajouter un réglage sans effet ferait repayer une campagne
+    entière pour rien.
+
+    Trié, donc reproductible d'un processus à l'autre — c'est la condition pour qu'une
+    clé de cache tienne entre deux exécutions du programme.
+    """
+    reglages = {
+        "effort": effort,
+        "raisonnement": boucle.RAISONNEMENT,
+        "max_tokens": boucle.MAX_TOKENS,
+        "max_iterations": agent.max_iterations,
+        "max_echecs_sql": agent.max_echecs_sql,
+    }
+    brut = json.dumps(reglages, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(brut.encode("utf-8")).hexdigest()[:12]
 
 
 @dataclass(frozen=True)
@@ -81,6 +112,7 @@ class AgentHorsLigne:
 
     identifiant: str
     empreinte_prompt: str
+    empreinte_reglages: str
     effort: str = ""
 
     def __call__(self, question: str) -> ReponseAgent:
@@ -110,7 +142,13 @@ def construire(racine: pathlib.Path, effort: str = boucle.EFFORT) -> AgentReel:
     racine.mkdir(parents=True, exist_ok=True)
     (racine / FICHIER_MODELE).write_text(
         json.dumps(
-            {"identifiant": identifiant, "effort": effort}, ensure_ascii=False, indent=2
+            {
+                "identifiant": identifiant,
+                "effort": effort,
+                "empreinte_reglages": empreinte_reglages(agent, effort),
+            },
+            ensure_ascii=False,
+            indent=2,
         )
     )
 
@@ -135,6 +173,10 @@ def hors_ligne(racine: pathlib.Path, con) -> AgentHorsLigne:
     return AgentHorsLigne(
         identifiant=trace["identifiant"],
         empreinte_prompt=prompt.empreinte(prompt.construire(con)),
+        # Relue et non recalculée : les réglages de la campagne ne sont plus en mémoire,
+        # et les recalculer depuis les constantes actuelles ferait pointer vers un cache
+        # qui n'existe pas dès que l'une d'elles a bougé. La trace est la seule source.
+        empreinte_reglages=trace["empreinte_reglages"],
         effort=trace.get("effort", ""),
     )
 

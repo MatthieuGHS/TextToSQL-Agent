@@ -29,10 +29,11 @@ class AgentBouchon:
     """Agent scriptable. `reponses` est consommée dans l'ordre, la dernière est répétée."""
 
     def __init__(self, reponses: list[Resultat], identifiant="modele-test",
-                 empreinte="abc123"):
+                 empreinte="abc123", reglages="reg00000"):
         self.reponses = reponses
         self.identifiant = identifiant
         self.empreinte_prompt = empreinte
+        self.empreinte_reglages = reglages
         self.appels = 0
 
     def __call__(self, question: str) -> r.ReponseAgent:
@@ -128,6 +129,49 @@ def test_un_modele_different_perime_le_cache(con, tmp_path):
     assert autre.appels == 1
 
 
+def test_un_reglage_different_perime_le_cache(con, tmp_path):
+    """Le test qui manquait, et le défaut qu'il aurait attrapé.
+
+    La clé ne portait que le modèle, le prompt, la question et la répétition. L'effort de
+    raisonnement et les plafonds de boucle n'y étaient pas — alors que ce sont
+    exactement les premières choses qu'on fait varier : le balayage d'effort, puis chaque
+    itération de réglage.
+
+    Sans ce contrôle, relancer sous un réglage différent resservait les réponses de
+    l'ancien. Trois rapports identiques, et la conclusion « le réglage ne change rien »,
+    énoncée avec assurance et fausse. Aucune erreur, aucun avertissement — le pire genre
+    de défaut de mesure.
+    """
+    cache = r.Cache(tmp_path)
+    avant = AgentBouchon([Resultat(reponse="total 1000", sql=["SELECT 1"])],
+                         reglages="effort-medium")
+    r.executer((CAS,), avant, con, k=1, cache=cache)
+
+    apres = AgentBouchon([Resultat(reponse="total 1000", sql=["SELECT 1"])],
+                         reglages="effort-high")
+    r.executer((CAS,), apres, con, k=1, cache=cache)
+
+    assert apres.appels == 1, "un réglage modifié doit changer la clé de cache"
+
+
+def test_le_rapport_annonce_les_repetitions_par_origine(con):
+    """Un k unique serait faux pour l'une des deux origines.
+
+    Le corpus tourne à k=3, la grille à k=1 — elle se note à la main, y répéter les
+    questions ne mesure rien. Le rapport annonçait le k du corpus pour tout le monde :
+    relu dans trois semaines, il aurait fait croire que la grille avait été jouée trois
+    fois. Le compte est désormais lu dans les exécutions, jamais dans les arguments.
+    """
+    du_corpus = AgentBouchon([Resultat(reponse="total 1000", sql=["SELECT 1"])])
+    cas_grille = Cas(propriete="grille/x", question="Q ?", assertions=(), source="grille")
+
+    executions = r.executer((CAS,), du_corpus, con, k=3)
+    executions += r.executer((cas_grille,), du_corpus, con, k=1)
+
+    assert r.repetitions_par_source(executions) == {"corpus": 3, "grille": 1}
+    assert "corpus 3 · grille 1" in r.rapport(executions, du_corpus)
+
+
 def test_le_mode_a_blanc_n_appelle_jamais_l_agent(con, tmp_path):
     cache = r.Cache(tmp_path)
     peuple = AgentBouchon([Resultat(reponse="total 1000", sql=["SELECT 1"])])
@@ -177,7 +221,7 @@ def test_le_rapport_epingle_le_modele_et_le_prompt(con):
     agent = AgentBouchon([Resultat(reponse="total 1000", sql=["SELECT 1"])],
                          identifiant="claude-x-9", empreinte="deadbeef")
 
-    texte = r.rapport(r.executer((CAS,), agent, con, k=2), agent, k=2)
+    texte = r.rapport(r.executer((CAS,), agent, con, k=2), agent)
 
     assert "claude-x-9" in texte
     assert "deadbeef" in texte
@@ -190,7 +234,7 @@ def test_le_rapport_signale_les_questions_instables(con):
         Resultat(reponse="aucune idée", sql=[]),
     ])
 
-    texte = r.rapport(r.executer((CAS,), agent, con, k=2), agent, k=2)
+    texte = r.rapport(r.executer((CAS,), agent, con, k=2), agent)
 
     assert "instable" in texte.lower()
 
@@ -198,7 +242,7 @@ def test_le_rapport_signale_les_questions_instables(con):
 def test_le_rapport_porte_le_cout(con):
     agent = AgentBouchon([Resultat(reponse="total 1000", sql=["SELECT 1"])])
 
-    texte = r.rapport(r.executer((CAS,), agent, con, k=2), agent, k=2)
+    texte = r.rapport(r.executer((CAS,), agent, con, k=2), agent)
 
     assert "Coût" in texte
     assert "taux de lecture de cache" in texte

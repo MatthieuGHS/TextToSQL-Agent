@@ -399,6 +399,75 @@ n'est mis en cache non plus : une panne figée dans l'archive se rejouerait ind�
 le SQL ne le disent — une réponse coupée au plafond de sortie paraît complète. Le motif
 d'arrêt voyage donc jusqu'aux assertions, et tout arrêt anormal est un échec.
 
+### Un échec du harnais accuse d'abord le harnais
+
+Première confrontation des assertions à de vraies réponses : **sur onze échecs, huit
+venaient de l'instrument, pas de l'agent**. Et toujours dans le même sens — les contrôles
+condamnaient les *meilleures* réponses.
+
+C'est un résultat structurel, pas un accident de rédaction. Les assertions sont écrites
+avant l'agent, délibérément, pour ne pas se calquer sur ce qu'il produit ; elles sont donc
+écrites contre une idée de la réponse, et l'idée est plus étroite que le réel.
+
+**Un faux positif ne fait pas que du bruit** : il désigne un défaut qui n'existe pas, et
+envoie le réglage corriger le prompt là où l'agent travaillait bien. Un instrument trop
+sévère est plus dangereux qu'un instrument absent, parce qu'il a l'air de fonctionner.
+
+Le symétrique existe aussi. Après correction, l'un des jeux est monté à 100 % — sur une
+seule assertion devenue incapable d'échouer. Il a fallu lui rendre un contrôle qui puisse
+mordre pour retomber sur le vrai chiffre. **Un score qui monte après qu'on a touché à
+l'instrument doit être regardé avec suspicion, pas avec satisfaction.**
+
+Quatre corrections en sont sorties, toutes générales.
+
+**Ne rien requêter n'est pas une faute.** Une bonne part des questions d'un jeu
+d'évaluation sont des pièges : une dimension qui n'existe pas, une valeur mal nommée, une
+grandeur que les données ne permettent pas d'établir. La bonne réponse est alors un refus
+expliqué, sans requête — ce que la boucle bénit déjà comme un arrêt normal. Le contrôle
+d'exécutabilité ne juge donc que ce qui a été écrit ; l'exigence inverse existe séparément,
+et se pose cas par cas, là où la question réclame vraiment d'interroger la base.
+
+**Un contrôle sur le vocabulaire ne distingue pas l'affirmation de sa réfutation.** On ne
+peut pas interdire à l'agent de nommer une grandeur qu'on lui demande précisément
+d'expliquer comme non calculable. La liste de mots interdits a donc disparu des contrôles
+universels ; la propriété qu'elle visait est mieux tenue par la traçabilité, puisqu'un
+chiffre qu'aucune requête ne peut produire n'a aucune source. *Une propriété portée par les
+données plutôt que par une liste de mots* — la même règle que pour le prompt.
+
+Corollaire de rédaction : chercher une sous-chaîne pour **exiger** un mot est utile, pour
+l'**interdire** c'est dangereux. Une occurrence en trop rend le premier plus indulgent et le
+second faux.
+
+**La traçabilité a trois sources, pas une.** Une valeur calculée par une requête ; un nombre
+qui figure littéralement dans un résultat — les dates en sortaient, alors qu'une réponse qui
+date son périmètre ne fait qu'obéir au prompt ; et un chiffre annoncé par la description
+générée des données, qu'il serait absurde de faire requêter à nouveau.
+
+**L'écriture déclare sa propre précision.** Un coefficient rendu « 0,06 » affirme une valeur
+entre 0,055 et 0,065 : le juger à quelques pourcents *relatifs* réclame une exactitude que
+son auteur n'a pas revendiquée. On accepte donc aussi une valeur qui, arrondie au nombre de
+décimales écrites, redonne le nombre écrit. Ce qui reste attrapé — et doit le rester — est
+le chiffre qu'aucune requête n'a produit : un total fait de tête, un ordre de grandeur lu de
+loin.
+
+Règle de méthode qui va avec : **quand on assouplit un contrôle, on ajoute la contre-épreuve
+dans le même geste**, un cas réel qui doit rester rouge. Et on refuse d'assouplir pour un
+seul nombre : un écart isolé au-delà de la tolérance reste un échec, parce qu'inventer une
+règle pour lui serait du réglage sur l'instrument. S'il se répète, il devient un signal.
+
+### La clé du cache porte tout ce qui change une réponse
+
+Modèle, prompt, **réglages**, question, numéro de répétition. La règle qui décide de son
+contenu : *si ça peut faire répondre autrement, ça y est ; si ça ne le peut pas, ça n'y est
+pas* — un réglage sans effet dans la clé ferait repayer une campagne pour rien.
+
+L'oubli des réglages a été un vrai défaut, et instructif par sa forme. Effort de
+raisonnement et plafonds de boucle n'apparaissent ni dans l'identifiant du modèle ni dans le
+prompt ; ce sont pourtant les premières choses qu'on fait varier. Relancer sous un réglage
+différent resservait donc les réponses de l'ancien : deux rapports identiques, et la
+conclusion « le réglage ne change rien » énoncée avec assurance. Sans erreur, sans
+avertissement — la famille d'échec que ce document existe pour recenser.
+
 ### L'alias n'est pas l'identifiant
 
 Le nom de modèle écrit dans le code est un **alias** : il désigne aujourd'hui une génération

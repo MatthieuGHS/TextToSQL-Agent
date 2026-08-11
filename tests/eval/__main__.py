@@ -43,8 +43,17 @@ CONFIRMATION_CONTROLE = "j'ouvre le scellé"
 
 
 def _cas(source: str, controle: bool) -> tuple[tuple, tuple]:
-    """Renvoie (cas du corpus, cas de la grille). Séparés : leurs k diffèrent."""
-    du_corpus = corpus_de_controle() if controle else corpus_de_travail()
+    """Renvoie (cas du corpus, cas de la grille). Séparés : leurs k diffèrent.
+
+    Ouvrir le scellé n'emporte pas la grille avec lui. Le jeu de contrôle sert à répondre
+    à une seule question — « le réglage a-t-il généralisé, ou seulement appris le corpus
+    visible ? » — et la grille n'y participe pas. L'y joindre coûterait 18 questions
+    client pour rien, et diluerait le seul chiffre qu'on est venu chercher.
+    """
+    if controle:
+        return corpus_de_controle(), ()
+
+    du_corpus = corpus_de_travail()
     de_la_grille = grille.charger(grille.chemin_par_defaut(connexion.ROOT))
 
     if source == "corpus":
@@ -125,8 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         con.close()
 
     texte = runner.rapport(
-        executions, agent, args.k,
-        effort=getattr(agent, "effort", ""), ecartees=ecartees,
+        executions, agent, effort=getattr(agent, "effort", ""), ecartees=ecartees,
     )
     # Dédoublonné par question : la notation se fait une fois par question du client, pas
     # une fois par répétition. Avec `--k-grille 3`, le tableau tripliquerait ses lignes.
