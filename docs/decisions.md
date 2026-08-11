@@ -221,6 +221,14 @@ apprendrait à contourner ; et ne jamais montrer au modèle une requête qu'il n
 l'enveloppe de plafonnement est retirée des extraits cités, sinon il chercherait à corriger
 une clause qui n'est pas de lui.
 
+**Troisième règle, apprise en relecture : un indice faux est pire qu'un indice absent.** Le
+moteur nomme l'*alias* fautif, pas la table (`Table "c" does not have a column named …`).
+Détailler une seule des tables citées revenait donc à tirer au sort, et le message obtenu
+envoyait le modèle chercher la colonne dans la mauvaise table — sur une jointure, c'est-à-
+dire précisément là où il a besoin d'aide. Toutes les tables citées sont détaillées :
+leur nombre est borné par celui des tables de la base, et deux listes valent mieux qu'une
+fausse.
+
 ## Agent
 
 ### Générer la description des données, écrire ce qu'elles signifient
@@ -250,6 +258,14 @@ frontière généré / écrit sépare deux origines, pas deux niveaux d'exigence
 est *owned*, d'où son coût nul » est une phrase de prompt, mais c'est un fait sur les
 données, et un extrait futur peut la rendre fausse en silence. Ce qu'on ne peut pas générer,
 on le garde par un test.
+
+**Le classement lui-même est une affirmation.** Annoncer qu'une colonne « a trop de valeurs
+pour être listée » sans compter ses valeurs, c'est écrire à la main dans un module dont la
+raison d'être est de générer. La règle est donc que le seuil décide seul de ce qui bascule
+d'un groupe à l'autre, et qu'une colonne écartée pour une *autre* raison que le volume
+l'annonce sous cette autre raison — sans quoi le prompt donne au modèle un motif faux, et un
+extrait plus étroit le rendrait faux en silence. Corollaire : la partie écrite à la main ne
+nomme plus ces colonnes ; elle renvoie à ce que la section générée signale.
 
 Il reste des affirmations que ni l'un ni l'autre n'atteint — le sens d'un GRP, ce que le jeu
 de données ne permet pas. Celles-là ne périment pas avec les données : elles se relisent.
@@ -289,6 +305,22 @@ un front-end doit revenir à réécrire la coquille, jamais le moteur.
 
 À respecter dès la première ligne : une logique métier qui s'installe dans le fichier
 d'interface est très coûteuse à en extraire ensuite.
+
+### Une réponse coupée n'est pas une réponse
+
+Le plafond de tokens de sortie est partagé avec le raisonnement : une réponse peut s'arrêter
+en pleine phrase, ou en plein appel d'outil. Rien ne la distingue alors d'une réponse
+terminée, sinon un motif d'arrêt renvoyé par l'API — le texte, lui, paraît complet.
+
+Elle a donc son propre motif d'arrêt, et il est classé **anormal**. C'est le sens de la
+mesure qui l'impose : compter une réponse tronquée comme un succès fausserait le score dans
+le sens flatteur, celui qu'on ne va pas vérifier. Le texte partiel est conservé — il n'y a
+pas de raison de punir l'utilisateur d'une limite qui est la nôtre — mais l'avertissement
+vient en dernier, là où la lecture s'arrête.
+
+Cas général derrière ce cas particulier : **tout état que l'API distingue et que la boucle
+confond devient une erreur de mesure silencieuse.** Un motif d'arrêt inconnu doit sortir de
+la boucle sous son propre nom, pas se fondre dans le chemin nominal.
 
 ### Un outil unique plutôt qu'une boîte à outils générique
 
@@ -343,7 +375,9 @@ lèvent aucune erreur.
 - Le comptage refuse une requête sans message utilisateur : un prompt système seul part dans
   un champ dédié et laisse la liste des messages vide.
 - Le compteur d'écritures de cache exposé par le connecteur reste à zéro alors que
-  l'écriture a bien lieu ; la valeur réelle est publiée sous une autre clé.
+  l'écriture a bien lieu ; la valeur réelle est publiée sous une autre clé — une par durée
+  de vie de cache. Ces valeurs se **somment** : n'en retenir qu'une donne un total juste
+  tant qu'une seule durée est utilisée, c'est-à-dire juste par coïncidence.
 - Le champ « tokens d'entrée » n'a pas le même sens dans le connecteur (total) et dans
   l'API brute (reste non caché). Les mélanger fausse tout calcul de coût.
 - Le connecteur n'envoie pas de configuration de raisonnement par défaut : le défaut de

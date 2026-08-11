@@ -18,6 +18,7 @@ toute la boucle sans consommer un seul appel API — un faux modèle rejoue des 
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Any, Protocol, Sequence
 
@@ -78,6 +79,21 @@ TEXTE_PLAFOND = (
     "Je n'ai pas abouti dans le nombre d'étapes imparti. Les requêtes déjà exécutées "
     "figurent dans la réponse ; découper la question en deux permettrait d'aboutir."
 )
+TEXTE_TRONQUE = (
+    "(Réponse interrompue : la limite de longueur a été atteinte. Ce qui précède est "
+    "incomplet — poser la question sur un périmètre plus étroit.)"
+)
+
+
+def _avec_avertissement(partiel: str, avertissement: str) -> str:
+    """Garde le travail du modèle *et* dit qu'il est incomplet.
+
+    Deux arrêts anormaux laissent derrière eux du texte utile — un plafond atteint, une
+    réponse coupée. Le jeter reviendrait à punir l'utilisateur d'une limite qui est la
+    nôtre ; le rendre seul le laisserait croire à une réponse entière. L'avertissement
+    vient donc en dernier, là où la lecture s'arrête.
+    """
+    return f"{partiel.strip()}\n\n{avertissement}" if partiel.strip() else avertissement
 
 
 class Modele(Protocol):
@@ -155,12 +171,27 @@ def construire(con: Any = None, *, effort: str = EFFORT) -> Agent:
 
 
 _defaut: Agent | None = None
+_verrou_defaut = threading.Lock()
 
 
 def agent_par_defaut() -> Agent:
+    """L'agent partagé, construit au premier appel.
+
+    Le verrou n'est pas de la précaution abstraite : E8 servira l'interface depuis un
+    pool de fils, et deux premières questions simultanées construiraient deux agents —
+    donc deux générations de prompt et deux connexions, dont une abandonnée sans être
+    refermée.
+
+    Il ne règle en revanche **pas** la question de la connexion partagée. `interrupt()`
+    de DuckDB porte sur la connexion et non sur la requête : deux questions en vol en
+    même temps, et le dépassement de délai de l'une interromprait l'autre. Tant que
+    l'appelant est mono-utilisateur (ligne de commande, harnais séquentiel), c'est sans
+    effet ; l'interface devra trancher — un curseur par appel, ou un agent par session.
+    """
     global _defaut
-    if _defaut is None:
-        _defaut = construire()
+    with _verrou_defaut:
+        if _defaut is None:
+            _defaut = construire()
     return _defaut
 
 
@@ -208,12 +239,25 @@ def ask(
 
         usage = usage + _usage_de(reponse)
         identifiant = reponse.response_metadata.get("model") or identifiant
-        dernier_texte = reponse.text or dernier_texte
+        motif = reponse.response_metadata.get("stop_reason")
 
-        # À vérifier **avant** de lire le contenu : sur un refus, il est vide.
-        if reponse.response_metadata.get("stop_reason") == "refusal":
+        # Le motif d'arrêt est examiné **avant** le contenu, qui n'est alors jamais lu :
+        # sur un refus il est vide, et le texte rendu est le nôtre. Se replier sur le
+        # dernier texte connu ferait passer le refus pour la réponse d'un tour précédent
+        # — un échec déguisé en succès plausible.
+        if motif == "refusal":
             return _finir(agent, TEXTE_REFUS, requetes, Arret.REFUS_MODELE, usage,
                           identifiant)
+
+        dernier_texte = reponse.text or dernier_texte
+
+        # Le plafond de sortie est partagé avec le raisonnement : une réponse peut être
+        # coupée en pleine phrase, voire en plein appel d'outil. Sans ce contrôle elle
+        # ressortait en `REPONSE_DONNEE`, c'est-à-dire comptée comme un succès par le
+        # harnais — une erreur de mesure qui ne se voit pas dans un score.
+        if motif == "max_tokens":
+            return _finir(agent, _avec_avertissement(dernier_texte, TEXTE_TRONQUE),
+                          requetes, Arret.REPONSE_TRONQUEE, usage, identifiant)
 
         if not reponse.tool_calls:
             # Aucune requête n'est un arrêt normal : le prompt invite le modèle à
@@ -239,8 +283,8 @@ def ask(
             return _finir(agent, TEXTE_ECHECS_SQL, requetes, Arret.TROP_D_ECHECS_SQL,
                           usage, identifiant)
 
-    return _finir(agent, TEXTE_PLAFOND, requetes, Arret.PLAFOND_ITERATIONS, usage,
-                  identifiant)
+    return _finir(agent, _avec_avertissement(dernier_texte, TEXTE_PLAFOND), requetes,
+                  Arret.PLAFOND_ITERATIONS, usage, identifiant)
 
 
 def _executer_appel(appel: dict, con: Any) -> RequeteExecutee:
@@ -263,15 +307,19 @@ def _usage_de(message: AIMessage) -> Usage:
     2. Le connecteur remet `cache_creation` à zéro dès qu'il publie le détail par durée
        de vie, pour éviter un double comptage. Lire l'un sans l'autre fait conclure
        qu'aucune écriture de cache n'a eu lieu — alors qu'on vient de la payer.
+
+    Les durées de vie se **somment**, elles ne se remplacent pas : une requête peut poser
+    deux marqueurs de durées différentes, et n'en retenir qu'une sous-estimerait alors
+    l'écriture. Le projet n'utilise aujourd'hui que l'éphémère court, mais une lecture
+    qui n'est juste que par coïncidence n'est pas une lecture juste.
     """
     donnees = getattr(message, "usage_metadata", None) or {}
     details = donnees.get("input_token_details") or {}
-    ecrit = (
-        details.get("cache_creation")
-        or details.get("ephemeral_5m_input_tokens")
-        or details.get("ephemeral_1h_input_tokens")
-        or 0
+    par_duree = sum(
+        details.get(cle) or 0
+        for cle in ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
     )
+    ecrit = par_duree or details.get("cache_creation") or 0
     return Usage(
         entree=donnees.get("input_tokens") or 0,
         sortie=donnees.get("output_tokens") or 0,
@@ -288,14 +336,19 @@ def _finir(
     usage: Usage,
     identifiant: str,
 ) -> AgentResponse:
+    # `usage.entree` est déjà un total — il contient le cache lu et le cache écrit (voir
+    # `_usage_de`). L'additionner à autre chose que la sortie recompterait le cache, et
+    # c'est ce chiffre-là qui finira dans un rapport.
     logger.info(
-        "ask · %s · %d requête(s) dont %d en échec · %d tokens (cache lu %d, écrit %d)",
+        "ask · %s · %d requête(s) dont %d en échec · %d tokens entrée "
+        "(dont %d lus en cache, %d écrits) · %d sortie",
         arret.value,
         len(requetes),
         sum(1 for r in requetes if not r.a_reussi),
-        usage.entree + usage.sortie,
+        usage.entree,
         usage.cache_lu,
         usage.cache_ecrit,
+        usage.sortie,
     )
     return AgentResponse(
         texte=texte,

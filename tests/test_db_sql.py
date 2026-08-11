@@ -13,6 +13,7 @@ Trois familles, dans cet ordre d'importance :
 from __future__ import annotations
 
 import pathlib
+import re
 
 import duckdb
 import pytest
@@ -235,6 +236,49 @@ def test_colonne_inconnue_liste_les_colonnes_reelles(con):
 
     message = str(exc.value)
     assert "cost" in message and "channel" in message
+
+
+def test_sur_une_jointure_toutes_les_tables_citees_sont_detaillees(con):
+    """Le cas où une seule liste de colonnes ne suffit pas — et peut tromper.
+
+    DuckDB nomme l'alias fautif (`Table "k" …`), jamais la table. Ne détailler qu'une des
+    tables citées revenait à tirer au sort : le modèle recevait ici les colonnes de
+    `media` pour une erreur portant sur `kpi_compteurs`, et repartait chercher la colonne
+    au mauvais endroit. C'est pire qu'un message pauvre — c'est un message faux.
+
+    Ce test échoue si l'on revient à une cible unique, quelle que soit celle retenue.
+    """
+    with pytest.raises(sql.SqlInvalide) as exc:
+        sql.run_sql(
+            "SELECT k.montant FROM media m JOIN kpi_compteurs k "
+            "ON k.step_date = m.step_date",
+            con,
+        )
+
+    message = str(exc.value)
+    assert "Colonnes de kpi_compteurs" in message, "la table en cause est absente"
+    assert "mes" in message, "la colonne qui aurait permis de se reprendre est absente"
+    assert "Colonnes de media" in message, "l'autre table citée reste utile au modèle"
+
+
+def test_les_tables_citees_sont_enumerees_dans_l_ordre(con):
+    """Le message part dans le contexte du modèle : son ordre doit être fixé.
+
+    Rejouer l'appel dans le même processus ne prouverait rien — un ensemble Python y rend
+    presque toujours le même ordre. C'est la propriété de tri qui se teste, exactement
+    comme pour les énumérations du prompt : sans `sorted()`, l'ordre dépend du hachage des
+    chaînes, qui change d'un processus à l'autre.
+    """
+    with pytest.raises(sql.SqlInvalide) as exc:
+        sql.run_sql(
+            "SELECT k.montant FROM media m JOIN kpi_compteurs k "
+            "ON k.step_date = m.step_date",
+            con,
+        )
+
+    citees = re.findall(r"^Colonnes de (\w+) :", str(exc.value), re.M)
+
+    assert citees == sorted(citees)
 
 
 def test_table_inconnue_liste_les_tables(con):

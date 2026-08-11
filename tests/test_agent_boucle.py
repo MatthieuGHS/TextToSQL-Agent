@@ -74,6 +74,14 @@ def appel_sql(query: str, identifiant: str = "t1") -> AIMessage:
     )
 
 
+def coupe(contenu: str) -> AIMessage:
+    """Une réponse arrêtée par le plafond de sortie, coupée en pleine phrase."""
+    return AIMessage(
+        content=contenu,
+        response_metadata={"model": "claude-sonnet-5", "stop_reason": "max_tokens"},
+    )
+
+
 # --- La base d'essai ------------------------------------------------------------------
 
 
@@ -255,6 +263,90 @@ def test_un_refus_ne_fait_pas_lire_un_contenu_vide(con):
     assert reponse.texte
 
 
+def test_un_refus_ne_recycle_pas_le_texte_du_tour_precedent(con):
+    """Le contenu d'un refus est vide — le repli ne doit pas aller chercher ailleurs.
+
+    Ce que ce test attrape exactement : un texte rendu qui serait
+    `dernier_texte or TEXTE_REFUS`. La boucle présenterait alors la réponse d'un tour
+    antérieur comme étant celle-ci, et le refus passerait inaperçu avec un texte
+    plausible à l'appui.
+
+    L'ordre du contrôle dans le code — avant la lecture du contenu — n'est en revanche
+    pas testable, et il ne prétend pas l'être : `.text` rend `""` sur un contenu vide au
+    lieu de lever. C'est une précaution, pas une garantie, et le commentaire de
+    `boucle.py` le dit désormais ainsi.
+    """
+    modele = ModeleScripte(
+        [
+            appel_sql("SELECT SUM(cost) FROM media"),
+            texte("Le total est de 1 250 €."),  # texte bien réel, d'un tour précédent
+        ]
+    )
+    agent = agent_avec(modele, con)
+    ask("quel total ?", agent=agent)
+
+    modele.reponses = [AIMessage(content=[], response_metadata={"stop_reason": "refusal"})]
+    reponse = ask("question hors sujet", agent=agent)
+
+    assert reponse.arret is Arret.REFUS_MODELE
+    assert reponse.texte == boucle.TEXTE_REFUS
+    assert "1 250" not in reponse.texte
+
+
+def test_une_reponse_coupee_au_plafond_de_sortie_n_est_pas_un_succes(con):
+    """Le plafond de sortie est partagé avec le raisonnement : la coupe est possible.
+
+    Sans ce contrôle, la réponse ressortait en `REPONSE_DONNEE` — donc comptée comme un
+    succès par le harnais, avec un texte qui *paraît* complet. C'est l'erreur de mesure
+    la plus coûteuse : elle flatte le score dans le sens qu'on ne va pas vérifier.
+    """
+    modele = ModeleScripte([coupe("Le budget média sur la période s'élève à 1 2")])
+
+    reponse = ask("quel budget ?", agent=agent_avec(modele, con))
+
+    assert reponse.arret is Arret.REPONSE_TRONQUEE
+    assert not reponse.arret.est_normal, "une réponse coupée n'est pas un arrêt normal"
+    assert "1 2" in reponse.texte, "le travail partiel reste rendu"
+    assert boucle.TEXTE_TRONQUE in reponse.texte, "et il est annoncé comme incomplet"
+
+
+def test_un_appel_d_outil_coupe_n_est_pas_execute(con):
+    """La coupe peut tomber au milieu d'un appel d'outil, dont les arguments sont alors
+    incomplets. Exécuter ce que l'on en devine ferait travailler la boucle sur une
+    requête que le modèle n'a pas fini d'écrire."""
+    modele = ModeleScripte(
+        [
+            AIMessage(
+                content="",
+                tool_calls=[{"name": outil.NOM, "args": {"query": "SELECT SUM(co"},
+                             "id": "t1"}],
+                response_metadata={"stop_reason": "max_tokens"},
+            )
+        ]
+    )
+
+    reponse = ask("quel total ?", agent=agent_avec(modele, con))
+
+    assert reponse.arret is Arret.REPONSE_TRONQUEE
+    assert reponse.requetes == [], "aucune requête tronquée ne doit partir vers la base"
+
+
+def test_le_travail_partiel_survit_au_plafond_d_iterations(con):
+    """Le motif d'arrêt dit que ça n'a pas abouti ; le texte n'a pas à disparaître."""
+    bavard = AIMessage(
+        content="Premiers éléments : le canal tv domine.",
+        tool_calls=[{"name": outil.NOM, "args": {"query": "SELECT 1"}, "id": "t1"}],
+        response_metadata={"stop_reason": "tool_use"},
+    )
+    modele = ModeleScripte([bavard, bavard])
+
+    reponse = ask("et ensuite ?", agent=agent_avec(modele, con, max_iterations=2))
+
+    assert reponse.arret is Arret.PLAFOND_ITERATIONS
+    assert "le canal tv domine" in reponse.texte
+    assert boucle.TEXTE_PLAFOND in reponse.texte
+
+
 def test_une_panne_d_api_devient_un_etat_de_la_reponse(con):
     """Aucune trace d'exécution ne sort de `ask()` : c'est l'interface qui décide de ce
     qu'un utilisateur voit, et elle ne peut pas décider sur une exception."""
@@ -349,3 +441,63 @@ def test_les_tokens_se_cumulent_sur_tous_les_appels(con):
     # Le connecteur remet `cache_creation` à zéro dès qu'il publie le détail par durée de
     # vie : lire la seule clé générique ferait conclure qu'aucune écriture n'a eu lieu.
     assert reponse.usage.cache_ecrit == 2700
+
+
+def test_les_deux_durees_de_cache_s_additionnent(con):
+    """Deux marqueurs de durées différentes écrivent deux fois — pas une.
+
+    Un enchaînement de conditions entre les deux clés donne la première non nulle et
+    ignore l'autre : la lecture n'est alors juste que tant qu'une seule durée est
+    utilisée, c'est-à-dire juste par coïncidence.
+    """
+    modele = ModeleScripte(
+        [
+            texte(
+                "Fini.",
+                usage={
+                    "input_tokens": 5000,
+                    "output_tokens": 10,
+                    "total_tokens": 5010,
+                    "input_token_details": {
+                        "cache_creation": 0,
+                        "ephemeral_5m_input_tokens": 1200,
+                        "ephemeral_1h_input_tokens": 3400,
+                    },
+                },
+            )
+        ]
+    )
+
+    reponse = ask("combien ?", agent=agent_avec(modele, con))
+
+    assert reponse.usage.cache_ecrit == 4600
+
+
+def test_l_agent_par_defaut_n_est_construit_qu_une_fois(monkeypatch):
+    """Deux premières questions simultanées ne doivent pas produire deux agents.
+
+    E8 servira l'interface depuis un pool de fils. Sans verrou, chacun construirait son
+    agent — donc deux générations de prompt et deux connexions, dont une abandonnée sans
+    être refermée. La lenteur simulée est ce qui rend la course observable ; sans elle,
+    le test passerait même sans verrou.
+    """
+    import threading
+    import time
+
+    construits: list[int] = []
+
+    def construire_lentement(*_, **__):
+        time.sleep(0.05)  # le temps qu'un autre fil entre dans la fenêtre
+        construits.append(1)
+        return "agent factice"
+
+    monkeypatch.setattr(boucle, "construire", construire_lentement)
+    monkeypatch.setattr(boucle, "_defaut", None)
+
+    fils = [threading.Thread(target=boucle.agent_par_defaut) for _ in range(4)]
+    for fil in fils:
+        fil.start()
+    for fil in fils:
+        fil.join()
+
+    assert len(construits) == 1, f"{len(construits)} agents construits au lieu d'un"

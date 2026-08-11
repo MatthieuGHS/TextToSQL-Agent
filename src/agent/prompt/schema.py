@@ -32,12 +32,17 @@ TABLES = ("media", "kpi_compteurs", "contexte")
 SEUIL_ENUMERATION = 20
 
 # Colonnes de `media` dont les valeurs sont énumérées si elles restent sous le seuil.
-# `type` en est volontairement absente : ses valeurs mêlent deux formes, et les quatre
-# colonnes qui en dérivent la décrivent mieux.
 COLONNES_ENUMEREES = (
     "entity", "category", "typology", "channel",
     "performance_metric", "objectif", "format",
+    "support",
 )
+
+# Écartée de l'énumération quelle que soit sa cardinalité, et pour une raison qui n'est
+# pas le volume : ses valeurs mêlent deux formes, et les quatre colonnes qui en dérivent
+# la décrivent mieux. La distinguer des colonnes simplement trop nombreuses évite
+# d'annoncer au modèle un motif faux.
+COLONNE_ECARTEE = "type"
 
 # Variables de `contexte` qui portent le même nom qu'une donnée des deux autres tables,
 # avec un périmètre différent. C'est le seul piège du jeu de données qui produit une
@@ -142,6 +147,12 @@ def valeurs_possibles(con: duckdb.DuckDBPyConnection) -> str:
     Annoncer explicitement les colonnes non énumérées est aussi utile que d'énumérer les
     autres : sans ça, le modèle ne sait pas s'il regarde une liste complète ou un extrait,
     et peut conclure à l'absence sans vérifier.
+
+    Le seuil décide seul de ce qui bascule d'un groupe à l'autre — rien n'est classé à la
+    main. Écrire « ces colonnes ont trop de valeurs » sur une colonne sans compter ses
+    valeurs serait une affirmation que la base ne garantit pas, et qu'un extrait plus
+    étroit rendrait fausse en silence : c'est-à-dire exactement le défaut que la
+    génération existe pour éviter.
     """
     lignes = ["## Valeurs des colonnes de `media`", ""]
     a_decouvrir = []
@@ -153,22 +164,30 @@ def valeurs_possibles(con: duckdb.DuckDBPyConnection) -> str:
             continue
         lignes.append(f"- `{colonne}` ({len(valeurs)}) : {', '.join(valeurs)}")
 
-    for colonne in ("support", "type"):
-        n = _lignes(
-            con, f"SELECT COUNT(DISTINCT {colonne}) FROM media"
-        )[0][0]
-        a_decouvrir.append((colonne, n))
-
     lignes += [
         "",
         "Ces listes sont **exhaustives** : une valeur qui n'y figure pas n'existe pas dans "
         "les données.",
+    ]
+
+    if a_decouvrir:
+        lignes += [
+            "",
+            "En revanche, ces colonnes ont trop de valeurs pour être listées ici :",
+            "",
+            *(f"- `{c}` — {n} valeurs distinctes" for c, n in a_decouvrir),
+        ]
+
+    (n_ecartee,) = _lignes(
+        con, f"SELECT COUNT(DISTINCT {COLONNE_ECARTEE}) FROM media"
+    )[0]
+    lignes += [
         "",
-        "En revanche, ces colonnes ont trop de valeurs pour être listées ici :",
+        f"La colonne `{COLONNE_ECARTEE}` ({n_ecartee} valeurs distinctes) n'est pas "
+        "listée non plus : elle mêle deux formes, et les colonnes qui en dérivent la "
+        "décrivent mieux. Elle reste consultable telle quelle.",
         "",
-        *(f"- `{c}` — {n} valeurs distinctes" for c, n in a_decouvrir),
-        "",
-        "Avant de conclure qu'une de leurs valeurs n'existe pas, faire un "
+        "Avant de conclure qu'une valeur de ces colonnes n'existe pas, faire un "
         "`SELECT DISTINCT` pour vérifier.",
     ]
     return "\n".join(lignes)

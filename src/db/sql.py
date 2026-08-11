@@ -145,15 +145,29 @@ def _enrichir_erreur(
     Une colonne inconnue est l'erreur la plus fréquente d'un modèle : lui renvoyer la
     liste réelle des colonnes lui permet de se reprendre au tour suivant, là où le
     message brut le laisserait deviner.
+
+    **Toutes** les tables citées sont détaillées, pas seulement la première. DuckDB nomme
+    l'alias (`Table "c" does not have a column named …`), pas la table : sur une jointure,
+    choisir une cible parmi les tables citées revenait à tirer au sort, et le message
+    obtenu ne se contentait pas d'être inutile — il envoyait le modèle chercher la colonne
+    dans la mauvaise table. Deux listes valent mieux qu'une fausse ; leur nombre est borné
+    par celui des tables de la base.
     """
     message = _sans_enveloppe(str(exc), query)
     tables = _set_tables(con)
-    citees = [t for t in tables if t.lower() in message.lower()]
+    # Trié, et non dans l'ordre d'un ensemble : ce message part dans le contexte du
+    # modèle, et deux exécutions doivent produire le même texte.
+    citees = sorted(t for t in tables if t.lower() in message.lower())
 
     if "column" in message.lower() or "referenced" in message.lower():
-        cible = citees[0] if citees else None
-        if cible:
-            return f"{message}\nColonnes de {cible} : {', '.join(_colonnes_de(con, cible))}"
+        if citees:
+            return "\n".join(
+                [message]
+                + [
+                    f"Colonnes de {t} : {', '.join(_colonnes_de(con, t))}"
+                    for t in citees
+                ]
+            )
         return f"{message}\nTables disponibles : {', '.join(sorted(tables))}"
 
     if "table" in message.lower() and not citees:

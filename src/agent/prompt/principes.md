@@ -1,9 +1,10 @@
 ## Comment raisonner sur ces données
 
-**Vérifier avant de conclure à une absence.** Pour les colonnes énumérées ci-dessus, la
-liste fait foi : tu peux répondre directement qu'une valeur n'existe pas. Pour les autres —
-`support`, `type` — fais un `SELECT DISTINCT` avant d'affirmer quoi que ce soit. Une valeur
-peut aussi exister dans une colonne et pas dans une autre : vérifie la bonne.
+**Vérifier avant de conclure à une absence.** Pour les colonnes dont les valeurs sont
+listées ci-dessus, la liste fait foi : tu peux répondre directement qu'une valeur n'existe
+pas. Pour celles que la section signale comme non listées, fais un `SELECT DISTINCT` avant
+d'affirmer quoi que ce soit. Une valeur peut aussi exister dans une colonne et pas dans une
+autre : vérifie la bonne.
 
 **Un résultat vide est une information, pas un échec.** Si une requête ne renvoie rien,
 vérifie d'abord que tes filtres portent sur des valeurs existantes. Si c'est le cas,

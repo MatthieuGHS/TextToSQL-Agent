@@ -28,6 +28,7 @@ class Arret(enum.Enum):
     """
 
     REPONSE_DONNEE = "reponse_donnee"
+    REPONSE_TRONQUEE = "reponse_tronquee"
     PLAFOND_ITERATIONS = "plafond_iterations"
     TROP_D_ECHECS_SQL = "trop_d_echecs_sql"
     REFUS_MODELE = "refus_modele"
@@ -41,6 +42,11 @@ class Arret(enum.Enum):
         ambiguë : une réponse sans aucune requête est donc un succès, pas un échec.
         C'est ici que la distinction est posée une fois pour toutes, plutôt que d'être
         rejouée par chaque consommateur.
+
+        `REPONSE_TRONQUEE` en est délibérément exclu, alors que le texte obtenu peut
+        paraître complet : une phrase coupée au plafond de sortie reste une réponse dont
+        la fin manque, et la compter comme un succès fausserait la mesure dans le sens
+        le plus flatteur — celui qu'on ne va pas vérifier.
         """
         return self is Arret.REPONSE_DONNEE
 

@@ -56,8 +56,9 @@ def genere(con) -> str:
 
 # Longueur minimale d'un préfixe mis en cache, en tokens. Elle dépend du modèle et n'est
 # pas monotone d'une génération à l'autre (512, 1 024, 2 048 ou 4 096 selon le modèle) :
-# cette constante appartient donc au choix de modèle et devra le suivre quand E4 le figera.
-SEUIL_CACHE_TOKENS = 1024  # claude-sonnet-5
+# cette constante appartient donc au choix de modèle, figé par E4 dans `boucle.MODELE`.
+MODELE_MESURE = "claude-sonnet-5"
+SEUIL_CACHE_TOKENS = 1024
 
 # Un token vaut *au plus* ~4 caractères sur du français mêlé de Markdown et de SQL. C'est
 # bien ce sens-là qu'il faut : « un caractère vaut au plus un token » majore le nombre de
@@ -207,12 +208,44 @@ def test_les_colonnes_a_forte_cardinalite_sont_signalees(con, genere):
     d'un rafraîchissement légitime une panne de suite de tests, alors que rien n'est
     cassé. C'est la même distinction invariant / volumétrie que côté ETL.
     """
-    for colonne in ("support", "type"):
+    for colonne in schema.COLONNES_ENUMEREES:
         (n,) = con.execute(f"SELECT COUNT(DISTINCT {colonne}) FROM media").fetchone()
+        if n <= schema.SEUIL_ENUMERATION:
+            continue
 
         assert f"`{colonne}` — {n} valeurs distinctes" in genere
 
+    (n,) = con.execute(
+        f"SELECT COUNT(DISTINCT {schema.COLONNE_ECARTEE}) FROM media"
+    ).fetchone()
+
+    assert f"`{schema.COLONNE_ECARTEE}` ({n} valeurs distinctes)" in genere
     assert "SELECT DISTINCT" in genere
+
+
+def test_le_seuil_decide_seul_de_ce_qui_est_enumere():
+    """Aucune colonne n'est classée à la main du côté « trop de valeurs ».
+
+    Contre-épreuve : sur une base où toutes les colonnes tiennent sous le seuil, la
+    phrase « ces colonnes ont trop de valeurs » ne doit pas apparaître, et `support`
+    doit être énuméré comme les autres. Écrire ce classement en dur — ce qui était le
+    cas — faisait affirmer au prompt un motif que la base ne garantissait plus.
+
+    `type` reste écartée, parce que sa raison n'est pas le volume : elle mêle deux
+    formes. Le test le vérifie dans la même base, sans quoi on ne saurait pas si les
+    deux motifs sont réellement distincts.
+    """
+    con = duckdb.connect(":memory:")
+    colonnes = ", ".join(f"'v' AS {c}" for c in schema.COLONNES_ENUMEREES)
+    con.execute(f"CREATE TABLE media AS SELECT {colonnes}, 'a/b' AS type")
+
+    section = schema.valeurs_possibles(con)
+    con.close()
+
+    assert "trop de valeurs" not in section
+    assert "- `support` (1) : v" in section, "sous le seuil, elle doit être énumérée"
+    assert f"`{schema.COLONNE_ECARTEE}` (1 valeurs distinctes)" in section
+    assert "SELECT DISTINCT" in section, "l'invitation à vérifier reste due"
 
 
 # --- 1 bis. Cohérence des affirmations écrites à la main ------------------------------
@@ -278,18 +311,34 @@ def test_deux_constructions_donnent_les_memes_octets(con):
         autre.close()
 
 
-def test_aucun_element_variable_dans_le_prompt(texte):
+def test_aucun_element_variable_dans_le_prompt(con, texte):
     """Une date du jour ou un identifiant aléatoire invaliderait le cache à chaque appel.
 
     Elle serait de surcroît fausse : les dates relatives se calculent depuis la fin des
     données, pas depuis aujourd'hui.
+
+    La version précédente cherchait l'année courante dans `texte.split(...)[0]`, soit le
+    seul en-tête du prompt — quelques milliers de caractères qui ne contiennent aucune
+    date par construction. Elle ne pouvait donc pas échouer. Le contrôle porte désormais
+    sur le texte entier, et la seule raison légitime d'y voir l'année courante est que
+    les données l'atteignent réellement.
     """
     import datetime
 
     aujourdhui = datetime.date.today()
+    (derniere,) = con.execute(
+        "SELECT GREATEST("
+        + ", ".join(f"(SELECT MAX(step_date) FROM {t})" for t in schema.TABLES)
+        + ")"
+    ).fetchone()
 
     assert str(aujourdhui) not in texte
-    assert str(aujourdhui.year) not in texte.split("Période couverte")[0]
+
+    if derniere.year < aujourdhui.year:
+        assert str(aujourdhui.year) not in texte, (
+            f"l'année courante apparaît dans le prompt alors que les données s'arrêtent "
+            f"en {derniere.year} : un élément variable s'y est glissé."
+        )
 
 
 def test_l_empreinte_est_stable_et_discriminante(texte):
@@ -373,6 +422,21 @@ def test_aucune_valeur_inexistante_n_est_nommee(texte):
     """
     for valeur in ("tiktok", "snapchat", "twitch", "netflix"):
         assert valeur not in texte.lower()
+
+
+def test_le_seuil_de_cache_correspond_au_modele_reellement_appele():
+    """La constante ci-dessus n'a de sens que pour un modèle donné.
+
+    Le seuil de mise en cache varie de 512 à 4 096 tokens selon la génération, et sans
+    ce garde-fou un changement de modèle dans `boucle.py` laisserait le test suivant
+    vérifier un plancher qui n'est plus le bon — vert, et sans objet.
+    """
+    from src.agent import boucle
+
+    assert boucle.MODELE == MODELE_MESURE, (
+        f"le modèle est passé à {boucle.MODELE} : revérifier son seuil de mise en cache "
+        f"avant de mettre à jour SEUIL_CACHE_TOKENS."
+    )
 
 
 def test_le_prompt_est_au_dessus_du_seuil_de_cache(texte):
