@@ -121,11 +121,16 @@ class AgentHorsLigne:
         )
 
 
-# Trace de la dernière campagne réelle. L'empreinte du prompt se recalcule hors ligne
-# depuis la base ; l'identifiant exact du modèle et l'effort de raisonnement, non — le
-# premier ne descend que d'une réponse, le second n'a laissé aucune trace dans le cache.
-# Les deux figurent au rapport parce que deux mesures prises sous des réglages différents
-# ne se comparent pas : un rapport à blanc qui les perdrait ne serait plus opposable.
+# Registre des campagnes réelles, **une entrée par jeu de réglages**.
+#
+# L'empreinte du prompt se recalcule hors ligne depuis la base ; l'identifiant exact du
+# modèle et l'effort de raisonnement, non — le premier ne descend que d'une réponse, le
+# second n'a laissé aucune trace dans le cache. Les deux figurent au rapport parce que deux
+# mesures prises sous des réglages différents ne se comparent pas.
+#
+# Un registre et non une trace unique : le balayage d'effort enchaîne plusieurs campagnes,
+# et écraser la précédente rendrait la ligne de base irrejouable à blanc alors que ses
+# réponses sont toujours en cache. Ce qu'on veut comparer, on doit pouvoir le relire.
 FICHIER_MODELE = "modele.json"
 
 
@@ -138,30 +143,40 @@ def construire(racine: pathlib.Path, effort: str = boucle.EFFORT) -> AgentReel:
     """
     agent = boucle.construire(effort=effort)
     identifiant = boucle.identifiant_exact(agent)
+    empreinte = empreinte_reglages(agent, effort)
 
     racine.mkdir(parents=True, exist_ok=True)
+    registre = _lire_registre(racine)
+    registre["campagnes"][empreinte] = {"identifiant": identifiant, "effort": effort}
+    registre["derniere"] = empreinte
     (racine / FICHIER_MODELE).write_text(
-        json.dumps(
-            {
-                "identifiant": identifiant,
-                "effort": effort,
-                "empreinte_reglages": empreinte_reglages(agent, effort),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
+        json.dumps(registre, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
     return AgentReel(agent=agent, identifiant=identifiant, effort=effort)
 
 
-def hors_ligne(racine: pathlib.Path, con) -> AgentHorsLigne:
+def _lire_registre(racine: pathlib.Path) -> dict:
+    fichier = racine / FICHIER_MODELE
+    if not fichier.exists():
+        return {"campagnes": {}, "derniere": None}
+    return json.loads(fichier.read_text(encoding="utf-8"))
+
+
+def hors_ligne(
+    racine: pathlib.Path, con, effort: str | None = None
+) -> AgentHorsLigne:
     """Reconstitue les clés du cache sans un seul appel.
 
     L'empreinte du prompt est recalculée depuis la base — E3 garantit qu'elle est
     déterministe, c'est même ce qui rend le cache possible. Si le prompt a bougé depuis la
     campagne, l'empreinte diffère et le cache ne répond plus : le rapport le dira, ce qui
     est le comportement voulu plutôt qu'une comparaison entre deux prompts différents.
+
+    Args:
+        effort: quelle campagne rejouer. Par défaut la dernière ; le préciser sert dès
+            qu'il y en a plusieurs — un balayage laisse un cache par niveau, et une
+            comparaison exige de pouvoir relire chacun.
     """
     fichier = racine / FICHIER_MODELE
     if not fichier.exists():
@@ -169,15 +184,30 @@ def hors_ligne(racine: pathlib.Path, con) -> AgentHorsLigne:
             f"aucune campagne réelle n'a encore eu lieu ({fichier} absent) : le mode à "
             f"blanc n'a rien à rejouer."
         )
-    trace = json.loads(fichier.read_text())
+    registre = _lire_registre(racine)
+    campagnes = registre["campagnes"]
+
+    if effort is None:
+        empreinte = registre["derniere"]
+    else:
+        empreinte = next(
+            (e for e, c in campagnes.items() if c["effort"] == effort), None
+        )
+        if empreinte is None:
+            connus = sorted({c["effort"] for c in campagnes.values()})
+            raise KeyError(
+                f"aucune campagne à l'effort {effort!r} ; disponibles : {connus}"
+            )
+
+    campagne = campagnes[empreinte]
     return AgentHorsLigne(
-        identifiant=trace["identifiant"],
+        identifiant=campagne["identifiant"],
         empreinte_prompt=prompt.empreinte(prompt.construire(con)),
         # Relue et non recalculée : les réglages de la campagne ne sont plus en mémoire,
         # et les recalculer depuis les constantes actuelles ferait pointer vers un cache
-        # qui n'existe pas dès que l'une d'elles a bougé. La trace est la seule source.
-        empreinte_reglages=trace["empreinte_reglages"],
-        effort=trace.get("effort", ""),
+        # qui n'existe pas dès que l'une d'elles a bougé. Le registre est la seule source.
+        empreinte_reglages=empreinte,
+        effort=campagne.get("effort", ""),
     )
 
 

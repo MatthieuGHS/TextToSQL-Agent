@@ -60,7 +60,8 @@ def test_la_phrase_exacte_leve_le_refus(base_presente, tmp_path, monkeypatch):
     monkeypatch.setattr(lancement, "RACINE_EVAL", tmp_path)
     (tmp_path).mkdir(parents=True, exist_ok=True)
     (tmp_path / agent_reel.FICHIER_MODELE).write_text(
-        '{"identifiant": "modele-x", "empreinte_reglages": "reg00000"}'
+        '{"campagnes": {"reg00000": {"identifiant": "modele-x", '
+        '"effort": "medium"}}, "derniere": "reg00000"}'
     )
 
     code = main(["--controle", CONFIRMATION_CONTROLE, "--a-blanc", "--source", "corpus"])
@@ -82,13 +83,38 @@ def test_le_mode_a_blanc_n_appelle_jamais_le_modele(base_presente, tmp_path, mon
 
     monkeypatch.setattr(lancement, "RACINE_EVAL", tmp_path)
     (tmp_path / agent_reel.FICHIER_MODELE).write_text(
-        '{"identifiant": "modele-x", "empreinte_reglages": "reg00000"}'
+        '{"campagnes": {"reg00000": {"identifiant": "modele-x", '
+        '"effort": "medium"}}, "derniere": "reg00000"}'
     )
 
     agent = agent_reel.hors_ligne(tmp_path, connexion.ouvrir())
 
     with pytest.raises(RuntimeError, match="ne devrait jamais arriver"):
         agent("une question")
+
+
+def test_un_balayage_laisse_chaque_campagne_rejouable(base_presente, tmp_path):
+    """Le registre garde une entrée par jeu de réglages, il n'écrase pas.
+
+    Le balayage d'effort enchaîne trois campagnes. Avec une trace unique, la dernière
+    effaçait les précédentes : la ligne de base devenait irrejouable à blanc alors que ses
+    réponses étaient toujours en cache — et c'est précisément elle qu'on veut comparer.
+    """
+    (tmp_path / agent_reel.FICHIER_MODELE).write_text(
+        '{"campagnes": {"reg-medium": {"identifiant": "m", "effort": "medium"}, '
+        '"reg-high": {"identifiant": "m", "effort": "high"}}, "derniere": "reg-high"}'
+    )
+    con = connexion.ouvrir()
+    try:
+        assert agent_reel.hors_ligne(tmp_path, con).empreinte_reglages == "reg-high"
+        assert (
+            agent_reel.hors_ligne(tmp_path, con, "medium").empreinte_reglages
+            == "reg-medium"
+        )
+        with pytest.raises(KeyError, match="aucune campagne à l'effort 'low'"):
+            agent_reel.hors_ligne(tmp_path, con, "low")
+    finally:
+        con.close()
 
 
 def test_le_mode_a_blanc_le_dit_quand_il_n_a_rien_a_rejouer(base_presente, tmp_path,
@@ -112,7 +138,8 @@ def test_l_empreinte_hors_ligne_est_celle_du_prompt_courant(base_presente, tmp_p
     from src.agent import prompt
 
     (tmp_path / agent_reel.FICHIER_MODELE).write_text(
-        '{"identifiant": "modele-x", "effort": "high", "empreinte_reglages": "reg00000"}'
+        '{"campagnes": {"reg00000": {"identifiant": "modele-x", '
+        '"effort": "high"}}, "derniere": "reg00000"}'
     )
     con = connexion.ouvrir()
     try:

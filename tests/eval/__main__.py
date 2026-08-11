@@ -114,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.a_blanc:
-            agent = agent_reel.hors_ligne(RACINE_EVAL, con)
+            agent = agent_reel.hors_ligne(RACINE_EVAL, con, args.effort)
         else:
             agent = agent_reel.construire(
                 RACINE_EVAL, effort=args.effort or boucle.EFFORT
