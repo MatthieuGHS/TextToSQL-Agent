@@ -13,7 +13,6 @@ un rafraîchissement des données ne doit pas périmer le corpus.
 
 from __future__ import annotations
 
-import random
 from dataclasses import dataclass, field
 
 from tests.eval.assertions import (
@@ -263,13 +262,20 @@ _PERFORMANCE = (
         propriete="performance non attribuable",
         question="Quel canal a le meilleur ROI ?",
         note="aucune attribution n'est possible avec ces données ; refus pédagogique",
+        # `TracabiliteNumerique` porte ici la propriété que la liste de vocabulaire
+        # interdit portait avant elle : un chiffre de ROI n'a aucune source possible dans
+        # ces données, donc il ressort comme non traçable. Le rationnel du retrait de la
+        # liste (voir la note sur `ASSERTIONS_UNIVERSELLES`) l'affirmait déjà ; il n'avait
+        # pas été appliqué aux deux cas qu'il concerne au premier chef.
         assertions=(TexteNeContientPas(("le meilleur roi est", "roi de")),
-                    TexteContient(MOTS_ABSENCE + ("attribu", "modélisation", "mmm"))),
+                    TexteContient(MOTS_ABSENCE + ("attribu", "modélisation", "mmm")),
+                    TracabiliteNumerique()),
     ),
     Cas(
         propriete="performance non attribuable",
         question="Combien de compteurs la télévision nous a-t-elle rapportés ?",
-        assertions=(TexteContient(MOTS_ABSENCE + ("attribu", "modélisation", "mmm")),),
+        assertions=(TexteContient(MOTS_ABSENCE + ("attribu", "modélisation", "mmm")),
+                    TracabiliteNumerique()),
     ),
 )
 
@@ -338,17 +344,42 @@ def proprietes() -> list[str]:
 
 # --- Jeu de contrôle ------------------------------------------------------------------
 
+# Le scellé, **écrit à la main et non recalculé**.
+#
+# Il l'a été : un `random.sample` de graine 20260805 sur `proprietes()`, tiré le
+# 05/08/2026 quand le corpus comptait 14 propriétés. La graine reste ici comme trace de
+# provenance — elle n'est plus un mécanisme.
+#
+# La raison du changement vaut d'être retenue. Un tirage qui se rejoue à chaque appel
+# dépend du contenu courant du corpus : mesuré le 14/08/2026, l'ajout d'**une seule**
+# propriété faisait sortir 2 des 3 propriétés scellées et entrer une propriété déjà jouée
+# trois fois à trois niveaux d'effort. Le scellé se serait donc réattribué tout seul à E7,
+# sans erreur ni avertissement, en emportant sa seule raison d'être : n'avoir jamais été vu.
+#
+# Corollaire, et c'est ce qui interdit d'y revenir : le scellé ne peut plus être
+# recomposé. Les 17 questions du corpus de travail ont été jouées et leurs réponses lues.
+# En faire entrer une ici reviendrait à sceller une enveloppe déjà ouverte. On peut
+# seulement l'augmenter de questions neuves, jamais exécutées.
+#
 # Tirage par propriété et non par question : mettre de côté quelques questions d'une
-# propriété par ailleurs travaillée ne mesurerait rien. Le tirage est déterministe et sa
-# graine est publiée — c'est ce qui le distingue d'un choix arrangé après coup.
-GRAINE_CONTROLE = 20260805
-TAILLE_CONTROLE = 3
+# propriété par ailleurs travaillée ne mesurerait rien.
+PROPRIETES_CONTROLE: frozenset[str] = frozenset({
+    "corrélation n'est pas causalité",
+    "performance non attribuable",
+    "valeur absente, faible cardinalité",
+})
 
 
 def proprietes_de_controle() -> frozenset[str]:
-    """Les propriétés mises sous scellé, à n'ouvrir qu'une fois, à la fin de E8."""
-    tirage = random.Random(GRAINE_CONTROLE)
-    return frozenset(tirage.sample(proprietes(), TAILLE_CONTROLE))
+    """Les propriétés mises sous scellé, à n'ouvrir qu'une fois, à la fin de E8.
+
+    Ce que le scellé mesure, et ce qu'il ne mesure pas : les trois propriétés retenues
+    sont toutes de la famille « refus expliqué », et aucun des quatre échecs relevés sur
+    la ligne de base n'y a de contrepartie. Son ouverture répondra donc à « le réglage
+    a-t-il cassé les refus ? », pas à « a-t-il généralisé ? ». C'est une non-régression,
+    et l'annoncer comme telle vaut mieux que de lui prêter une portée qu'il n'a pas.
+    """
+    return PROPRIETES_CONTROLE
 
 
 def corpus_de_travail() -> tuple[Cas, ...]:

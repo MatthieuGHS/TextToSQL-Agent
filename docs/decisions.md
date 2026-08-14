@@ -468,6 +468,117 @@ différent resservait donc les réponses de l'ancien : deux rapports identiques,
 conclusion « le réglage ne change rien » énoncée avec assurance. Sans erreur, sans
 avertissement — la famille d'échec que ce document existe pour recenser.
 
+### L'instrument est devenu la principale source de défauts
+
+Relevé le 14/08/2026, en relisant E1 à E5 avec une seule question : *est-ce qu'on se perd
+en complexité ?*
+
+```
+noyau         ETL + accès base + agent .......................... 1 818 lignes
+instrument    tests/eval 1 498 + ses propres tests 920 .......... 2 418 lignes
+
+sur 171 exécutions réelles :
+   tâtonnements SQL ...................................... 0
+   motifs d'arrêt empruntés .............................. 2 sur 6
+```
+
+L'instrument pèse 1,3 fois ce qu'il mesure, pour 22 questions. Et ses quatre derniers
+défauts — clé de cache incomplète, registre écrasé, scellé recalculé, sélection de
+campagne ambiguë — viennent **tous** d'un mécanisme ajouté au tour précédent pour couvrir
+le mécanisme d'avant. Trois tours, trois défauts silencieux, aucune question d'évaluation
+gagnée.
+
+Deux distinctions permettent de ne pas en tirer la mauvaise conclusion.
+
+**Une protection qui ne se déclenche pas n'est pas du gaspillage.** Quatre des six motifs
+d'arrêt de la boucle n'ont jamais été empruntés — erreur d'API, refus du modèle, réponse
+tronquée, trop d'échecs SQL. Ils coûtent quelques lignes chacun et empêchent qu'un refus
+soit un jour compté comme un succès. Ils restent.
+
+**Un confort de récupération qui ne sert jamais, si.** Le modèle écrit **zéro requête
+fautive sur 171 exécutions**. Les quelque 70 lignes qui reconstruisent un message d'erreur
+exploitable — dé-enveloppement de l'erreur DuckDB, liste des colonnes de toutes les tables
+citées — n'ont donc jamais été exécutées en conditions réelles. Rien ne casse sans elles :
+la requête échouerait, simplement. Elles ne sont pas supprimées — elles sont écrites,
+testées, et un rafraîchissement des données peut les réveiller — mais **on cesse d'y
+investir**, et on n'en construit pas l'équivalent pour le graphique en E7.
+
+### Corriger sur un défaut constaté, jamais anticipé
+
+> **On ne corrige l'instrument que sur un défaut observé sur une réponse réelle. À défaut
+> égal, on préfère la correction qui retire du mécanisme à celle qui en ajoute.**
+
+Cette règle est née d'une erreur qu'elle aurait évitée. La relecture du 14/08 avait relevé
+que `TracabiliteNumerique` se dilue quand le résultat grossit — mesuré : 1,3 % de
+l'espace des nombres accepté en médiane, mais jusqu'à 48 % sur les exécutions ramenant
+plusieurs centaines de valeurs. Le correctif proposé était « resserrer les échelles, une
+ligne, sans risque ». Mesuré avant d'être appliqué :
+
+- il **ne changeait pas la couverture** — 1,3 % avant, 1,3 % après ; la dilution vient du
+  nombre de valeurs comparées, pas des échelles ;
+- il **cassait 25 verdicts sur 119**, tous sur des réponses justes : écrire un montant en
+  millions demande un facteur 10⁶.
+
+Le durcissement aurait dégradé l'instrument. Le défaut visé, lui, était **anticipé** pour
+E7 et non constaté : il se corrigera à E7, avec les vraies réponses sous les yeux. La
+limite est écrite dans la docstring de l'assertion, chiffrée — *une limite documentée est
+plus sûre qu'une limite corrigée à l'aveugle*.
+
+Corollaire méthodologique, valable au-delà de ce projet : **mesurer avant de proposer**.
+Le cache rend la vérification gratuite, et deux fois sur deux elle a contredit
+l'intuition.
+
+### Le budget, parce qu'une règle sans chiffre ne tient pas
+
+`tests/eval` ne dépasse pas **1 058 lignes exécutables** — docstrings et commentaires
+exclus, sans quoi le budget pousserait à supprimer les explications que ce dépôt exige.
+La limite est tenue par `tests/test_eval_budget.py` et non par ce paragraphe : une règle
+de méthode se contourne exactement comme une règle de prompt.
+
+Ce que le plafond force, c'est la bonne question. Quand il est atteint, on ne le relève
+pas : on cherche **quelle assertion existante n'a jamais échoué**. Le rapport
+d'évaluation le dit, et la réponse est déjà connue pour plusieurs d'entre elles.
+
+Trois décisions en découlent pour la suite :
+
+- **E6 est supprimé.** Son contenu résiduel était de verrouiller la traçabilité des
+  chiffres dans le code. On ne peut pas empêcher un modèle d'écrire un nombre : le
+  mécanisme serait un post-traitement qui détecte sans pouvoir corriger, alors que
+  `role.md` l'exige déjà en clair. Le défaut « somme faite de tête » se traite en E8, par
+  la description des données — moins cher, réversible, mesurable sur tout le corpus.
+- **E7 n'ajoute aucune assertion au harnais.** Le « Chart Check » est une colonne de
+  notation *manuelle* du client. Écrire des contrôles automatiques de lisibilité de
+  graphique referait exactement ce qui a produit les 2 418 lignes ci-dessus.
+  `PasDeGraphiqueSurResultatVide` existe et redevient active ; c'est tout.
+- **E7 n'a pas de boucle de correction.** Zéro tâtonnement sur 171 exécutions : rien ne
+  justifie de construire pour le graphique le mécanisme de reprise qui n'a jamais servi
+  pour le SQL. S'il en faut un, la mesure le dira d'abord.
+
+### Le scellé est écrit, il n'est plus tiré
+
+Le jeu de contrôle était défini par un `random.sample` de graine publiée — argument
+d'honnêteté : personne ne peut rejouer le tirage jusqu'à obtenir celui qui l'arrange. Le
+tirage se rejouait à chaque appel, donc il dépendait du **contenu courant** du corpus.
+Mesuré : ajouter **une seule** propriété faisait sortir 2 des 3 propriétés scellées et
+entrer une propriété déjà jouée trois fois à trois niveaux d'effort. E7 ajoute des
+propriétés de graphique — le scellé se serait réattribué tout seul, sans erreur ni
+avertissement, en perdant sa seule raison d'être : n'avoir jamais été vu.
+
+Il est désormais une constante écrite à la main ; la graine reste en commentaire comme
+trace de provenance. Plus faible sur le papier, strictement identique en fait — le tirage
+n'était déjà plus reproductible.
+
+Ce qui est fermé du même coup, et vaut d'être dit : **le scellé ne peut plus être
+recomposé.** Les 17 questions du corpus de travail ont été jouées et leurs réponses lues.
+En faire entrer une reviendrait à sceller une enveloppe ouverte. On peut seulement
+l'augmenter de questions neuves, jamais exécutées.
+
+Et il faut lire ce qu'il mesure sans lui prêter davantage : ses trois propriétés sont
+toutes de la famille « refus expliqué », et aucun des quatre échecs de la ligne de base
+n'y a de contrepartie. Son ouverture dira si le réglage a cassé les refus, pas s'il a
+généralisé. C'est une non-régression, et l'annoncer comme telle vaut mieux que de la
+présenter comme une preuve de généralisation.
+
 ### L'alias n'est pas l'identifiant
 
 Le nom de modèle écrit dans le code est un **alias** : il désigne aujourd'hui une génération

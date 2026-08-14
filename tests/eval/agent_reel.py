@@ -164,7 +164,7 @@ def _lire_registre(racine: pathlib.Path) -> dict:
 
 
 def hors_ligne(
-    racine: pathlib.Path, con, effort: str | None = None
+    racine: pathlib.Path, con, cible: str | None = None
 ) -> AgentHorsLigne:
     """Reconstitue les clés du cache sans un seul appel.
 
@@ -174,9 +174,12 @@ def hors_ligne(
     est le comportement voulu plutôt qu'une comparaison entre deux prompts différents.
 
     Args:
-        effort: quelle campagne rejouer. Par défaut la dernière ; le préciser sert dès
-            qu'il y en a plusieurs — un balayage laisse un cache par niveau, et une
-            comparaison exige de pouvoir relire chacun.
+        cible: quelle campagne rejouer — un **effort** ou une **empreinte de réglages**.
+            Par défaut la dernière. Deux formes pour un seul argument parce qu'elles
+            répondent au même besoin à deux moments : l'effort suffit tant qu'il désigne
+            une campagne unique, l'empreinte est le recours quand il n'en désigne plus
+            une seule. Un second argument n'aurait fait qu'ajouter la question « lequel
+            gagne s'ils se contredisent ? ».
     """
     fichier = racine / FICHIER_MODELE
     if not fichier.exists():
@@ -187,17 +190,30 @@ def hors_ligne(
     registre = _lire_registre(racine)
     campagnes = registre["campagnes"]
 
-    if effort is None:
+    if cible is None:
         empreinte = registre["derniere"]
+    elif cible in campagnes:
+        empreinte = cible
     else:
-        empreinte = next(
-            (e for e, c in campagnes.items() if c["effort"] == effort), None
-        )
-        if empreinte is None:
+        # Toutes les campagnes de cet effort, pas la première trouvée. L'effort ne
+        # suffira plus à en désigner une dès E8, qui fera varier `MAX_ITERATIONS` à
+        # effort constant : deux entrées `medium`, et un `next()` en rendrait une au
+        # hasard de l'ordre d'insertion. Rejouer à blanc la mauvaise campagne ne lève
+        # rien et produit un rapport plausible — même famille que les deux défauts de
+        # cache déjà corrigés. On lève plutôt que de choisir.
+        candidates = [e for e, c in campagnes.items() if c["effort"] == cible]
+        if not candidates:
             connus = sorted({c["effort"] for c in campagnes.values()})
             raise KeyError(
-                f"aucune campagne à l'effort {effort!r} ; disponibles : {connus}"
+                f"aucune campagne à l'effort {cible!r} ; efforts disponibles : {connus}"
             )
+        if len(candidates) > 1:
+            raise KeyError(
+                f"{len(candidates)} campagnes à l'effort {cible!r} : "
+                f"{sorted(candidates)}. L'effort ne les distingue pas — relancer en "
+                f"passant l'empreinte de réglages voulue à la place."
+            )
+        empreinte = candidates[0]
 
     campagne = campagnes[empreinte]
     return AgentHorsLigne(

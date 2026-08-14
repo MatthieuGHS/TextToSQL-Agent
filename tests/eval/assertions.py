@@ -367,7 +367,14 @@ class TexteNeContientPas:
 
 @dataclass(frozen=True)
 class PasDeGraphiqueSurResultatVide:
-    """Un résultat vide est une information. On le rapporte, on ne le trace pas."""
+    """Un résultat vide est une information. On le rapporte, on ne le trace pas.
+
+    ⚠️ **Inerte en campagne réelle jusqu'à E7.** `agent_reel._resultat()` force
+    `graphique=False` — l'agent ne dessine pas encore — donc ce contrôle rend `True` sans
+    rien examiner. Il est exercé dans les deux sens par les tests, et il ne mesure rien
+    en production. E7 doit le réactiver en renseignant le champ ; d'ici là, ne pas lire un
+    corpus « tout vert » comme si cette propriété était acquise.
+    """
 
     nom: str = "pas de graphique sur résultat vide"
 
@@ -384,6 +391,13 @@ _NOMBRE = re.compile(r"\d[\d   ]*(?:[.,]\d+)?")
 
 # Un nombre isolé de 1 ou 2 chiffres est presque toujours un ordinal, une date ou un
 # effectif de phrase ("les 3 canaux"), pas un chiffre extrait des données.
+#
+# Ce que ce plancher exempte, et qu'il faut savoir en lisant un score : **tous les
+# pourcentages** (« +47 % »), tous les ratios (« 2,5 fois plus ») et toute valeur
+# décimale sous 10 écrite avec une seule décimale. Un pourcentage inventé passe donc
+# librement. C'est une exemption assumée — un plancher plus bas condamnerait les
+# ordinaux — et non un oubli. À rouvrir si des pourcentages fabriqués apparaissent dans
+# les réponses réelles ; à la date du 14/08/2026, aucun n'a été observé.
 _PLANCHER_CHIFFRES = 3
 
 
@@ -479,6 +493,25 @@ class TracabiliteNumerique:
     Ce qui reste attrapé, et c'est le cas qui compte : un chiffre qu'aucune requête n'a
     produit — un total fait de tête à partir de deux résultats, ou une lecture approximative
     d'un ordre de grandeur qu'on n'a pas demandé à la base.
+
+    ⚠️ **Le contrôle se dilue quand le résultat grossit**, et il faut le savoir avant de
+    lire un score. Un nombre est accepté s'il approche *n'importe laquelle* des valeurs de
+    *n'importe laquelle* des requêtes : la part de l'espace des nombres qu'il accepte croît
+    donc avec le nombre de cellules ramenées. Mesuré le 14/08/2026 sur les 119 exécutions
+    en cache — part des entiers de 3 à 7 chiffres jugés traçables : **1,3 % en médiane,
+    mais 27 à 48 % sur les exécutions ramenant 170 à 570 valeurs**, qui sont les questions
+    de graphique.
+
+    Non corrigé, et volontairement. Les deux resserrements envisagés ont été mesurés :
+    borner les échelles de `range(0, 4)` à `range(0, 2)` ne change pas la couverture
+    (1,3 % avant comme après) et fait échouer 25 verdicts sur 119 portant sur des réponses
+    justes : un montant écrit « 47,3 » pour 47 300 000 € demande un facteur 10⁶.
+    Conditionner la
+    tolérance à la taille du résultat ajoutait un régime de plus à une fonction qui en a
+    déjà trois, contre un défaut jamais observé sur une réponse réelle.
+
+    À traiter à E7, quand les gros résultats deviendront la norme et que le défaut sera
+    constaté plutôt qu'anticipé.
     """
 
     tolerance: float = 0.02

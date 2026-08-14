@@ -117,6 +117,33 @@ def test_un_balayage_laisse_chaque_campagne_rejouable(base_presente, tmp_path):
         con.close()
 
 
+def test_un_effort_ambigu_leve_au_lieu_de_choisir(base_presente, tmp_path):
+    """E8 fera varier `MAX_ITERATIONS` à effort constant : deux campagnes `medium`.
+
+    L'ancienne résolution prenait la première trouvée, au hasard de l'ordre d'insertion
+    du registre. Rejouer à blanc la mauvaise campagne ne lève rien et produit un rapport
+    parfaitement plausible — la troisième occurrence de « ce qui n'est pas dans la clé se
+    ressert ». Ce test échoue sur cette version-là.
+
+    La porte de sortie est vérifiée dans le même geste : lever sans recours ne ferait
+    que déplacer le problème.
+    """
+    (tmp_path / agent_reel.FICHIER_MODELE).write_text(
+        '{"campagnes": {"reg-4-tours": {"identifiant": "m", "effort": "medium"}, '
+        '"reg-8-tours": {"identifiant": "m", "effort": "medium"}}, '
+        '"derniere": "reg-8-tours"}'
+    )
+    con = connexion.ouvrir()
+    try:
+        with pytest.raises(KeyError, match="2 campagnes à l'effort 'medium'"):
+            agent_reel.hors_ligne(tmp_path, con, "medium")
+
+        agent = agent_reel.hors_ligne(tmp_path, con, "reg-4-tours")
+        assert agent.empreinte_reglages == "reg-4-tours"
+    finally:
+        con.close()
+
+
 def test_le_mode_a_blanc_le_dit_quand_il_n_a_rien_a_rejouer(base_presente, tmp_path,
                                                             monkeypatch):
     """Un cache vide doit se dire, pas produire un rapport à zéro qu'on lirait comme

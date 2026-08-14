@@ -78,6 +78,9 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--source", default="tout", choices=["corpus", "grille", "tout"])
     a.add_argument("--a-blanc", action="store_true",
                    help="rejoue le cache sans un seul appel API")
+    a.add_argument("--campagne", default=None, metavar="EMPREINTE",
+                   help="à blanc : quelle campagne relire, quand l'effort n'en désigne "
+                        "plus une seule (voir data/eval/modele.json)")
     a.add_argument("--controle", metavar="CONFIRMATION", default=None,
                    help=f"exécute le jeu sous scellé ; exige « {CONFIRMATION_CONTROLE} »")
     a.add_argument("--journal", action="store_true")
@@ -114,7 +117,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.a_blanc:
-            agent = agent_reel.hors_ligne(RACINE_EVAL, con, args.effort)
+            agent = agent_reel.hors_ligne(
+                RACINE_EVAL, con, args.campagne or args.effort
+            )
         else:
             agent = agent_reel.construire(
                 RACINE_EVAL, effort=args.effort or boucle.EFFORT

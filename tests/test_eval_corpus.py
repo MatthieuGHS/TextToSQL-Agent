@@ -13,7 +13,11 @@ import pytest
 
 from src.etl import build_db
 from tests.eval import corpus as c
-from tests.eval.assertions import ValeurAttendue, _valeurs_numeriques
+from tests.eval.assertions import (
+    TracabiliteNumerique,
+    ValeurAttendue,
+    _valeurs_numeriques,
+)
 
 
 @pytest.fixture(scope="module")
@@ -124,7 +128,48 @@ def test_le_jeu_de_controle_est_disjoint_du_corpus_de_travail():
     assert len(travail) + len(controle) == len(c.CORPUS)
 
 
-def test_le_tirage_du_controle_est_reproductible():
-    """Le tirage est déterministe : personne ne peut le rejouer jusqu'à obtenir le bon."""
-    assert c.proprietes_de_controle() == c.proprietes_de_controle()
-    assert len(c.proprietes_de_controle()) == c.TAILLE_CONTROLE
+def test_le_scelle_est_ecrit_et_non_calcule():
+    """Les trois propriétés exactes, en dur — c'est ce qui rend le scellé opposable.
+
+    Un tirage recalculé à chaque appel dépendait du contenu courant du corpus. Le test
+    qui existait ici ne vérifiait que l'auto-cohérence et la taille : il serait resté vert
+    pendant que le scellé changeait de contenu.
+    """
+    assert c.proprietes_de_controle() == frozenset({
+        "corrélation n'est pas causalité",
+        "performance non attribuable",
+        "valeur absente, faible cardinalité",
+    })
+
+
+def test_le_scelle_ne_bouge_pas_quand_le_corpus_grandit(monkeypatch):
+    """La contre-épreuve du défaut réel : E7 ajoutera des propriétés de graphique.
+
+    Avec l'ancien `random.sample` sur `proprietes()`, ajouter **une seule** propriété
+    faisait sortir deux des trois propriétés scellées et entrer une propriété déjà jouée
+    trois fois — un jeu de contrôle contaminé, sans erreur ni avertissement. Ce test
+    échoue sur cette version-là.
+    """
+    avant = c.proprietes_de_controle()
+    nouveau = c.Cas(propriete="lisibilité du graphique", question="Q ?", assertions=())
+    monkeypatch.setattr(c, "CORPUS", c.CORPUS + (nouveau,))
+
+    assert c.proprietes_de_controle() == avant
+    assert nouveau.question in {x.question for x in c.corpus_de_travail()}
+
+
+def test_les_cas_d_attribution_controlent_la_tracabilite():
+    """La propriété que la liste de vocabulaire interdit portait avant son retrait.
+
+    Le rationnel du retrait annonçait que `TracabiliteNumerique` la reprenait « et
+    mieux » — un chiffre de ROI n'a aucune source possible dans ces données. Elle n'avait
+    pas été posée sur les deux cas concernés : la couverture avait été retirée sans être
+    remplacée, sur une propriété sous scellé, donc invisible jusqu'à son ouverture.
+    """
+    for cas in c.CORPUS:
+        if cas.propriete != "performance non attribuable":
+            continue
+
+        assert any(isinstance(a, TracabiliteNumerique) for a in cas.assertions), (
+            f"aucun contrôle de traçabilité sur : {cas.question}"
+        )
