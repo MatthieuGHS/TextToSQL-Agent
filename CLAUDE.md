@@ -39,6 +39,16 @@ passerait.
 **Préférer le simple et le général au malin.** Une propriété portée par les données est plus
 robuste qu'une propriété portée par une phrase de prompt.
 
+**On ne corrige l'instrument que sur un défaut constaté, jamais anticipé.** Le dispositif
+de mesure a produit, à lui seul, les quatre derniers défauts du projet — chacun né d'un
+mécanisme ajouté au tour précédent pour couvrir le mécanisme d'avant. Avant de durcir une
+assertion : la mesurer sur le cache d'évaluation, qui rend la vérification gratuite. Deux
+fois sur deux, la mesure a contredit l'intuition et le « correctif » aurait dégradé
+l'instrument. À défaut égal, préférer la correction qui **retire** du mécanisme.
+`tests/eval` tient sous un budget de lignes exécutables, vérifié par
+`tests/test_eval_budget.py` — quand il est atteint, chercher l'assertion qui n'a jamais
+échoué plutôt que relever le plafond. Détail et mesures dans `docs/decisions.md`.
+
 ## Architecture
 
 ```
@@ -74,11 +84,25 @@ reposent sur cette prémisse.
 ```bash
 source .venv/bin/activate
 python -m src.etl.build_db      # reconstruit data/mmm.duckdb depuis data/raw/
-python -m pytest tests/ -q      # suite complète (~5 s, sans appel API)
+python -m pytest tests/ -q      # suite complète (~8 s, sans appel API)
 ```
 
 Les tests ne consomment aucun appel API. Ceux qui en consommeraient (harnais d'évaluation
 en conditions réelles) sont explicitement séparés.
+
+Le harnais est le **seul** endroit d'où partent des appels facturés, et il faut le vouloir :
+
+```bash
+python -m tests.eval --a-blanc                    # rejoue le cache, 0 appel, 0 $
+python -m tests.eval --a-blanc --effort low       # une campagne précise du balayage
+python -m tests.eval --a-blanc --campagne <empr.> # quand l'effort n'en désigne plus une
+python -m tests.eval --k 1 --source corpus        # ⚠ campagne réelle, facturée
+```
+
+**Toujours commencer à blanc.** Les campagnes déjà payées sont en cache et se rejouent
+gratuitement ; c'est ce qui permet de vérifier une hypothèse sur l'instrument avant de le
+modifier. Séquence d'une nouvelle campagne : peuplement `--k 1` → itérations `--a-blanc`
+→ campagne de référence.
 
 ## Conventions
 
@@ -114,4 +138,27 @@ géographique ni démographique · les trois tables n'ont pas les mêmes bornes 
   des tests font exception : ils sont inventés.
 - Aucune donnée client, aucun chiffre réel, aucun nom d'entreprise dans le code versionné —
   y compris dans les commentaires et les exemples de docstring. Vérifier avant de committer.
+  La règle se viole le plus facilement en *justifiant une mesure* : citer un montant réel
+  pour illustrer un correctif est la fuite typique. Utiliser un chiffre inventé.
+- Reste à trancher : `EDF` apparaît dans une question du corpus et dans une docstring de
+  `transforms.py`, `Twitch` dans trois cas de test. Ce sont des valeurs du jeu de données,
+  versionnées depuis les premiers commits. Anonymiser demanderait une purge d'historique —
+  décision à prendre avant toute publication du dépôt.
 - Aucune clé API dans le code : tout passe par les variables d'environnement.
+
+## État au 14 août 2026
+
+Fait : socle · ETL et contrat de données (E1) · accès SQL unique et durci (E2) · prompt
+système généré (E3) · boucle agent (E4) · harnais d'évaluation en conditions réelles (E5)
+· balayage d'effort · relecture méthodologique et corrections.
+
+**Prochaine étape : E7, les graphiques** — 8 des 18 questions du client en sont, et
+l'agent répond aujourd'hui qu'il ne sait pas dessiner. Passe avant E6, qui est supprimé
+(voir `docs/decisions.md`). Deux contraintes posées et à respecter : **E7 n'ajoute aucune
+assertion au harnais** — le « Chart Check » est une colonne de notation manuelle — et
+**E7 n'a pas de boucle de correction**, le modèle n'ayant produit aucune requête fautive
+sur 171 exécutions.
+
+Puis E8 (réglage), E9 (interface), E10 (observabilité), E11 (livraison). Le jeu de
+contrôle sous scellé ne s'ouvre qu'à la fin d'E8, et il mesure une non-régression sur les
+refus — pas une généralisation.
