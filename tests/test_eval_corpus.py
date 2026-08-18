@@ -8,6 +8,8 @@ passerait pour un contrôle alors qu'elle n'en est pas un.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import duckdb
 import pytest
 
@@ -120,10 +122,59 @@ def test_la_valeur_en_mauvaise_colonne_existe_bien(con):
 # --- Jeu de contrôle ------------------------------------------------------------------
 
 
-def test_le_jeu_de_controle_est_disjoint_du_corpus_de_travail():
+def test_le_scelle_designe_des_proprietes_qui_existent():
+    """Un nom scellé qui ne correspond à rien vide le scellé en silence.
+
+    Défaut ouvert par le passage du tirage à une constante écrite : un `random.sample`
+    sur `proprietes()` ne pouvait pas nommer une propriété inexistante, une liste écrite
+    à la main le peut. Une reformulation d'étiquette suffit à faire glisser un cas scellé
+    dans le corpus de travail.
+
+    Le scellé n'avait aucun ancrage direct : son intégrité reposait sur
+    `test_toutes_les_proprietes_sont_couvertes`, **une autre liste épinglée**, qui n'a
+    jamais mentionné le scellé. Or son message d'échec invite à mettre la liste à jour —
+    c'est le geste juste dans son propre cadre. Mesuré le 18/08/2026 sur ce scénario
+    exact : renommage plus mise à jour de bonne foi de la liste épinglée, la suite entière
+    passe au vert avec un contrôle tombé de 5 à 4 cas. Même piège que
+    `EMPREINTE_ATTENDUE` — une constante dont le message d'échec ne dit pas tout ce que sa
+    modification emporte.
+
+    Il y avait ici un contrôle de disjonction — `travail & controle == set()` et
+    `len(travail) + len(controle) == len(CORPUS)`. Les deux sont vrais **par
+    construction** : les deux fonctions partitionnent `CORPUS` sur la même propriété. Un
+    scellé vide y satisfaisait aussi bien qu'un scellé juste. Remplacé plutôt que
+    complété : un test qui ne peut pas échouer occupe la place de celui qui le pourrait.
+    """
+    connues = set(c.proprietes())
+    assert c.PROPRIETES_CONTROLE <= connues, (
+        f"propriété(s) scellée(s) absente(s) du corpus : "
+        f"{sorted(c.PROPRIETES_CONTROLE - connues)} — le scellé s'est vidé sans le dire."
+    )
+    assert c.corpus_de_controle()
+    assert c.corpus_de_travail()
+
+
+def test_un_renommage_de_propriete_ne_vide_pas_le_scelle_en_silence(monkeypatch):
+    """Contre-épreuve du test précédent, sur son déclencheur réel : le renommage.
+
+    Reformuler l'étiquette d'une seule propriété scellée fait passer le corpus de travail
+    de 17 à 18 cas et le contrôle de 5 à 4, sur un jeu qui n'est pas censé pouvoir bouger.
+    Les deux dernières assertions montrent ce que l'ancien contrôle de disjonction en
+    disait : rien. Elles restent vraies dans le monde cassé, et c'est tout leur intérêt
+    ici — elles documentent pourquoi elles ne suffisaient pas.
+    """
+    renomme = tuple(
+        replace(x, propriete=x.propriete + " (reformulée)")
+        if x.propriete == "corrélation n'est pas causalité"
+        else x
+        for x in c.CORPUS
+    )
+    monkeypatch.setattr(c, "CORPUS", renomme)
+
+    assert not c.PROPRIETES_CONTROLE <= set(c.proprietes())
+
     travail = {x.question for x in c.corpus_de_travail()}
     controle = {x.question for x in c.corpus_de_controle()}
-
     assert travail & controle == set()
     assert len(travail) + len(controle) == len(c.CORPUS)
 
