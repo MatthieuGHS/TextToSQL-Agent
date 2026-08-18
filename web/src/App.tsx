@@ -75,16 +75,23 @@ export default function App() {
       setEtapes([])
       setOccupe(true)
 
+      // Accumulées dans un tableau local *et* dans l'état : l'état sert l'affichage en
+      // direct, le tableau survit à la closure. Lire `etapes` à la fin rendrait la valeur
+      // figée au moment où `envoyer` a été créée, c'est-à-dire vide.
+      const collectees: Etape[] = []
+
       try {
-        const reponse = await demander(propre, precedents, (e) =>
-          setEtapes((actuelles) => [...actuelles, e]),
-        )
+        const reponse = await demander(propre, precedents, (e) => {
+          collectees.push(e)
+          setEtapes((actuelles) => [...actuelles, e])
+        })
         setMessages((m) => [
           ...m,
           {
             role: 'agent',
             texte: reponse.texte,
             reponse,
+            etapes: collectees,
             avertissement: reponse.arret_normal
               ? undefined
               : (AVERTISSEMENTS[reponse.arret] ?? "La réponse n'a pas abouti normalement."),
@@ -98,11 +105,17 @@ export default function App() {
             texte:
               "La question n'a pas pu être traitée. " +
               (e instanceof Error ? e.message : ''),
+            // Conservées aussi sur un échec, et c'est là qu'elles servent le plus : elles
+            // disent jusqu'où l'exécution est allée avant de tomber.
+            etapes: collectees,
             avertissement: 'Erreur de communication avec le service.',
           },
         ])
       } finally {
         setOccupe(false)
+        // Vidées ici parce qu'elles ont été recopiées dans le message : ce qui reste à
+        // l'écran est celui du message, pas l'indicateur en direct. Sans ça les deux se
+        // superposeraient le temps d'un rendu.
         setEtapes([])
       }
     },

@@ -25,11 +25,24 @@ function libelle(etape: Etape): string {
   }
 }
 
-export function Progression({ etapes }: { etapes: Etape[] }) {
+export function Progression({
+  etapes,
+  terminee = false,
+}: {
+  etapes: Etape[]
+  /**
+   * Une fois la réponse rendue, les étapes restent mais cessent de se signaler : plus de
+   * pastille clignotante, plus de dernière ligne mise en avant. Elles deviennent une
+   * trace qu'on relit, pas une activité qu'on suit — et sans ce basculement, une
+   * conversation de cinq questions afficherait cinq points en train de clignoter pour
+   * des exécutions terminées depuis longtemps.
+   */
+  terminee?: boolean
+}) {
   return (
     <div className="flex flex-col gap-1.5 py-1">
       {etapes.map((etape, i) => {
-        const derniere = i === etapes.length - 1
+        const derniere = !terminee && i === etapes.length - 1
         return (
           <div
             key={i}

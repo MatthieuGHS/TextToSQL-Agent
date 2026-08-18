@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Message as TypeMessage } from '../types'
 import { BlocRequete } from './BlocRequete'
 import { Markdown } from './Markdown'
+import { Progression } from './Progression'
 
 /**
  * Un tour de conversation.
@@ -58,6 +59,10 @@ export function Message({ message }: { message: TypeMessage }) {
         >
           {message.avertissement}
         </div>
+      )}
+
+      {message.etapes && message.etapes.length > 0 && (
+        <Progression etapes={message.etapes} terminee />
       )}
 
       <div className="group relative">
