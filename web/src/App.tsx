@@ -43,13 +43,23 @@ export default function App() {
   const [sante, setSante] = useState<Sante | null>(null)
   const [erreurSante, setErreurSante] = useState<string | null>(null)
   const bas = useRef<HTMLDivElement>(null)
+  const zone = useRef<HTMLElement>(null)
 
   useEffect(() => {
     lireSante().then(setSante).catch((e) => setErreurSante(String(e)))
   }, [])
 
+  // Ne suit que si on est déjà en bas. Sans cette condition, remonter pour relire une
+  // requête pendant que l'agent travaille ramène en bas à chaque étape — c'est-à-dire
+  // toutes les quelques secondes, et précisément au moment d'une démonstration où on
+  // remonte justement pour montrer quelque chose.
+  const PRES_DU_BAS = 120
+
   useEffect(() => {
-    bas.current?.scrollIntoView({ behavior: 'smooth' })
+    const e = zone.current
+    if (!e) return
+    const distance = e.scrollHeight - e.scrollTop - e.clientHeight
+    if (distance < PRES_DU_BAS) bas.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, etapes])
 
   const envoyer = useCallback(
@@ -105,7 +115,7 @@ export default function App() {
     <div className="h-full flex flex-col">
       <Entete sante={sante} erreur={erreurSante} />
 
-      <main className="flex-1 overflow-y-auto">
+      <main ref={zone} className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-8 flex flex-col gap-8">
           {vide && (
             <div className="flex flex-col gap-4 pt-12">

@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import type { Message as TypeMessage } from '../types'
 import { BlocRequete } from './BlocRequete'
+import { Markdown } from './Markdown'
 
 /**
  * Un tour de conversation.
@@ -11,6 +13,26 @@ import { BlocRequete } from './BlocRequete'
  * `arret_normal` vient du serveur et n'est jamais redéduit ici — le rejouer côté navigateur
  * le ferait diverger un jour, et un abandon finirait par s'afficher comme un succès.
  */
+function BoutonCopier({ texte }: { texte: string }) {
+  const [copie, setCopie] = useState(false)
+
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(texte)
+        setCopie(true)
+        setTimeout(() => setCopie(false), 1500)
+      }}
+      className="absolute -top-1 right-0 rounded-md px-2 py-1 text-xs text-slate-500
+                 opacity-0 transition-opacity group-hover:opacity-100
+                 hover:bg-slate-800 hover:text-slate-300"
+    >
+      {copie ? 'copié' : 'copier'}
+    </button>
+  )
+}
+
+
 export function Message({ message }: { message: TypeMessage }) {
   if (message.role === 'utilisateur') {
     return (
@@ -38,10 +60,9 @@ export function Message({ message }: { message: TypeMessage }) {
         </div>
       )}
 
-      <div
-        className="text-[15px] leading-relaxed text-slate-200 whitespace-pre-wrap"
-      >
-        {message.texte}
+      <div className="group relative">
+        <Markdown texte={message.texte} />
+        <BoutonCopier texte={message.texte} />
       </div>
 
       {requetes.length > 0 && (

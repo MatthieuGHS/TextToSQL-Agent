@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Requete } from '../types'
+import { SqlColore } from './SqlColore'
 import { TableauResultat } from './TableauResultat'
 
 /**
@@ -49,12 +50,7 @@ export function BlocRequete({ requete }: { requete: Requete }) {
 
       {ouvert && (
         <div className="border-t border-slate-800">
-          <pre
-            className="px-3 py-2 text-xs font-mono text-slate-300 whitespace-pre-wrap
-                       bg-slate-950/50 overflow-x-auto"
-          >
-            {requete.sql}
-          </pre>
+          <SqlColore sql={requete.sql} />
           {enEchec ? (
             <p
               className="px-3 py-2 text-xs font-mono text-red-300 whitespace-pre-wrap
