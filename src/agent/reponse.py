@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
+from typing import Any
 
 
 class Arret(enum.Enum):
@@ -124,6 +125,10 @@ class AgentResponse:
     usage: Usage
     modele: str
     empreinte_prompt: str
+    # `Graphique | None` — annoté `Any` pour que ce module reste sans dépendance : il est
+    # le contrat entre le noyau et ses consommateurs, et rien de ce qu'il porte ne doit
+    # obliger un lecteur à importer autre chose pour le comprendre.
+    graphique: Any = None
 
     @property
     def a_interroge_la_base(self) -> bool:

@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
+from src import charts
 from src.agent import outil, prompt
 from src.agent.reponse import AgentResponse, Arret, Echange, RequeteExecutee, Usage
 from src.db import connexion
@@ -407,6 +408,24 @@ def _usage_de(message: AIMessage) -> Usage:
     )
 
 
+def _graphique(requetes: list[RequeteExecutee]):
+    """Propose un graphique à partir de la **dernière requête réussie**.
+
+    La dernière et non la plus grosse : c'est celle sur laquelle le modèle s'est arrêté
+    pour répondre, donc celle qui porte sa conclusion. Les précédentes sont des
+    explorations — vérifier qu'une valeur existe, lister des canaux — et tracer l'une
+    d'elles illustrerait un raisonnement intermédiaire au lieu de la réponse.
+
+    Aucune décision n'est prise ici : `charts.proposer` refuse tout seul ce qui ne se
+    trace pas, et son refus est le cas fréquent.
+    """
+    reussies = [r for r in requetes if r.a_reussi]
+    if not reussies:
+        return None
+    derniere = reussies[-1]
+    return charts.proposer(derniere.colonnes, derniere.lignes)
+
+
 def _finir(
     agent: Agent,
     texte: str,
@@ -436,4 +455,5 @@ def _finir(
         usage=usage,
         modele=identifiant,
         empreinte_prompt=agent.empreinte_prompt,
+        graphique=_graphique(requetes),
     )

@@ -265,7 +265,7 @@ def _resultat(reponse: AgentResponse) -> Resultat:
     return Resultat(
         reponse=reponse.texte,
         sql=[r.sql for r in reponse.requetes if r.a_reussi],
-        graphique=False,  # E7 le renseignera
+        graphique=reponse.graphique is not None,
         arret=reponse.arret.value,
     )
 

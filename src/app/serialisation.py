@@ -65,6 +65,30 @@ def requete(executee) -> schemas.RequeteSortante:
     )
 
 
+def graphique(spec) -> schemas.GraphiqueSortant | None:
+    """Les étiquettes passent par `cellule()`, les valeurs sont déjà des flottants.
+
+    L'abscisse peut porter des dates, que `src/charts` garde en objets Python — il
+    travaille sur les types du noyau et ignore qu'une frontière HTTP existe. C'est ici,
+    et seulement ici, qu'elles deviennent transportables.
+    """
+    if spec is None:
+        return None
+    return schemas.GraphiqueSortant(
+        type=spec.type,
+        x=spec.x,
+        etiquettes=[cellule(e) for e in spec.etiquettes],
+        series=[
+            schemas.SerieSortante(
+                colonne=s.colonne,
+                valeurs=list(s.valeurs),
+                axe_secondaire=s.axe_secondaire,
+            )
+            for s in spec.series
+        ],
+    )
+
+
 def reponse(agent_response: AgentResponse) -> schemas.ReponseSortante:
     """`arret_normal` est calculé ici, jamais réinterprété par l'interface.
 
@@ -76,6 +100,7 @@ def reponse(agent_response: AgentResponse) -> schemas.ReponseSortante:
     return schemas.ReponseSortante(
         texte=agent_response.texte,
         requetes=[requete(r) for r in agent_response.requetes],
+        graphique=graphique(agent_response.graphique),
         arret=agent_response.arret.value,
         arret_normal=agent_response.arret.est_normal,
         usage=schemas.UsageSortant(

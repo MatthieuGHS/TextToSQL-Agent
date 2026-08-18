@@ -602,3 +602,63 @@ def test_une_trace_qui_leve_ne_passe_pas_pour_une_panne_d_agent(con):
     with pytest.raises(ValueError, match="traceur mal branché"):
         ask("Question ?", agent=agent_avec(modele, con), trace=trace_fautive)
 
+
+# --- 5. Le graphique ------------------------------------------------------------------
+
+
+def test_le_graphique_vient_de_la_derniere_requete_reussie(con):
+    """La dernière, et non la plus grosse : c'est celle qui porte la conclusion.
+
+    Les précédentes sont des explorations — vérifier qu'une valeur existe, lister des
+    canaux. Tracer l'une d'elles illustrerait un raisonnement intermédiaire au lieu de la
+    réponse, avec l'assurance trompeuse que donne un graphique.
+    """
+    modele = ModeleScripte([
+        appel_sql("SELECT DISTINCT channel FROM media"),
+        appel_sql("SELECT step_date, cost FROM media ORDER BY step_date", "t2"),
+        texte("Voici l'évolution."),
+    ])
+
+    reponse = ask("Évolution ?", agent=agent_avec(modele, con))
+
+    assert reponse.graphique is not None
+    assert reponse.graphique.x == "step_date"
+    assert [s.colonne for s in reponse.graphique.series] == ["cost"]
+
+
+def test_aucun_graphique_quand_le_resultat_ne_s_y_prete_pas(con):
+    """Le refus est le cas fréquent, et il ne doit pas ressembler à une panne."""
+    modele = ModeleScripte([
+        appel_sql("SELECT SUM(cost) FROM media"),
+        texte("Le total est de 1 250 €."),
+    ])
+
+    reponse = ask("Total ?", agent=agent_avec(modele, con))
+
+    assert reponse.graphique is None
+    assert reponse.arret is Arret.REPONSE_DONNEE
+
+
+def test_une_requete_en_echec_ne_sert_pas_de_source_au_graphique(con):
+    """Un tâtonnement n'a ni colonnes ni lignes : le tracer n'aurait aucun sens."""
+    modele = ModeleScripte([
+        appel_sql("SELECT step_date, cost FROM media ORDER BY step_date"),
+        appel_sql("SELECT colonne_absente FROM media", "t2"),
+        texte("Voici."),
+    ])
+
+    reponse = ask("Évolution ?", agent=agent_avec(modele, con))
+
+    # La dernière *réussie*, donc la première des deux.
+    assert reponse.graphique is not None
+    assert reponse.graphique.x == "step_date"
+
+
+def test_aucune_requete_ne_donne_aucun_graphique(con):
+    """Un refus pédagogique reste un refus : rien à tracer, et ce n'est pas un défaut."""
+    modele = ModeleScripte([texte("Ces données ne permettent pas de calculer un ROI.")])
+
+    reponse = ask("Quel canal a le meilleur ROI ?", agent=agent_avec(modele, con))
+
+    assert reponse.graphique is None
+

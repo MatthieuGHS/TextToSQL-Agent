@@ -31,7 +31,13 @@ IDENTIFIANT = "claude-sonnet-5"
 def base(tmp_path_factory) -> pathlib.Path:
     chemin = tmp_path_factory.mktemp("db") / "test.duckdb"
     con = duckdb.connect(str(chemin))
-    con.execute("CREATE TABLE media AS SELECT 'tv' AS channel, 1000.0 AS cost")
+    # Deux lignes et non une : `src/charts` refuse — à juste titre — de tracer un résultat
+    # d'une seule ligne, qui ne fait ni évolution ni comparaison. Une base d'essai à une
+    # ligne rendait ce refus indistinguable d'un champ jamais renseigné.
+    con.execute(
+        "CREATE TABLE media AS SELECT * FROM (VALUES "
+        "('tv', 1000.0), ('sea', 250.0)) t(channel, cost)"
+    )
     con.close()
     return chemin
 
@@ -273,3 +279,36 @@ def test_l_effort_change_l_empreinte():
     }
 
     assert len(empreintes) == 3
+
+
+# --- 5. Le champ « graphique », enfin renseigné ---------------------------------------
+
+
+def test_le_graphique_remonte_jusqu_aux_assertions(con):
+    """`PasDeGraphiqueSurResultatVide` était inerte depuis sa création.
+
+    `_resultat()` forçait `graphique=False`, faute d'agent capable de dessiner : le
+    contrôle rendait `True` sans rien examiner. Il lit désormais `AgentResponse.graphique`,
+    ce qui le rend capable d'échouer — c'est-à-dire de mesurer quelque chose.
+    """
+    modele = ModeleScripte([
+        appel_sql("SELECT channel, cost FROM media"),
+        texte("Voici la répartition."),
+    ])
+
+    resultat = adaptateur(modele, con)("Répartition ?").resultat
+
+    assert resultat.graphique is True
+
+
+def test_un_resultat_non_tracable_laisse_le_champ_a_faux(con):
+    """Contre-épreuve : sans elle, le champ pourrait être vrai en permanence."""
+    modele = ModeleScripte([
+        appel_sql("SELECT SUM(cost) FROM media"),
+        texte("Le total est de 1 000 €."),
+    ])
+
+    resultat = adaptateur(modele, con)("Total ?").resultat
+
+    assert resultat.graphique is False
+

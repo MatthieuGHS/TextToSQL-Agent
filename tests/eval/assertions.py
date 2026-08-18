@@ -369,11 +369,16 @@ class TexteNeContientPas:
 class PasDeGraphiqueSurResultatVide:
     """Un résultat vide est une information. On le rapporte, on ne le trace pas.
 
-    ⚠️ **Inerte en campagne réelle jusqu'à E7.** `agent_reel._resultat()` force
-    `graphique=False` — l'agent ne dessine pas encore — donc ce contrôle rend `True` sans
-    rien examiner. Il est exercé dans les deux sens par les tests, et il ne mesure rien
-    en production. E7 doit le réactiver en renseignant le champ ; d'ici là, ne pas lire un
-    corpus « tout vert » comme si cette propriété était acquise.
+    **Active depuis E7.** Elle a été inerte de sa création au 18/08/2026 :
+    `agent_reel._resultat()` forçait `graphique=False`, faute d'agent capable de dessiner,
+    et ce contrôle rendait `True` sans rien examiner. Il renseigne désormais le champ
+    depuis `AgentResponse.graphique`.
+
+    Ce qu'elle mesure vraiment, et qui a changé de nature : la décision de tracer est prise
+    par `src/charts`, en code, et son premier refus est justement le résultat vide. Cette
+    assertion contrôle donc que cette garde-là tient de bout en bout — de la boucle jusqu'au
+    verdict — plutôt qu'une intention du modèle. C'est plus faible qu'il n'y paraît, et
+    c'est voulu : le contrôle fort est dans `tests/test_charts.py`, sur des fonctions pures.
     """
 
     nom: str = "pas de graphique sur résultat vide"

@@ -181,6 +181,46 @@ def test_une_question_vide_est_refusee_par_la_frontiere(client):
     assert client.post("/api/question", json={"question": ""}).status_code == 422
 
 
+def test_la_specification_de_graphique_traverse_la_frontiere(client):
+    """L'interface ne décide de rien : elle reçoit un type, un axe, des séries.
+
+    C'est ce qui permet de changer de bibliothèque de rendu sans toucher à une règle de
+    lisibilité, et de tester ces règles sur des fonctions pures plutôt qu'au travers d'un
+    navigateur.
+    """
+    charge = client.post("/api/question", json={"question": "Quelles dépenses ?"}).json()
+    g = charge["graphique"]
+
+    assert g is not None
+    assert g["type"] == "courbe"
+    assert g["x"] == "step_date"
+    # Les dates de l'abscisse sont sérialisées comme partout ailleurs : `src/charts`
+    # travaille sur les types du noyau et ignore qu'une frontière HTTP existe.
+    assert g["etiquettes"] == ["2024-09-02", "2024-09-09"]
+    assert g["series"] == [
+        {"colonne": "cost", "valeurs": [1000.5, 250.25], "axe_secondaire": False}
+    ]
+
+
+def test_l_absence_de_graphique_est_explicite_et_non_une_omission(client, monkeypatch):
+    """`null` plutôt qu'un champ manquant : le refus est un résultat, pas un oubli."""
+    def agent_sans_trace():
+        return boucle.Agent(
+            modele=ModeleScripte([
+                appel_sql("SELECT SUM(cost) FROM media"),
+                texte("Le total est de 1 250,75 €."),
+            ]),
+            systeme=SystemMessage(content="prompt d'essai"),
+            empreinte_prompt="essai00000ab",
+        )
+
+    monkeypatch.setattr(api.boucle, "agent_par_defaut", agent_sans_trace)
+    charge = client.post("/api/question", json={"question": "Total ?"}).json()
+
+    assert "graphique" in charge
+    assert charge["graphique"] is None
+
+
 # --- 3. Le flux -----------------------------------------------------------------------
 
 

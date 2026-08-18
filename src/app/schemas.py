@@ -52,6 +52,30 @@ class RequeteSortante(BaseModel):
     erreur: str | None
 
 
+class SerieSortante(BaseModel):
+    colonne: str
+    # Les `None` sont conservés : un trou dans une série est une information, et
+    # l'interface doit le rendre comme une interruption de tracé, pas comme un zéro.
+    valeurs: list[float | None]
+    axe_secondaire: bool
+
+
+class GraphiqueSortant(BaseModel):
+    """La spécification décidée par `src/charts`, jamais par l'interface.
+
+    Celle-ci ne choisit ni le type, ni les axes, ni ce qui se trace : elle rend. C'est ce
+    qui permet de changer de bibliothèque de rendu sans toucher à une règle de lisibilité,
+    et de tester ces règles sur des fonctions pures.
+
+    Absent de la réponse quand il n'y a rien à tracer — et c'est le cas fréquent.
+    """
+
+    type: str
+    x: str
+    etiquettes: list[Any]
+    series: list[SerieSortante]
+
+
 class UsageSortant(BaseModel):
     entree: int
     sortie: int
@@ -69,6 +93,7 @@ class ReponseSortante(BaseModel):
 
     texte: str
     requetes: list[RequeteSortante]
+    graphique: GraphiqueSortant | None
     arret: str
     arret_normal: bool
     usage: UsageSortant
