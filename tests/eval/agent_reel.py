@@ -16,8 +16,9 @@ import hashlib
 import json
 import pathlib
 
-from src.agent import boucle, prompt
+from src.agent import boucle, outil, prompt
 from src.agent.reponse import AgentResponse, Arret
+from src.db import sql as acces_sql
 from tests.eval.assertions import Resultat
 
 # Levée ici, attrapée par le runner : c'est la seule exception qu'un agent a le droit de
@@ -85,6 +86,27 @@ def empreinte_reglages(agent: boucle.Agent, effort: str) -> str:
 
     Trié, donc reproductible d'un processus à l'autre — c'est la condition pour qu'une
     clé de cache tienne entre deux exécutions du programme.
+
+    **Ce que le modèle voit d'un résultat en fait partie**, et ça manquait. Les trois
+    bornes de `run_sql` décident du contenu d'un retour d'outil : `LIMITE_LIGNES` combien
+    de lignes reviennent, `BUDGET_CARACTERES` combien s'affichent, `DELAI_SECONDES` si la
+    requête aboutit. Les baisser change la réponse ; sans elles dans la clé, un rejeu à
+    blanc resservait les réponses de l'ancien réglage et le rapport concluait « ça ne
+    change rien », sans erreur ni avertissement.
+
+    **La description d'outil aussi**, et pour la même raison. Elle est prescriptive — elle
+    dit *quand* appeler l'outil, donc elle pèse sur le taux de sollicitation — mais elle
+    est liée par `bind_tools()` et n'entre pas dans `empreinte_prompt`, qui ne hache que
+    les `.md` et la partie générée. Aucune clé ne la contenait. Elle est posée ici telle
+    quelle plutôt que pré-hachée : le `json.dumps` trié ci-dessous s'en charge, et un
+    hachage de plus serait un mécanisme de plus pour le même effet.
+
+    Limite, écrite plutôt que couverte : ceci complète la clé **aujourd'hui**. Rien
+    n'empêche un réglage futur d'être ajouté ailleurs sans passer ici. Construire une
+    détection automatique — introspection des constantes, hachage des modules — serait le
+    quatrième mécanisme posé pour couvrir le troisième, c'est-à-dire le motif exact qui a
+    produit les derniers défauts du projet. Ce qu'on met à la place : ce dict est le seul
+    endroit où la question se pose, et `docs/decisions.md` tient la liste des clés.
     """
     reglages = {
         "effort": effort,
@@ -92,6 +114,10 @@ def empreinte_reglages(agent: boucle.Agent, effort: str) -> str:
         "max_tokens": boucle.MAX_TOKENS,
         "max_iterations": agent.max_iterations,
         "max_echecs_sql": agent.max_echecs_sql,
+        "limite_lignes": acces_sql.LIMITE_LIGNES,
+        "budget_caracteres": acces_sql.BUDGET_CARACTERES,
+        "delai_sql": acces_sql.DELAI_SECONDES,
+        "outil": outil.OUTIL_SQL,
     }
     brut = json.dumps(reglages, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(brut.encode("utf-8")).hexdigest()[:12]

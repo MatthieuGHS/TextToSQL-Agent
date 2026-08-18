@@ -184,3 +184,92 @@ def test_l_usage_est_dans_les_cles_attendues_par_le_runner(con):
     assert usage["cache_read"] == 2700
     assert usage["cache_creation"] == 200
     assert usage["tatonnements"] == 0
+
+
+# --- 4. Ce que la clé de réglages doit contenir ---------------------------------------
+#
+# Trois défauts de cache déjà corrigés ont la même forme : une clé d'indexation qui ne
+# contient pas tout ce qui distingue ce qu'elle indexe. Le symptôme est toujours le même —
+# une campagne resservie sous d'autres réglages, un rapport plausible, aucune erreur.
+# Ces tests posent la contre-épreuve : faire varier un réglage, et exiger que l'empreinte
+# bouge.
+
+AGENT_NU = boucle.Agent(modele=None, systeme=None, empreinte_prompt="")
+
+# Empreinte de référence, épinglée. Elle n'a pas de valeur en soi : elle existe pour
+# qu'une modification soit **consciente**, comme `EMPREINTE_ATTENDUE` pour le schéma
+# d'outil. C'est celle de la campagne `medium` du 11/08/2026, qui est la ligne de base.
+EMPREINTE_MEDIUM = "4f7a1f99217d"
+
+
+def test_l_empreinte_de_la_ligne_de_base_est_epinglee():
+    """Si ce test échoue, les campagnes en cache ne se rejouent plus.
+
+    Ce n'est pas un défaut à corriger en mettant à jour la constante sans réfléchir : une
+    empreinte qui bouge veut dire qu'un réglage a changé, donc que les réponses en cache
+    ont été produites sous une autre configuration. Deux issues, et une seule est gratuite
+    — annuler le changement de réglage, ou repayer la campagne. Re-cléer le cache n'est
+    légitime que si le réglage n'a pas *réellement* changé depuis les campagnes, ce qui se
+    vérifie dans l'historique et pas au jugé.
+    """
+    assert agent_reel.empreinte_reglages(AGENT_NU, "medium") == EMPREINTE_MEDIUM
+
+
+@pytest.mark.parametrize(
+    "constante, valeur",
+    [
+        ("LIMITE_LIGNES", 50),
+        ("BUDGET_CARACTERES", 2000),
+        ("DELAI_SECONDES", 3.0),
+    ],
+)
+def test_les_bornes_de_run_sql_changent_l_empreinte(monkeypatch, constante, valeur):
+    """Elles décident de ce que le modèle voit d'un résultat, donc de sa réponse.
+
+    Elles ne figuraient dans aucune clé. Baisser `LIMITE_LIGNES` et relancer à blanc
+    resservait les réponses obtenues sur 200 lignes, et le rapport concluait « ça ne
+    change rien » — la mesure exacte que le balayage de E8 est censé produire.
+    """
+    avant = agent_reel.empreinte_reglages(AGENT_NU, "medium")
+    monkeypatch.setattr(agent_reel.acces_sql, constante, valeur)
+
+    assert agent_reel.empreinte_reglages(AGENT_NU, "medium") != avant
+
+
+def test_la_description_d_outil_change_l_empreinte(monkeypatch):
+    """Elle est prescriptive, et n'entre pas dans l'empreinte du prompt.
+
+    `bind_tools()` l'assemble à part ; `prompt.construire()` ne hache que les `.md` et la
+    partie générée. Une description reformulée changeait donc le taux de sollicitation de
+    l'outil sans qu'aucune clé ne bouge.
+    """
+    avant = agent_reel.empreinte_reglages(AGENT_NU, "medium")
+    reformule = dict(outil.OUTIL_SQL, description=outil.OUTIL_SQL["description"] + " ")
+    monkeypatch.setattr(agent_reel.outil, "OUTIL_SQL", reformule)
+
+    assert agent_reel.empreinte_reglages(AGENT_NU, "medium") != avant
+
+
+def test_les_plafonds_de_boucle_changent_l_empreinte():
+    """Contre-épreuve de la règle inverse : n'y mettre *que* ce qui change la réponse.
+
+    Ces deux-là y étaient déjà. Le test les garde parce qu'une refonte de l'empreinte les
+    perdrait sans bruit — et ils décident du nombre d'allers-retours, donc du contenu.
+    """
+    from dataclasses import replace
+
+    avant = agent_reel.empreinte_reglages(AGENT_NU, "medium")
+
+    assert agent_reel.empreinte_reglages(replace(AGENT_NU, max_iterations=8), "medium") \
+        != avant
+    assert agent_reel.empreinte_reglages(replace(AGENT_NU, max_echecs_sql=5), "medium") \
+        != avant
+
+
+def test_l_effort_change_l_empreinte():
+    """La raison d'être de l'empreinte : le balayage compare trois campagnes."""
+    empreintes = {
+        agent_reel.empreinte_reglages(AGENT_NU, e) for e in ("low", "medium", "high")
+    }
+
+    assert len(empreintes) == 3

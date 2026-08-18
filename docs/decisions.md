@@ -579,6 +579,79 @@ n'y a de contrepartie. Son ouverture dira si le réglage a cassé les refus, pas
 généralisé. C'est une non-régression, et l'annoncer comme telle vaut mieux que de la
 présenter comme une preuve de généralisation.
 
+### Ce qui indexe quoi — la famille de défaut, et sa clôture
+
+Quatre défauts du dispositif de mesure ont maintenant la même forme, et il vaut mieux
+nommer la forme que continuer à corriger les cas : **une clé d'indexation qui ne contient
+pas tout ce qui distingue ce qu'elle indexe.** Le symptôme ne varie pas — une entrée
+resservie sous une autre configuration, un rapport parfaitement plausible, aucune erreur,
+aucun avertissement. C'est le pire mode de défaillance possible pour un instrument, parce
+qu'il produit un chiffre au lieu de s'arrêter.
+
+Recensement de toutes les clés du projet, ce qu'elles contiennent, et ce qui les distingue :
+
+| Clé | Contenu | Ce qui la distingue |
+|---|---|---|
+| entrée de cache | modèle · empreinte prompt · empreinte réglages · question · répétition | complète |
+| `empreinte_reglages` | effort · raisonnement · plafond de sortie · plafonds de boucle · **bornes de `run_sql`** · **description d'outil** | complète depuis le 18/08/2026 |
+| `empreinte_prompt` | hachage des `.md` et de la partie générée | ne contient pas la description d'outil — reportée sur les réglages |
+| registre des campagnes | une entrée par empreinte de réglages | complète depuis le 14/08/2026 |
+| jeu de contrôle | trois noms de propriétés, écrits | ancré au corpus depuis le 18/08/2026 |
+
+Les deux dernières colonnes du 18/08 se lisent ensemble avec ce qui précède : le
+correctif du 14/08 sur le scellé — passer d'un tirage à une constante écrite — avait
+*déplacé* le risque au lieu de le fermer. Un `random.sample` sur `proprietes()` ne peut
+pas nommer une propriété inexistante ; une liste écrite à la main le peut. Son intégrité
+reposait alors sur une *autre* liste épinglée, dans un test qui ne mentionne pas le
+scellé et dont le message d'échec invite à mettre la liste à jour. Mesuré : renommage
+plus mise à jour de bonne foi, et la suite entière passe au vert avec un jeu de contrôle
+amputé.
+
+Ce qui manquait à `empreinte_reglages` change directement ce que le modèle voit et donc
+ce qu'il répond : les trois bornes de `run_sql` décident du contenu d'un retour d'outil,
+et la description d'outil est prescriptive — elle dit *quand* appeler, donc elle pèse sur
+le taux de sollicitation. Aucune des deux n'était nulle part. Le cache existant a été
+re-clé plutôt que repayé, ce qui n'était légitime que parce que l'historique établit que
+`sql.py` et `outil.py` étaient figés avant les trois campagnes. La preuve est le rejeu à
+blanc : ligne de base reproduite à l'identique, 171 entrées relues, zéro appel.
+
+**Ce qu'on ne construit pas.** Une détection automatique des réglages omis — introspection
+des constantes, hachage des modules — serait le quatrième mécanisme posé pour couvrir le
+troisième, c'est-à-dire exactement le motif qui a produit ces défauts. Ce qu'on met à la
+place : un seul endroit où la question se pose, ce tableau, et une empreinte de référence
+épinglée par un test dont le message dit ce que sa modification emporte.
+
+### Les assertions qui n'ont jamais échoué, et celles qui ne peuvent pas
+
+Le budget de complexité prescrivait, en cas de dépassement, de chercher « l'assertion qui
+n'a jamais échoué ». Mesuré le 18/08/2026 en rejouant les 171 exécutions en cache :
+
+| | familles | verdicts | échecs |
+|---|---|---|---|
+| familles ayant déjà échoué | 2 | 261 | 13 |
+| familles n'ayant jamais échoué | 9 | 342 | 0 |
+
+La question désigne donc les neuf dixièmes de l'instrument, dont le contrôle qui garde le
+principal piège du jeu de données — l'homonymie entre périmètres. Il n'a jamais échoué
+parce que l'agent a eu raison à chaque fois ; le retirer serait le contraire de ce que la
+mesure suggère.
+
+La question qui discrimine est autre : **quelle assertion ne *peut pas* échouer ?** Une
+seule y répond, et elle est déjà documentée comme telle — le contrôle de graphique, inerte
+tant que l'agent ne dessine pas. E7 la réactive.
+
+Le budget est donc conservé, avec deux issues au lieu d'une : retirer ce qui est
+structurellement inerte, **ou** relever le plafond en écrivant le motif à côté de la
+constante. Un budget qui n'offre que la suppression transforme un chiffre en objectif et
+pousse à retirer des gardes qui fonctionnent. Premier relèvement motivé le 18/08/2026,
+1 058 → 1 063, pour la complétion de la clé de réglages.
+
+Écarté, et pour la même raison qu'ailleurs : remplacer le budget de lignes par un audit de
+discrimination — « chaque famille a-t-elle déjà échoué ? ». C'est la mesure directe de ce
+qui compte, mais elle exige le cache, qui est hors dépôt : elle ne tient donc pas comme
+test, et en faire une commande ajouterait du mécanisme contre un défaut que le budget n'a
+pas encore causé.
+
 ### L'alias n'est pas l'identifiant
 
 Le nom de modèle écrit dans le code est un **alias** : il désigne aujourd'hui une génération

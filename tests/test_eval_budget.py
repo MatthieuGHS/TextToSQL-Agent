@@ -15,9 +15,21 @@ qui les compterait pousserait à les supprimer, c'est-à-dire à rendre le code 
 reprenable pour satisfaire une métrique. C'est le mécanisme qu'on veut borner, pas son
 explication.
 
-Quand ce test échoue, la question n'est pas « de combien relever le plafond ? » mais
-**« quelle assertion existante n'a jamais échoué ? »** — le rapport d'évaluation donne la
-réponse, et elle est connue pour plusieurs d'entre elles.
+Quand ce test échoue, deux issues sont légitimes, et la première n'est pas celle qu'on
+croit.
+
+**« Quelle assertion ne *peut pas* échouer ? »** — et non « laquelle n'a jamais échoué ».
+La distinction a été mesurée le 18/08/2026 sur les 171 exécutions en cache : 9 familles
+d'assertions sur 11 n'ont jamais produit un seul verdict rouge, soit 342 verdicts à 0 %.
+La question d'origine désigne donc presque tout l'instrument, dont `SqlNeTouchePas`, qui
+garde le principal piège du jeu de données et n'a jamais échoué parce que l'agent a eu
+raison à chaque fois. La supprimer serait le contraire de ce qu'il faut faire. Une seule
+famille est structurellement inerte — `PasDeGraphiqueSurResultatVide`, et E7 la réactive.
+
+**Ou relever le plafond, en écrivant pourquoi à côté de la constante.** Un budget qui
+n'offre que la suppression transforme un chiffre en objectif, et pousse à retirer des
+gardes qui fonctionnent pour tenir une métrique. La trace écrite est ce qui distingue un
+relèvement justifié d'un plafond qui cède.
 """
 
 from __future__ import annotations
@@ -27,9 +39,16 @@ import pathlib
 
 DOSSIER = pathlib.Path(__file__).resolve().parent / "eval"
 
-# Mesuré le 14/08/2026, après les corrections de la relecture méthodologique. Le plafond
-# est la valeur du jour, sans marge : une marge serait dépensée.
-BUDGET_EXECUTABLE = 1058
+# Le plafond est la valeur du jour, sans marge : une marge serait dépensée. Chaque
+# relèvement porte son motif — c'est ce qui le rend relisible, et ce qui rendrait un
+# relèvement non motivé visible comme tel.
+#
+# 14/08/2026 · 1 058 — mesure initiale, après la relecture méthodologique.
+# 18/08/2026 · 1 063 — complétion de la clé de réglages : les trois bornes de `run_sql` et
+#   la description d'outil changent la réponse du modèle et n'entraient dans aucune clé.
+#   Aucune assertion retirée en compensation : la mesure du même jour a montré que la
+#   seule famille structurellement inerte est celle qu'E7 réactive.
+BUDGET_EXECUTABLE = 1063
 
 
 def _lignes_executables(chemin: pathlib.Path) -> int:
@@ -71,6 +90,8 @@ def test_l_instrument_de_mesure_reste_sous_son_budget():
 
     assert total <= BUDGET_EXECUTABLE, (
         f"le dispositif de mesure passe à {total} lignes exécutables pour un budget de "
-        f"{BUDGET_EXECUTABLE} : {par_fichier}. Avant de relever le plafond, chercher "
-        f"l'assertion qui n'a jamais échoué."
+        f"{BUDGET_EXECUTABLE} : {par_fichier}.\n"
+        f"Deux issues légitimes : retirer une assertion qui ne *peut pas* échouer (et non "
+        f"une qui n'a jamais échoué — 9 familles sur 11 sont dans ce cas), ou relever le "
+        f"plafond en écrivant le motif à côté de la constante."
     )
