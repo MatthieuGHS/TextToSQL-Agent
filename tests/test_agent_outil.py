@@ -40,7 +40,17 @@ EMPREINTE_ATTENDUE = "f984c0baef8c"
 
 def test_le_schema_de_l_outil_est_stable():
     """Si ce test échoue après une modification volontaire de la description : mettre à
-    jour la constante, et savoir que le prochain appel repaiera l'écriture du cache."""
+    jour la constante, et savoir ce que ça emporte.
+
+    Deux choses, pas une. Le prochain appel repaiera l'écriture du cache de l'API — c'est
+    le coût visible. Et **le cache du harnais d'évaluation devient périmé** : la
+    description d'outil est prescriptive, elle change ce que le modèle répond. Elle entre
+    donc dans `agent_reel.empreinte_reglages`, et une campagne jouée sous l'ancienne
+    description ne se compare plus à une campagne jouée sous la nouvelle.
+
+    Ne pas mettre à jour la constante sans mesurer à nouveau : un message d'échec qui dit
+    seulement « mettre à jour » invite au geste qui casse la mesure en silence.
+    """
     empreinte = hashlib.sha256(
         json.dumps(outil.OUTIL_SQL, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()[:12]

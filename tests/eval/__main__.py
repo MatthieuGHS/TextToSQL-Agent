@@ -35,10 +35,12 @@ from tests.eval.corpus import corpus_de_controle, corpus_de_travail
 
 RACINE_EVAL = connexion.ROOT / "data" / "eval"
 
-# Le scellé. Trois propriétés tirées d'avance, graine publiée, à n'ouvrir qu'à la fin
-# d'E8 : c'est ce qui distingue une mesure d'un ajustement rétrospectif. L'option existe
-# parce qu'il faudra bien l'ouvrir un jour, la phrase parce qu'on ne l'ouvre pas par
-# distraction.
+# Le scellé. Trois propriétés écrites d'avance, à n'ouvrir qu'à la fin d'E8 : c'est ce
+# qui distingue une mesure d'un ajustement rétrospectif. L'option existe parce qu'il
+# faudra bien l'ouvrir un jour, la phrase parce qu'on ne l'ouvre pas par distraction.
+#
+# « Tirées d'avance, graine publiée » jusqu'au 14/08/2026 : le tirage se rejouait à chaque
+# appel, donc il dépendait du contenu courant du corpus. Voir `corpus.PROPRIETES_CONTROLE`.
 CONFIRMATION_CONTROLE = "j'ouvre le scellé"
 
 

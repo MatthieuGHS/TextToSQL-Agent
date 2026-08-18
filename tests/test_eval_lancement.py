@@ -144,6 +144,40 @@ def test_un_effort_ambigu_leve_au_lieu_de_choisir(base_presente, tmp_path):
         con.close()
 
 
+def test_l_option_campagne_atteint_le_runner(base_presente, tmp_path, monkeypatch):
+    """Le câblage, et non plus seulement `hors_ligne()`.
+
+    `--campagne` a été ajoutée pour départager deux campagnes de même effort. Elle passe
+    par `args.campagne or args.effort` dans `main()` : une inversion de ces deux termes
+    rendrait l'option inopérante sans rien lever.
+
+    **Les deux options sont passées ensemble**, et c'est ce qui rend le test capable
+    d'échouer. Avec `--campagne` seule, `args.effort` vaut `None` et les deux ordres
+    donnent le même résultat — première version de ce test, qui passait aussi bien sur le
+    code inversé. Le seul cas discriminant est celui pour lequel l'option existe : un
+    effort qui ne désigne plus une campagne unique, et une empreinte pour trancher.
+    """
+    from tests.eval import runner
+    from tests.eval import __main__ as lancement
+
+    (tmp_path / agent_reel.FICHIER_MODELE).write_text(
+        '{"campagnes": {"reg-4-tours": {"identifiant": "m", "effort": "medium"}, '
+        '"reg-8-tours": {"identifiant": "m", "effort": "medium"}}, '
+        '"derniere": "reg-8-tours"}'
+    )
+    monkeypatch.setattr(lancement, "RACINE_EVAL", tmp_path)
+
+    vus = []
+    monkeypatch.setattr(
+        runner, "executer", lambda cas, agent, con, **kw: vus.append(agent) or []
+    )
+
+    main(["--a-blanc", "--effort", "medium", "--campagne", "reg-4-tours",
+          "--source", "corpus"])
+
+    assert vus and vus[0].empreinte_reglages == "reg-4-tours"
+
+
 def test_le_mode_a_blanc_le_dit_quand_il_n_a_rien_a_rejouer(base_presente, tmp_path,
                                                             monkeypatch):
     """Un cache vide doit se dire, pas produire un rapport à zéro qu'on lirait comme
