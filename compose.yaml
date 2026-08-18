@@ -1,0 +1,22 @@
+# Lancement du livrable :  docker compose up --build
+#
+# Deux choses sont montées plutôt que construites, et pour la même raison — elles ne
+# doivent pas se retrouver figées dans une couche d'image qu'on transmet :
+#
+#   - `data/`, qui porte la base et les CSV sources (données client) ;
+#   - la clé API, lue depuis le `.env` du dépôt.
+
+services:
+  agent:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Échoue au démarrage si la variable est absente, plutôt que de laisser découvrir
+      # le problème sur la première question.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?clé absente — la définir dans .env}
+      DB_PATH: data/mmm.duckdb
+    volumes:
+      # En lecture seule : le conteneur n'a aucune raison d'écrire dans les données, et
+      # l'ETL ne tourne pas ici.
+      - ./data:/app/data:ro

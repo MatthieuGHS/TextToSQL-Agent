@@ -38,6 +38,13 @@ env/
 .pytest_cache/
 .ipynb_checkpoints/
 
+# === Interface ===
+# `package-lock.json` est versionné, lui : c'est ce qui rend la construction de l'image
+# reproductible. Le reste se régénère.
+web/node_modules/
+web/dist/
+web/.vite/
+
 # === Outils ===
 .claude/
 .vscode/

@@ -72,17 +72,33 @@ src/
 ├── agent/
 │   └── prompt/         description des données : générée (schema.py) + écrite (*.md)
 ├── charts/   (à venir) spécification de graphique + règles de lisibilité
-└── app/      (à venir) interface — coquille mince, aucune logique métier
+└── app/      API HTTP — coquille mince, aucune logique métier
+    ├── schemas.py        types de la frontière (distincts de ceux du noyau)
+    ├── serialisation.py  Decimal, date, tuple -> JSON
+    └── api.py            routes ; /api/question et /api/question/flux
+
+web/          interface React + Vite + TypeScript (voir web/README.md)
 
 tests/
 ├── test_*.py           unitaires
 └── eval/               harnais : corpus, assertions, runner, chargeur de grille
 ```
 
-**Le noyau est découplé de l'interface.** Le cœur exposera `ask(question, historique) ->
+**Le noyau est découplé de l'interface.** Le cœur expose `ask(question, historique) ->
 AgentResponse`. L'interface n'est qu'une couche de présentation : la remplacer ne doit pas
 toucher au moteur. À respecter dès la première ligne — une logique métier installée dans le
 fichier d'interface est très coûteuse à en extraire.
+
+`ask()` accepte un `trace=` optionnel, purement observationnel : il rapporte les étapes au
+fil de l'eau à une interface qui doit montrer qu'elle travaille. Aucune décision de la
+boucle n'en dépend, et `tests/test_agent_boucle.py` vérifie que deux exécutions identiques,
+l'une observée et l'autre non, rendent la même réponse. Sans cette propriété, `trace=`
+ouvrirait un second chemin d'exécution à couvrir partout.
+
+**Une connexion par requête HTTP**, décidé à E9 : `interrupt()` de DuckDB porte sur la
+connexion et non sur la requête, donc deux questions en vol sur une connexion partagée
+s'interrompraient l'une l'autre. Le prompt et son empreinte restent partagés — les
+regénérer par requête rouvrirait le risque d'instabilité du préfixe mis en cache.
 
 **Aucun module n'ouvre la base hors de `src/db/connexion.py`.** C'est vérifié
 mécaniquement par `tests/test_db_point_unique.py` : toutes les protections de `sql.py`
@@ -94,7 +110,12 @@ reposent sur cette prémisse.
 source .venv/bin/activate
 python -m src.etl.build_db      # reconstruit data/mmm.duckdb depuis data/raw/
 python -m pytest tests/ -q      # suite complète (~8 s, sans appel API)
+./lancer.sh                     # API + interface en développement (rechargement à chaud)
+docker compose up --build       # le livrable : une image, une adresse
 ```
+
+⚠ `./lancer.sh` et le conteneur **consomment de vrais appels facturés** à chaque question.
+Le cache d'évaluation est un dispositif du harnais, pas du produit.
 
 Les tests ne consomment aucun appel API. Ceux qui en consommeraient (harnais d'évaluation
 en conditions réelles) sont explicitement séparés.
@@ -155,7 +176,7 @@ géographique ni démographique · les trois tables n'ont pas les mêmes bornes 
   décision à prendre avant toute publication du dépôt.
 - Aucune clé API dans le code : tout passe par les variables d'environnement.
 
-## État au 18 août 2026
+## État au 18 août 2026 (interface)
 
 Fait : socle · ETL et contrat de données (E1) · accès SQL unique et durci (E2) · prompt
 système généré (E3) · boucle agent (E4) · harnais d'évaluation en conditions réelles (E5)
@@ -165,6 +186,11 @@ La seconde relecture (18/08) a fermé la famille de défaut « clé d'indexation
 plutôt que ses cas : le scellé est ancré au corpus, les bornes de `run_sql` et la
 description d'outil entrent dans l'empreinte de réglages, et le cache a été re-clé sans
 repayer — ligne de base reproduite à l'identique.
+
+**E9 (interface) a été avancé avant E7**, pour une démonstration client. React + Vite,
+API FastAPI, étapes diffusées pendant que l'agent travaille, image Docker livrable. Les
+réponses portent les lignes et colonnes brutes de chaque requête : E7 branchera ses
+graphiques dessus sans retoucher la frontière.
 
 **Prochaine étape : E7, les graphiques** — 8 des 18 questions du client en sont, et
 l'agent répond aujourd'hui qu'il ne sait pas dessiner. Passe avant E6, qui est supprimé

@@ -1,0 +1,16 @@
+# Ce qui ne doit jamais entrer dans une image remise au client.
+data/
+docs/prive/
+.env
+*.duckdb
+
+# Ce qui alourdirait l'image sans rien y apporter : l'étape Node reconstruit
+# `node_modules` depuis le verrou, et l'environnement Python est réinstallé.
+.venv/
+web/node_modules/
+web/dist/
+.git/
+.pytest_cache/
+__pycache__/
+*.pyc
+tests/
