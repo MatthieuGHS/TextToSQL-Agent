@@ -501,3 +501,104 @@ def test_l_agent_par_defaut_n_est_construit_qu_une_fois(monkeypatch):
         fil.join()
 
     assert len(construits) == 1, f"{len(construits)} agents construits au lieu d'un"
+
+
+# --- 4. La trace : observer sans influencer -------------------------------------------
+
+
+class TraceEspion:
+    """Retient les étapes, dans l'ordre où elles sont poussées."""
+
+    def __init__(self):
+        self.etapes: list[tuple[str, dict]] = []
+
+    def __call__(self, etape: str, detail: dict) -> None:
+        self.etapes.append((etape, detail))
+
+
+def test_la_trace_rapporte_les_etapes_au_fil_de_l_eau(con):
+    """Ce que l'interface a besoin de montrer pendant les dix à trente secondes d'attente.
+
+    L'ordre compte autant que le contenu : une réflexion, puis la requête *avec son
+    résultat*, puis une seconde réflexion, puis la rédaction. Une trace qui annoncerait la
+    requête avant de l'exécuter n'aurait ni son nombre de lignes ni sa durée à montrer.
+    """
+    espion = TraceEspion()
+    modele = ModeleScripte([
+        appel_sql("SELECT SUM(cost) FROM media"),
+        texte("Le total est de 1 250 €."),
+    ])
+
+    ask("Quel est le total ?", agent=agent_avec(modele, con), trace=espion)
+
+    assert [e for e, _ in espion.etapes] == [
+        boucle.ETAPE_REFLEXION,
+        boucle.ETAPE_REQUETE,
+        boucle.ETAPE_REFLEXION,
+        boucle.ETAPE_REDACTION,
+    ]
+    detail = espion.etapes[1][1]
+    assert detail["sql"] == "SELECT SUM(cost) FROM media"
+    assert detail["lignes"] == 1
+    assert detail["erreur"] is None
+
+
+def test_la_trace_rapporte_aussi_les_tatonnements(con):
+    """Un échec de requête est ce qu'une démo a de plus intéressant à montrer.
+
+    Il prouve que la boucle se reprend. Le masquer donnerait d'une exécution une image
+    plus lisse que la réalité — et c'est précisément ce que le projet refuse de faire de
+    ses mesures.
+    """
+    espion = TraceEspion()
+    modele = ModeleScripte([
+        appel_sql("SELECT colonne_absente FROM media"),
+        appel_sql("SELECT SUM(cost) FROM media", "t2"),
+        texte("Le total est de 1 250 €."),
+    ])
+
+    ask("Quel est le total ?", agent=agent_avec(modele, con), trace=espion)
+
+    requetes = [d for e, d in espion.etapes if e == boucle.ETAPE_REQUETE]
+    assert len(requetes) == 2
+    assert requetes[0]["erreur"] is not None
+    assert requetes[1]["erreur"] is None
+
+
+def test_observer_la_boucle_ne_la_change_pas(con):
+    """La propriété qui autorise à laisser ce paramètre à l'interface.
+
+    Sans elle, `trace=` ouvrirait un second chemin d'exécution — et il faudrait alors
+    rejouer toute la suite dans les deux modes. Deux exécutions identiques, l'une observée
+    et l'autre non, doivent rendre exactement la même réponse.
+    """
+    def executer(trace):
+        modele = ModeleScripte([
+            appel_sql("SELECT SUM(cost) FROM media"),
+            texte("Le total est de 1 250 €."),
+        ])
+        return ask("Quel est le total ?", agent=agent_avec(modele, con), trace=trace)
+
+    sans = executer(None)
+    avec = executer(TraceEspion())
+
+    assert sans.texte == avec.texte
+    assert sans.arret is avec.arret
+    assert [r.sql for r in sans.requetes] == [r.sql for r in avec.requetes]
+    assert [r.lignes for r in sans.requetes] == [r.lignes for r in avec.requetes]
+
+
+def test_une_trace_qui_leve_ne_passe_pas_pour_une_panne_d_agent(con):
+    """Un traceur fautif est un défaut de l'appelant, pas une erreur de l'agent.
+
+    L'étouffer produirait une interface muette qu'on croirait branchée — l'exception
+    remonte donc, et le développeur la voit.
+    """
+    def trace_fautive(etape, detail):
+        raise ValueError("traceur mal branché")
+
+    modele = ModeleScripte([texte("Réponse.")])
+
+    with pytest.raises(ValueError, match="traceur mal branché"):
+        ask("Question ?", agent=agent_avec(modele, con), trace=trace_fautive)
+

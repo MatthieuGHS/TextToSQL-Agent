@@ -85,6 +85,14 @@ TEXTE_TRONQUE = (
 )
 
 
+# Étapes rapportées à l'appelant qui le demande, via `trace=`. Ce sont des **noms
+# d'étapes**, pas des phrases : la boucle ne compose pas de texte d'interface, et deux
+# interfaces différentes doivent pouvoir les traduire autrement.
+ETAPE_REFLEXION = "reflexion"
+ETAPE_REQUETE = "requete"
+ETAPE_REDACTION = "redaction"
+
+
 def _avec_avertissement(partiel: str, avertissement: str) -> str:
     """Garde le travail du modèle *et* dit qu'il est incomplet.
 
@@ -94,6 +102,26 @@ def _avec_avertissement(partiel: str, avertissement: str) -> str:
     vient donc en dernier, là où la lecture s'arrête.
     """
     return f"{partiel.strip()}\n\n{avertissement}" if partiel.strip() else avertissement
+
+
+class Trace(Protocol):
+    """Rapporte l'avancement pendant que la boucle tourne.
+
+    Existe pour une seule raison : une question prend plusieurs allers-retours, et une
+    interface qui n'a rien à montrer pendant ce temps donne à croire qu'elle est figée.
+    Les étapes sont poussées au fil de l'eau plutôt que déduites après coup de
+    `AgentResponse.requetes` — après coup, il n'y a plus rien à montrer.
+
+    **Optionnel, et sans effet sur le résultat.** `ask(..., trace=None)` est le
+    comportement historique, au caractère près ; aucune décision de la boucle ne dépend
+    de la présence d'un traceur. C'est ce qui permet de le laisser à l'interface sans
+    ouvrir un second chemin d'exécution à tester.
+
+    Une exception levée par le traceur n'est pas rattrapée : c'est un défaut de
+    l'appelant, et l'étouffer produirait une interface muette qu'on croirait branchée.
+    """
+
+    def __call__(self, etape: str, detail: dict) -> None: ...
 
 
 class Modele(Protocol):
@@ -227,6 +255,7 @@ def ask(
     historique: Sequence[Echange] = (),
     *,
     agent: Agent | None = None,
+    trace: Trace | None = None,
 ) -> AgentResponse:
     """Répond à une question sur les données.
 
@@ -238,8 +267,12 @@ def ask(
         historique: les échanges précédents ; seuls les derniers sont transmis. Ils sont
             placés *après* le point de coupe du cache, donc leur rotation n'invalide rien.
         agent: pour les tests, ou pour un appelant qui veut maîtriser l'assemblage.
+        trace: rapporte les étapes au fil de l'eau, pour une interface qui doit montrer
+            qu'elle travaille. Purement observationnel — voir `Trace`. Absent, la boucle
+            se comporte exactement comme avant son introduction.
     """
     agent = agent if agent is not None else agent_par_defaut()
+    dire = trace if trace is not None else _sans_trace
 
     messages: list[Any] = [agent.systeme]
     for echange in list(historique)[-HISTORIQUE_MAX:]:
@@ -253,7 +286,8 @@ def ask(
     echecs_consecutifs = 0
     dernier_texte = ""
 
-    for _ in range(agent.max_iterations):
+    for tour in range(agent.max_iterations):
+        dire(ETAPE_REFLEXION, {"tour": tour + 1, "sur": agent.max_iterations})
         try:
             reponse = agent.modele.invoke(messages)
         except anthropic.APIError as exc:
@@ -290,6 +324,7 @@ def ask(
             # Aucune requête n'est un arrêt normal : le prompt invite le modèle à
             # demander une précision quand la question est ambiguë. Une boucle qui
             # exigerait au moins une requête casserait ce comportement voulu.
+            dire(ETAPE_REDACTION, {})
             return _finir(agent, dernier_texte, requetes, Arret.REPONSE_DONNEE, usage,
                           identifiant)
 
@@ -297,6 +332,14 @@ def ask(
         for appel in reponse.tool_calls:
             executee = _executer_appel(appel, agent.con)
             requetes.append(executee)
+            # Après exécution et non avant : ce qu'une interface a d'intéressant à montrer
+            # — le nombre de lignes, la durée, l'échec éventuel — n'existe pas avant.
+            dire(ETAPE_REQUETE, {
+                "sql": executee.sql,
+                "lignes": len(executee.lignes),
+                "duree_ms": executee.duree_ms,
+                "erreur": executee.erreur,
+            })
             echecs_consecutifs = 0 if executee.a_reussi else echecs_consecutifs + 1
             messages.append(
                 ToolMessage(
@@ -312,6 +355,15 @@ def ask(
 
     return _finir(agent, _avec_avertissement(dernier_texte, TEXTE_PLAFOND), requetes,
                   Arret.PLAFOND_ITERATIONS, usage, identifiant)
+
+
+def _sans_trace(etape: str, detail: dict) -> None:
+    """Le traceur par défaut. Ne fait rien, et c'est tout ce qu'on lui demande.
+
+    Préféré à un `if trace is not None` répété à chaque étape : quatre conditions de plus
+    dans la boucle, c'est quatre chemins de plus à couvrir, sur du code qui n'a aucune
+    raison de se comporter différemment selon qu'on l'observe.
+    """
 
 
 def _executer_appel(appel: dict, con: Any) -> RequeteExecutee:
