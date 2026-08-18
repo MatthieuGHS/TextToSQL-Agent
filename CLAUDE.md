@@ -46,8 +46,17 @@ assertion : la mesurer sur le cache d'évaluation, qui rend la vérification gra
 fois sur deux, la mesure a contredit l'intuition et le « correctif » aurait dégradé
 l'instrument. À défaut égal, préférer la correction qui **retire** du mécanisme.
 `tests/eval` tient sous un budget de lignes exécutables, vérifié par
-`tests/test_eval_budget.py` — quand il est atteint, chercher l'assertion qui n'a jamais
-échoué plutôt que relever le plafond. Détail et mesures dans `docs/decisions.md`.
+`tests/test_eval_budget.py`. Quand il est atteint, chercher l'assertion qui ne **peut
+pas** échouer — et non celle qui n'a jamais échoué : mesuré, 9 familles d'assertions sur
+11 sont dans ce second cas, dont celles qui gardent les vrais pièges du jeu de données.
+Deux issues légitimes, retirer ce qui est inerte ou relever le plafond en écrivant le
+motif à côté de la constante. Détail et mesures dans `docs/decisions.md`.
+
+**Avant d'ajouter un réglage, regarder ce qui l'indexe.** Quatre défauts du dispositif
+ont eu la même forme — une clé qui ne contient pas tout ce qui distingue ce qu'elle
+indexe — et le symptôme est toujours un rapport plausible sans erreur. Tout ce qui peut
+faire répondre autrement entre dans `agent_reel.empreinte_reglages`. Le recensement des
+clés est dans `docs/decisions.md`.
 
 ## Architecture
 
@@ -146,11 +155,16 @@ géographique ni démographique · les trois tables n'ont pas les mêmes bornes 
   décision à prendre avant toute publication du dépôt.
 - Aucune clé API dans le code : tout passe par les variables d'environnement.
 
-## État au 14 août 2026
+## État au 18 août 2026
 
 Fait : socle · ETL et contrat de données (E1) · accès SQL unique et durci (E2) · prompt
 système généré (E3) · boucle agent (E4) · harnais d'évaluation en conditions réelles (E5)
-· balayage d'effort · relecture méthodologique et corrections.
+· balayage d'effort · deux relectures méthodologiques et leurs corrections.
+
+La seconde relecture (18/08) a fermé la famille de défaut « clé d'indexation incomplète »
+plutôt que ses cas : le scellé est ancré au corpus, les bornes de `run_sql` et la
+description d'outil entrent dans l'empreinte de réglages, et le cache a été re-clé sans
+repayer — ligne de base reproduite à l'identique.
 
 **Prochaine étape : E7, les graphiques** — 8 des 18 questions du client en sont, et
 l'agent répond aujourd'hui qu'il ne sait pas dessiner. Passe avant E6, qui est supprimé
