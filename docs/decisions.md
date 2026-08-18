@@ -652,6 +652,34 @@ qui compte, mais elle exige le cache, qui est hors dépôt : elle ne tient donc 
 test, et en faire une commande ajouterait du mécanisme contre un défaut que le budget n'a
 pas encore causé.
 
+### Le grain de `kpi_compteurs` est la cause mesurée de l'instabilité « grain distinct »
+
+Constaté le 18/08/2026 dans l'interface, puis vérifié sur le cache. La propriété « grain
+distinct » est notée **2/3 instable** dans la ligne de base ; les 9 exécutions en cache de
+sa question donnent une corrélation parfaite :
+
+| requête sur `kpi_compteurs` | motif d'arrêt | nombre de requêtes |
+|---|---|---|
+| agrégée (7 exécutions) | `reponse_donnee` | 1 à 3 |
+| **non agrégée (2 exécutions)** | **`plafond_iterations`** | 4 et 5 |
+
+`kpi_compteurs` a une ligne par semaine **et par énergie**. Une CTE qui la lit sans
+`GROUP BY` double donc le nombre de lignes et duplique la valeur jointe sur chacune. Le
+modèle tâtonne ensuite pour s'en sortir et heurte le plafond d'itérations. Symptôme
+secondaire, visible dans l'interface : la réponse affirme « sommé sur les deux énergies »
+alors que sa requête ne somme pas — l'intention est juste, la requête ne la réalise pas.
+
+**Ce n'est pas une lacune du prompt.** La section générée annonce explicitement « Grain :
+une semaine × une énergie » pour cette table. L'information est présente et exacte ; le
+modèle ne s'en sert pas systématiquement.
+
+Non corrigé, et pour la raison habituelle : une observation n'est pas un défaut, c'est une
+hypothèse. Elle est notée ici parce qu'elle est **chiffrée et reproductible**, ce qui en
+fait la première piste utilisable d'E8 — la question étant de savoir si le grain doit être
+rappelé autrement (une phrase de `metier.md` sur les tables à plusieurs lignes par semaine)
+ou si c'est le plafond d'itérations qui est trop bas. Les deux se mesurent sur le corpus
+entier, et pas sur cette question.
+
 ### L'alias n'est pas l'identifiant
 
 Le nom de modèle écrit dans le code est un **alias** : il désigne aujourd'hui une génération
