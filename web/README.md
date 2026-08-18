@@ -6,7 +6,7 @@ serveur.
 
 ## Développement
 
-Depuis la racine du dépôt : `./lancer.sh`. Vite sert l'interface sur 5173 et relaie
+Depuis la racine du dépôt : `./run.sh`. Vite sert l'interface sur 5173 et relaie
 `/api` vers uvicorn sur 8000, donc une seule adresse à ouvrir et aucun CORS.
 
 ## Structure

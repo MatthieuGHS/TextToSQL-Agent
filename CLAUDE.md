@@ -110,11 +110,11 @@ reposent sur cette prémisse.
 source .venv/bin/activate
 python -m src.etl.build_db      # reconstruit data/mmm.duckdb depuis data/raw/
 python -m pytest tests/ -q      # suite complète (~8 s, sans appel API)
-./lancer.sh                     # API + interface en développement (rechargement à chaud)
+./run.sh                     # API + interface en développement (rechargement à chaud)
 docker compose up --build       # le livrable : une image, une adresse
 ```
 
-⚠ `./lancer.sh` et le conteneur **consomment de vrais appels facturés** à chaque question.
+⚠ `./run.sh` et le conteneur **consomment de vrais appels facturés** à chaque question.
 Le cache d'évaluation est un dispositif du harnais, pas du produit.
 
 Les tests ne consomment aucun appel API. Ceux qui en consommeraient (harnais d'évaluation
