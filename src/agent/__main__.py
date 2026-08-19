@@ -1,9 +1,12 @@
 """Interface en ligne de commande — une coquille, rien d'autre.
 
 Elle lit des arguments, appelle `ask()`, met en forme. Aucune décision métier ne se prend
-ici : ce fichier doit pouvoir être supprimé et remplacé par Streamlit sans que le moteur
-bouge d'une ligne. C'est le premier endroit où cette discipline se teste vraiment, parce
-que c'est le premier moment où « juste une petite règle ici » devient tentant.
+ici : ce fichier doit pouvoir être supprimé sans que le moteur bouge d'une ligne. C'est le
+premier endroit où cette discipline se teste vraiment, parce que c'est le premier moment
+où « juste une petite règle ici » devient tentant.
+
+Elle a tenu : `src/app/` est venue s'ajouter à côté sans rien déplacer du noyau, et les
+deux interfaces coexistent aujourd'hui sur le même `ask()`.
 
     python -m src.agent "Quel budget média sur la dernière année ?"
 """

@@ -726,6 +726,49 @@ le tracé sort correctement, et l'énumération en toutes lettres de ce qui est 
 n'apparaît que sur un cas — des barres à dix catégories, où un tableau de dix lignes se
 défend. Pas de correctif, donc : la mesure a de nouveau contredit l'intuition.
 
+### Charger des données depuis l'interface — trois propriétés, une seule difficile
+
+L'interface **écrit**, ce que le reste de l'API ne fait pas. Trois propriétés en découlent,
+et la troisième est la seule dont l'absence ne se verrait jamais.
+
+**Le dossier d'attente.** Les fichiers reçus ne vont pas dans `data/raw/`. On recopie les
+sources en place dans un dossier temporaire, on y écrit ce qui arrive, on construit depuis
+là, et on ne promeut qu'une fois la base écrite **et validée**. Un fichier mal formé laisse
+donc les sources et la base exactement dans l'état où elles étaient : on renvoie le bon
+fichier sans avoir rien à réparer d'abord. C'est ce qui a demandé de paramétrer le dossier
+source de l'ETL — sans ça, il aurait fallu écraser `data/raw/` avant de savoir si ça marche.
+
+**La liste des noms est close.** La pipeline code en dur les quatre fichiers qu'elle lit ;
+accepter un autre nom écrirait un fichier ensuite ignoré, et l'utilisateur croirait avoir
+chargé ses données. Effet second, qui vaut à lui seul la règle : **aucun nom de fichier ne
+vient de l'utilisateur**, donc aucune traversée de chemin n'est possible. Une protection
+obtenue par la forme du problème plutôt que par une validation à écrire.
+
+**L'agent partagé est oublié après un rechargement réussi.** Le prompt système est généré
+depuis le schéma et assemblé une fois au démarrage. Après une reconstruction, un agent
+conservé décrirait des canaux disparus et ignorerait les nouveaux — sans lever quoi que ce
+soit, et avec assurance. C'est le seul défaut entièrement silencieux de cette page, et
+`boucle.reinitialiser()` existe pour lui. La contre-épreuve compte autant : un **échec** ne
+doit pas l'oublier, la base n'ayant pas changé.
+
+Deux correctifs sont venus de la vérification bout en bout, et aucun test unitaire ne les
+aurait produits :
+
+- `checks.py` journalisait sous `src.etl.checks` quand `build_db` journalise sous `etl` —
+  deux arbres distincts. Le relais vers l'interface ne voyait donc rien des contrôles du
+  contrat, c'est-à-dire de la partie la plus utile à lire. Le flux est passé de 9 à 22
+  événements.
+- Un CSV aux mauvaises colonnes rendait « une erreur interne est survenue », alors que la
+  bibliothèque de lecture savait exactement quelle colonne manquait. Les causes que
+  l'utilisateur **peut corriger** sont désormais nommées, et cette liste vient d'un échec
+  constaté, pas d'une anticipation. Tout ce qui n'y figure pas reste muet : une trace
+  d'exécution rendue au client exposerait des chemins de fichiers.
+
+Le journal affiché est celui de l'ETL, relayé tel quel. Il porte déjà la volumétrie par
+table, les invariants et les avertissements du contrat : réinventer une notion
+d'avancement à côté aurait produit un affichage plus pauvre que ce que l'exploitant lit
+dans son terminal.
+
 ### L'alias n'est pas l'identifiant
 
 Le nom de modèle écrit dans le code est un **alias** : il désigne aujourd'hui une génération

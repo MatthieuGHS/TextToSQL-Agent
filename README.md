@@ -1,10 +1,12 @@
 # TextToSQL-Agent
 
-Agent IA conversationnel qui traduit des questions en langage naturel en requêtes SQL,
-les exécute, et restitue le résultat sous forme de tableau et de graphique.
+Agent conversationnel qui traduit des questions en langage naturel en requêtes SQL, les
+exécute sur une base en lecture seule, et restitue le résultat en texte, en tableau et en
+graphique.
 
 Le jeu de données porte sur des investissements média hebdomadaires et leurs indicateurs
-de performance, destinés à alimenter un modèle de *Marketing Mix Modeling*.
+de performance, destinés à alimenter un modèle de *Marketing Mix Modeling*. L'agent sert à
+**explorer et auditer ces données avant modélisation** ; il ne fait pas de modélisation.
 
 ## Installation
 
@@ -23,7 +25,11 @@ Déposer les fichiers sources dans `data/raw/`, puis construire la base :
 python -m src.etl.build_db
 ```
 
-Génère `data/mmm.duckdb` avec trois tables :
+La construction est **atomique et vérifiée** : les invariants du contrat de données sont
+contrôlés avant remplacement, et un échec laisse la base précédente intacte. La même
+pipeline se relance depuis l'interface, page « Données ».
+
+Trois tables sont produites :
 
 | Table | Contenu | Périmètre |
 |---|---|---|
@@ -34,20 +40,43 @@ Génère `data/mmm.duckdb` avec trois tables :
 ⚠️ Trois métriques (`cost`, `grp`, `compteurs`) existent dans `contexte` **et** dans les
 deux autres tables, avec des périmètres différents et des ordres de grandeur voisins. Ne
 jamais les additionner entre tables : la colonne `brand_name` indique de qui l'on parle.
+C'est le principal risque du jeu de données — une somme entre tables produit un résultat
+faux mais crédible.
 
-## État d'avancement
+## Lancer l'agent
 
-| Brique | État |
-|---|---|
-| ETL et contrat de données | fait |
-| Accès SQL sécurisé | fait |
-| Description des données fournie au modèle | fait |
-| Dispositif de mesure (corpus, assertions, rapport) | outillage prêt |
-| Boucle agentique | à venir |
-| Graphiques · interface | à venir |
+```bash
+./run.sh                     # développement : API + interface, rechargement à chaud
+docker compose up --build    # le livrable : une image, une seule adresse
+```
 
-La boucle qui relie le tout n'existe pas encore : il n'y a donc pas de commande pour poser
-une question. Les briques en dessous sont fonctionnelles et testées.
+En développement, l'interface est sur <http://127.0.0.1:5173> ; en conteneur, sur
+<http://127.0.0.1:8000>. La base et la clé API sont **montées** et jamais construites dans
+l'image — une image qui porterait des données client se diffuserait par accident.
+
+En ligne de commande, sans interface :
+
+```bash
+python -m src.agent "Quel budget média sur la dernière année ?"
+```
+
+⚠️ **Chaque question consomme des appels API facturés.** Le cache d'évaluation est un
+dispositif du harnais de mesure, pas du produit.
+
+## L'interface
+
+Deux pages.
+
+**Conversation** — la question, la réponse rendue en Markdown, le graphique quand le
+résultat s'y prête, puis chaque requête exécutée avec son SQL coloré et le tableau de son
+résultat. Les requêtes en échec y figurent aussi : la boucle est faite pour se reprendre,
+et les masquer donnerait de l'exécution une image plus lisse que la réalité. Les étapes
+défilent pendant que l'agent travaille et restent affichées ensuite.
+
+**Données** — l'état des fichiers sources, leur remplacement, et la relance de la pipeline
+avec son journal complet. Le téléversement passe par un dossier d'attente qui n'est promu
+qu'après une construction réussie : un fichier mal formé ne dégrade ni les sources ni la
+base.
 
 ## Architecture
 
@@ -61,13 +90,20 @@ src/
 │   ├── connexion.py    ouverture en lecture seule et durcie
 │   └── sql.py          run_sql() : valide, borne, exécute
 ├── agent/
+│   ├── boucle.py       ask(question, historique) -> AgentResponse
+│   ├── outil.py        le seul outil du modèle
 │   └── prompt/         description des données : générée + écrite
-├── charts/   (à venir) spécification de graphique + règles de lisibilité
-└── app/      (à venir) interface — coquille mince, sans logique métier
+├── charts/   décide s'il y a un graphique à faire, et lequel
+└── app/      API HTTP — coquille mince, sans logique métier
+
+web/          interface React + Vite + TypeScript
+tests/eval/   harnais d'évaluation en conditions réelles (appels facturés)
 ```
 
-Le cœur exposera `ask(question, historique) -> AgentResponse`. L'interface n'est qu'une
-couche de présentation : la remplacer ne touche pas au moteur.
+Le cœur expose `ask(question, historique) -> AgentResponse`. **L'interface n'est qu'une
+couche de présentation : la remplacer ne touche pas au moteur.** Elle ne décide notamment
+rien du graphique — le type, les axes et les séries sont choisis côté serveur, en code
+déterministe et testé en fonctions pures.
 
 **Aucun module n'ouvre la base hors de `src/db/connexion.py`** — vérifié par un test qui
 parcourt les sources. Les protections de `sql.py` reposent sur cette prémisse : lecture
@@ -77,11 +113,22 @@ lignes annoncé, délai maximal.
 ## Tests
 
 ```bash
-pytest tests/ -q     # suite complète, ~5 s, aucun appel API
+pytest tests/ -q             # suite complète, ~8 s, aucun appel API
+cd web && npm test           # interface
 ```
 
-Le harnais d'évaluation (`tests/eval/`) fournit le corpus, les assertions et le rapport ; il
-consommera des appels API une fois la boucle agentique en place.
+**La suite ne consomme aucun appel API**, et c'est une propriété vérifiée
+mécaniquement — un test qui construirait un agent réel fait échouer
+`tests/test_agent_structure.py`. C'est cette contrainte qui a décidé de l'architecture :
+le client de modèle est injecté partout.
+
+Le harnais d'évaluation est le seul endroit d'où partent des appels facturés, et il faut
+le vouloir :
+
+```bash
+python -m tests.eval --a-blanc      # rejoue le cache : 0 appel, 0 $
+python -m tests.eval --k 1          # ⚠ campagne réelle, facturée
+```
 
 ## Conventions
 
@@ -90,5 +137,7 @@ consommera des appels API une fois la boucle agentique en place.
 - Aucune clé API dans le code : tout passe par les variables d'environnement.
 - Le prompt système décrit les données et des principes généraux — jamais de règle
   spécifique à une question donnée.
+- Français partout : code, commentaires, docstrings, messages, commits.
 
-Le *pourquoi* des choix de schéma et d'architecture est dans **`docs/decisions.md`**.
+Le *pourquoi* de chaque choix structurant est dans **`docs/decisions.md`**. Les consignes
+de travail sur le dépôt sont dans **`CLAUDE.md`**.

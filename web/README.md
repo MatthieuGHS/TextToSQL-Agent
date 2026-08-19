@@ -14,14 +14,27 @@ Depuis la racine du dépôt : `./run.sh`. Vite sert l'interface sur 5173 et rela
 | Fichier | Rôle |
 |---|---|
 | `src/types.ts` | les types de la frontière, recopiés de `src/app/schemas.py` |
-| `src/api.ts` | le client HTTP ; lit le flux NDJSON ligne à ligne |
-| `src/App.tsx` | la conversation et son état |
-| `src/composants/` | affichage — message, requête, tableau, progression, saisie |
+| `src/api.ts` | le client HTTP ; lit les flux NDJSON ligne à ligne |
+| `src/App.tsx` | l'aiguillage entre les deux pages, et l'état de la conversation |
+| `src/composants/` | affichage — message, graphique, requête, tableau, progression, saisie |
+| `src/composants/PageDonnees.tsx` | chargement des sources et relance de la pipeline |
 
-## Ce qui reste à faire à E7
+Deux pages, donc pas de routeur : l'application est mono-utilisateur et sans état serveur,
+et l'URL n'a pas à être partageable.
 
-Le composant de graphique n'existe pas encore. Il se branchera dans `BlocRequete`, à
-partir des `colonnes` et `lignes` que l'API rend déjà : la frontière n'aura pas à changer.
-La bibliothèque retenue est Recharts, et le choix est sans conséquence forte — la
-*spécification* du graphique sera produite côté serveur par `src/charts/`, l'interface ne
-faisant que la rendre.
+## Ce que l'interface ne décide pas
+
+Le graphique. Son type, son abscisse, ses séries et leur répartition sur deux axes viennent
+de `src/charts/`, côté serveur, où ils sont testés en fonctions pures. Une règle de
+lisibilité ajoutée ici échapperait à ces tests et se dédoublerait.
+
+`arret_normal` non plus : il est calculé côté serveur. Le redéduire de `arret` dans le
+navigateur le ferait diverger un jour, et un abandon finirait par s'afficher comme un
+succès.
+
+## Sécurité
+
+`rehype-raw` n'est pas installé et ne doit jamais l'être. Le texte affiché vient d'un
+modèle qui lit lui-même une base de données : sans cette garantie, une chaîne malveillante
+stockée dans les données pourrait ressortir dans une réponse et s'exécuter.
+`tests/Markdown.test.tsx` en fait une propriété vérifiée.
