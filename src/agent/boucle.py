@@ -437,21 +437,29 @@ def _usage_de(message: AIMessage) -> Usage:
 
 
 def _graphique(requetes: list[RequeteExecutee]):
-    """Propose un graphique à partir de la **dernière requête réussie**.
+    """Propose un graphique à partir de la dernière requête réussie **qui se trace**.
 
-    La dernière et non la plus grosse : c'est celle sur laquelle le modèle s'est arrêté
-    pour répondre, donc celle qui porte sa conclusion. Les précédentes sont des
+    La plus récente et non la plus grosse : c'est celle sur laquelle le modèle s'est
+    arrêté pour répondre, donc celle qui porte sa conclusion. Les plus anciennes sont des
     explorations — vérifier qu'une valeur existe, lister des canaux — et tracer l'une
     d'elles illustrerait un raisonnement intermédiaire au lieu de la réponse.
+
+    **« Qui se trace » a été ajouté le 19/08/2026, sur défaut constaté.** Le modèle
+    ajoute parfois un scalaire *après* le résultat qui porte le visuel — un `CORR()`, un
+    total de contrôle. Ce scalaire n'a rien à montrer, et s'arrêter à lui privait la
+    réponse de son graphique : mesuré sur le cache, 8 exécutions sur 197, dont trois fois
+    la question de corrélation. L'agent annonçant parfois lui-même que son résultat est
+    tracé, son texte devenait faux. Se replier ne trace donc pas « une exploration » : ça
+    trace la plus récente des conclusions dessinables.
 
     Aucune décision n'est prise ici : `charts.proposer` refuse tout seul ce qui ne se
     trace pas, et son refus est le cas fréquent.
     """
-    reussies = [r for r in requetes if r.a_reussi]
-    if not reussies:
-        return None
-    derniere = reussies[-1]
-    return charts.proposer(derniere.colonnes, derniere.lignes)
+    for requete in reversed([r for r in requetes if r.a_reussi]):
+        specification = charts.proposer(requete.colonnes, requete.lignes)
+        if specification is not None:
+            return specification
+    return None
 
 
 def _finir(

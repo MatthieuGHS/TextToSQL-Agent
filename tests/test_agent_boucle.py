@@ -606,15 +606,16 @@ def test_une_trace_qui_leve_ne_passe_pas_pour_une_panne_d_agent(con):
 # --- 5. Le graphique ------------------------------------------------------------------
 
 
-def test_le_graphique_vient_de_la_derniere_requete_reussie(con):
-    """La dernière, et non la plus grosse : c'est celle qui porte la conclusion.
+def test_le_graphique_vient_de_la_derniere_requete_tracable(con):
+    """La plus récente qui se dessine, et non la première venue.
 
-    Les précédentes sont des explorations — vérifier qu'une valeur existe, lister des
-    canaux. Tracer l'une d'elles illustrerait un raisonnement intermédiaire au lieu de la
-    réponse, avec l'assurance trompeuse que donne un graphique.
+    **Les deux requêtes se tracent ici, et c'est ce qui rend le test discriminant.** Sa
+    version d'origine mettait un `SELECT DISTINCT channel` en tête — qui ne se trace pas,
+    faute de mesure — donc elle passait aussi bien sous la règle inverse « la première
+    traçable ». Un test qui ne peut pas échouer ne prouve rien.
     """
     modele = ModeleScripte([
-        appel_sql("SELECT DISTINCT channel FROM media"),
+        appel_sql("SELECT channel, cost FROM media"),
         appel_sql("SELECT step_date, cost FROM media ORDER BY step_date", "t2"),
         texte("Voici l'évolution."),
     ])
@@ -624,6 +625,25 @@ def test_le_graphique_vient_de_la_derniere_requete_reussie(con):
     assert reponse.graphique is not None
     assert reponse.graphique.x == "step_date"
     assert [s.colonne for s in reponse.graphique.series] == ["cost"]
+
+
+def test_un_scalaire_final_ne_prive_pas_la_reponse_de_son_graphique(con):
+    """Défaut constaté le 19/08/2026, en conditions réelles.
+
+    Le modèle trace 84 paires, puis ajoute un `CORR()` d'une ligne pour chiffrer ce qu'il
+    vient de montrer. Le scalaire n'a rien à dessiner, et s'arrêter à lui faisait
+    disparaître le graphique — alors que la réponse annonçait qu'il était tracé.
+    """
+    modele = ModeleScripte([
+        appel_sql("SELECT step_date, cost FROM media ORDER BY step_date"),
+        appel_sql("SELECT SUM(cost) FROM media", "t2"),
+        texte("Voici l'évolution, dont le total est de 1 250 €."),
+    ])
+
+    reponse = ask("Évolution et total ?", agent=agent_avec(modele, con))
+
+    assert reponse.graphique is not None
+    assert reponse.graphique.x == "step_date"
 
 
 def test_aucun_graphique_quand_le_resultat_ne_s_y_prete_pas(con):
