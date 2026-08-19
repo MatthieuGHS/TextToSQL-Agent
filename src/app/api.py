@@ -26,8 +26,6 @@ import logging
 import os
 import pathlib
 import queue
-import shutil
-import tempfile
 import threading
 from dataclasses import replace
 
@@ -40,7 +38,7 @@ from src.agent import boucle
 from src.agent.reponse import Echange
 from src.app import schemas, serialisation
 from src.db import connexion
-from src.etl import build_db, checks, transforms
+from src.etl import build_db, checks, rechargement, transforms
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +81,23 @@ def _agent_pour_la_requete() -> tuple[boucle.Agent, object]:
     return replace(partage, con=con), con
 
 
+def _fermer(con) -> None:
+    """Referme la connexion d'une requête, sans faire tomber la réponse.
+
+    Cas résiduel connu : après un `SqlTropLong` dont l'interruption n'a pas rendu la
+    main (voir `sql._executer_borne`), la connexion peut encore porter un fil. La
+    fermeture est alors le moindre mal — l'attente prolongée côté `sql.py` rend ce cas
+    pathologique — mais une exception ici ne doit pas transformer une réponse déjà
+    produite en 500.
+    """
+    if con is None:
+        return
+    try:
+        con.close()
+    except Exception:  # noqa: BLE001 — une connexion déjà fermée n'est pas un échec
+        logger.warning("fermeture de la connexion de requête en échec", exc_info=True)
+
+
 def _historique(entrants: list[schemas.EchangeEntrant]) -> list[Echange]:
     return [Echange(question=e.question, reponse=e.reponse) for e in entrants]
 
@@ -121,8 +136,9 @@ def sante() -> schemas.Sante:
 @application.post("/api/question", response_model=schemas.ReponseSortante)
 def question(entree: schemas.QuestionEntrante) -> schemas.ReponseSortante:
     """La réponse complète, en un aller-retour."""
-    agent, con = _agent_pour_la_requete()
+    con = None
     try:
+        agent, con = _agent_pour_la_requete()
         reponse = boucle.ask(entree.question, _historique(entree.historique), agent=agent)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -130,7 +146,7 @@ def question(entree: schemas.QuestionEntrante) -> schemas.ReponseSortante:
         logger.exception("question en échec")
         raise HTTPException(status_code=500, detail=TEXTE_ERREUR_INTERNE) from exc
     finally:
-        con.close()
+        _fermer(con)
 
     return serialisation.reponse(reponse)
 
@@ -154,8 +170,14 @@ def question_en_flux(entree: schemas.QuestionEntrante) -> StreamingResponse:
         file.put({"type": etape, **detail})
 
     def travail() -> None:
-        agent, con = _agent_pour_la_requete()
+        # Tout le corps du fil vit sous le `try`, l'assemblage de l'agent compris : une
+        # exception levée avant le `finally` — base absente au premier appel, clé API
+        # manquante — laisserait sinon la file sans son sentinelle, et le générateur
+        # attendrait pour toujours. Vu en relecture : la requête HTTP pendait au lieu de
+        # rendre une erreur.
+        con = None
         try:
+            agent, con = _agent_pour_la_requete()
             reponse = boucle.ask(
                 entree.question, _historique(entree.historique),
                 agent=agent, trace=tracer,
@@ -164,6 +186,10 @@ def question_en_flux(entree: schemas.QuestionEntrante) -> StreamingResponse:
                 "type": "reponse",
                 "reponse": serialisation.reponse(reponse).model_dump(),
             })
+        except FileNotFoundError as exc:
+            # La même cause rend un 503 explicite sur la voie directe : le flux, dont le
+            # statut est déjà parti, doit dire la même chose dans un événement.
+            file.put({"type": "erreur", "message": str(exc)})
         except Exception:
             # Le flux a déjà commencé : le code de statut est parti, on ne peut plus
             # rendre une 500. L'erreur devient donc un événement, que l'interface doit
@@ -171,7 +197,7 @@ def question_en_flux(entree: schemas.QuestionEntrante) -> StreamingResponse:
             logger.exception("question en flux en échec")
             file.put({"type": "erreur", "message": TEXTE_ERREUR_INTERNE})
         finally:
-            con.close()
+            _fermer(con)
             file.put(None)
 
     threading.Thread(target=travail, daemon=True).start()
@@ -189,14 +215,10 @@ def question_en_flux(entree: schemas.QuestionEntrante) -> StreamingResponse:
 # incrémental : téléverser un fichier remplace sa version et rejoue tout. C'est le
 # comportement de `build_db` depuis E1, et le changer serait un autre sujet que celui-ci.
 
-# Seuls ces noms sont acceptés. La pipeline les code en dur : accepter un autre nom serait
-# silencieusement inutile — le fichier serait écrit puis ignoré, et l'utilisateur croirait
-# avoir chargé ses données. Le verrou a un second effet, plus important : aucun nom de
-# fichier ne vient de l'utilisateur, donc aucune traversée de chemin n'est possible.
-FICHIERS_ATTENDUS = {
-    **{nom: True for nom in build_db.SOURCES.values()},
-    build_db.MASTER_SOURCE: False,
-}
+# La liste close vit chez la pipeline (`src/etl/rechargement.py`) : c'est une règle des
+# données, pas du transport. Reprise ici parce que la validation doit refuser *avant*
+# d'ouvrir le flux, tant qu'une erreur HTTP est encore possible.
+FICHIERS_ATTENDUS = rechargement.FICHIERS_ATTENDUS
 
 # Un CSV de sources pèse quelques dizaines de mégaoctets. Le plafond n'est pas là pour
 # protéger le disque mais pour que l'erreur arrive vite : un fichier de 2 Go téléversé
@@ -318,42 +340,38 @@ async def recharger(fichiers: list[UploadFile] = File(default=[])) -> StreamingR
             file.put(None)
             return
 
-        journal = _JournalVersFile(file)
-        journal.setFormatter(logging.Formatter("%(message)s"))
-        etl = logging.getLogger("etl")
-        niveau = etl.level
-        etl.addHandler(journal)
-        etl.setLevel(logging.INFO)
-
-        attente = pathlib.Path(tempfile.mkdtemp(prefix="sources-"))
+        # Même règle que le flux de question : à partir d'ici, quoi qu'il arrive, le
+        # `finally` extérieur rend le verrou et pose le sentinelle. Sans lui, une
+        # exception hors du `try` intérieur bloquait le flux *et* toute reconstruction
+        # ultérieure — le verrou n'était jamais rendu.
         try:
-            for nom in FICHIERS_ATTENDUS:
-                courant = build_db.RAW_DIR / nom
-                if courant.is_file():
-                    (attente / nom).write_bytes(courant.read_bytes())
-            for nom, contenu in recus.items():
-                (attente / nom).write_bytes(contenu)
+            journal = _JournalVersFile(file)
+            journal.setFormatter(logging.Formatter("%(message)s"))
+            etl = logging.getLogger("etl")
+            niveau = etl.level
+            etl.addHandler(journal)
+            etl.setLevel(logging.INFO)
+            try:
+                rechargement.reconstruire_depuis(recus, connexion.chemin_base())
 
-            build_db.construire(connexion.chemin_base(), attente)
-
-            # Promotion : la base est écrite et validée, les sources qui l'ont produite
-            # deviennent les sources de référence. Dans cet ordre, jamais l'inverse.
-            build_db.RAW_DIR.mkdir(parents=True, exist_ok=True)
-            for nom in recus:
-                (build_db.RAW_DIR / nom).write_bytes((attente / nom).read_bytes())
-
-            # Le prompt est généré depuis le schéma : sans cet oubli volontaire, l'agent
-            # continuerait de décrire l'ancienne base. C'est le défaut silencieux le plus
-            # grave de cette page.
-            boucle.reinitialiser()
-            file.put({"type": "termine", "fichiers": sorted(recus)})
-        except Exception as exc:
-            logger.exception("reconstruction en échec")
-            file.put({"type": "erreur", "message": _cause_lisible(exc)})
+                # Le prompt est généré depuis le schéma : sans cet oubli volontaire,
+                # l'agent continuerait de décrire l'ancienne base. C'est le défaut
+                # silencieux le plus grave de cette page. Il reste ici et non dans la
+                # pipeline : l'ETL n'a pas à connaître l'agent.
+                boucle.reinitialiser()
+                file.put({"type": "termine", "fichiers": sorted(recus)})
+            except Exception as exc:
+                logger.exception("reconstruction en échec")
+                file.put({"type": "erreur", "message": _cause_lisible(exc)})
+            finally:
+                etl.removeHandler(journal)
+                etl.setLevel(niveau)
+        except Exception:
+            # Une panne *hors* pipeline — l'installation du relais de journal, pas la
+            # construction. Muette sur la cause, comme toute panne interne.
+            logger.exception("reconstruction en échec hors pipeline")
+            file.put({"type": "erreur", "message": TEXTE_ERREUR_PIPELINE})
         finally:
-            etl.removeHandler(journal)
-            etl.setLevel(niveau)
-            shutil.rmtree(attente, ignore_errors=True)
             _verrou_reconstruction.release()
             file.put(None)
 

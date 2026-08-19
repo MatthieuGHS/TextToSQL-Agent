@@ -273,6 +273,43 @@ def test_une_panne_en_cours_de_flux_devient_un_evenement(client, monkeypatch):
     assert "panne simulée" not in evenements[-1]["message"]
 
 
+def test_un_echec_d_assemblage_termine_le_flux_au_lieu_de_le_laisser_pendre(
+    client, monkeypatch
+):
+    """L'assemblage de l'agent échoue *avant* la boucle — base absente au premier appel.
+
+    Vu en relecture : l'assemblage vivait hors du `try/finally` du fil de travail, donc
+    l'exception emportait le fil sans jamais poser le sentinelle dans la file — et la
+    requête HTTP pendait pour toujours au lieu de rendre une erreur. La requête est jouée
+    dans un fil borné : sans le correctif, ce test échoue par dépassement au lieu de
+    bloquer toute la suite.
+    """
+    import threading
+
+    def leve():
+        raise FileNotFoundError("Base absente : la construire d'abord")
+
+    monkeypatch.setattr(api.boucle, "agent_par_defaut", leve)
+
+    resultat = {}
+
+    def requete():
+        resultat["r"] = client.post(
+            "/api/question/flux", json={"question": "Quelles dépenses ?"}
+        )
+
+    fil = threading.Thread(target=requete, daemon=True)
+    fil.start()
+    fil.join(timeout=5.0)
+
+    assert not fil.is_alive(), "le flux n'a pas rendu la main : sentinelle jamais posé"
+    evenements = _evenements(resultat["r"])
+    assert evenements[-1]["type"] == "erreur"
+    # La même cause rend un 503 explicite sur la voie directe : le flux doit dire
+    # la même chose, pas un message générique.
+    assert "Base absente" in evenements[-1]["message"]
+
+
 def test_une_panne_ne_fuit_pas_la_cause_au_client(client, monkeypatch):
     """Une trace d'exécution recopiée dans une réponse expose des chemins de fichiers."""
     def tombe(*a, **kw):

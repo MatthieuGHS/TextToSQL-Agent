@@ -21,7 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.app import api
-from src.etl import build_db, checks
+from src.etl import build_db, checks, rechargement
 
 
 @pytest.fixture
@@ -222,6 +222,74 @@ def test_l_agent_n_est_pas_oublie_quand_la_construction_echoue(client, monkeypat
     client.post("/api/donnees/recharger", files=[])
 
     assert oublis == []
+
+
+def test_une_panne_avant_la_construction_rend_le_verrou(client, monkeypatch):
+    """Le sentinelle et le verrou survivent à une exception hors du `try` intérieur.
+
+    Vu en relecture sur le flux de question : une exception levée avant le `try`
+    emportait le fil sans sentinelle ni libération. Ici, la même faute aurait un effet
+    pire — plus aucune reconstruction possible, chaque tentative répondant « déjà en
+    cours » pour toujours.
+    """
+    monkeypatch.setattr(
+        api, "_JournalVersFile",
+        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("panne d'installation")),
+    )
+
+    premier = _evenements(client.post("/api/donnees/recharger", files=[]))
+    assert premier[-1]["type"] == "erreur"
+    assert premier[-1]["message"] == api.TEXTE_ERREUR_PIPELINE
+
+    # Contre-épreuve du verrou : sans libération, ce second appel dirait
+    # « une reconstruction est déjà en cours ».
+    monkeypatch.undo()
+    monkeypatch.setattr(api.build_db, "construire", lambda out, raw_dir=None, **kw: out)
+    monkeypatch.setattr(api.boucle, "reinitialiser", lambda: None)
+    second = _evenements(client.post("/api/donnees/recharger", files=[]))
+
+    assert second[-1]["type"] == "termine"
+
+
+# --- 4. La pipeline de rechargement, sans HTTP ----------------------------------------
+
+
+def test_reconstruire_depuis_promeut_apres_construction(sources, tmp_path, monkeypatch):
+    """La garantie du dossier d'attente se teste ici, sans passer par la frontière."""
+    def construction_reussie(out, raw_dir=None, **kw):
+        assert (raw_dir / "features_cost.csv").read_bytes() == b"colonne\nneuf\n"
+        return out
+
+    monkeypatch.setattr(build_db, "construire", construction_reussie)
+
+    rechargement.reconstruire_depuis(
+        {"features_cost.csv": b"colonne\nneuf\n"}, tmp_path / "mmm.duckdb"
+    )
+
+    assert (sources / "features_cost.csv").read_bytes() == b"colonne\nneuf\n"
+
+
+def test_reconstruire_depuis_ne_promeut_rien_sur_echec(sources, tmp_path, monkeypatch):
+    avant = (sources / "features_cost.csv").read_bytes()
+    monkeypatch.setattr(
+        build_db, "construire",
+        lambda *a, **kw: (_ for _ in ()).throw(checks.DataQualityError("invariant")),
+    )
+
+    with pytest.raises(checks.DataQualityError):
+        rechargement.reconstruire_depuis(
+            {"features_cost.csv": b"colonne\ncassee\n"}, tmp_path / "mmm.duckdb"
+        )
+
+    assert (sources / "features_cost.csv").read_bytes() == avant
+
+
+def test_reconstruire_depuis_refuse_un_nom_hors_pipeline(tmp_path):
+    """Ceinture sous les bretelles de l'API : la pipeline vérifie aussi la liste close."""
+    with pytest.raises(ValueError):
+        rechargement.reconstruire_depuis(
+            {"vole.csv": b"x\n"}, tmp_path / "mmm.duckdb", raw_dir=tmp_path
+        )
 
 
 def test_le_journal_de_l_etl_est_diffuse(client, monkeypatch):
