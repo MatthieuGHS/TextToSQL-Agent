@@ -35,6 +35,13 @@ logger = logging.getLogger(__name__)
 LIMITE_LIGNES = 200
 DELAI_SECONDES = 15.0
 
+# Attente maximale de la mort effective du fil après `interrupt()`. Généreuse à dessein :
+# DuckDB honore l'interruption entre deux vecteurs d'exécution, ce qui prend au pire
+# quelques secondes — mais refermer une connexion sous un fil encore vivant ne lève pas
+# d'exception, ça plante le moteur. Depuis E9 la connexion vient de l'appelant, qui la
+# referme en fin de requête HTTP : attendre ici est ce qui rend cette fermeture sûre.
+ATTENTE_INTERRUPTION = 30.0
+
 # Borne d'affichage, en caractères. Le plafond en lignes borne ce que la base renvoie ;
 # celui-ci borne ce que ça coûte. 200 lignes larges pèsent plusieurs milliers de tokens,
 # payés sur chaque question qui les produit — c'est la partie volatile du contexte, celle
@@ -204,16 +211,23 @@ def _executer_borne(
 
     if fil.is_alive():
         con.interrupt()
-        fil.join(timeout=5.0)
+        fil.join(timeout=ATTENTE_INTERRUPTION)
         trop_long = SqlTropLong(
             f"Requête interrompue après {delai:.0f} s. Elle croise probablement deux "
             f"tables sans condition de jointure, ou balaie trop de lignes : ajouter une "
             f"condition sur step_date, ou agréger."
         )
-        # Si le fil n'a pas rendu la main, il exécute encore *sur cette connexion*.
-        # La refermer sous lui ne lève pas d'exception : ça plante le moteur. Mieux vaut
-        # laisser filer une connexion que faire tomber le processus.
+        # Si le fil n'a pas rendu la main malgré l'attente, il exécute encore *sur cette
+        # connexion*. La refermer sous lui ne lève pas d'exception : ça plante le moteur.
+        # Mieux vaut laisser filer une connexion que faire tomber le processus — et le
+        # journal doit le crier, parce que l'appelant HTTP refermera la sienne sans
+        # pouvoir le savoir.
         trop_long.connexion_liberee = not fil.is_alive()
+        if not trop_long.connexion_liberee:
+            logger.error(
+                "interruption sans effet après %.0f s : la connexion reste occupée",
+                ATTENTE_INTERRUPTION,
+            )
         raise trop_long
 
     if "erreur" in resultat:
