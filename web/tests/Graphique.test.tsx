@@ -36,6 +36,27 @@ describe('données du graphique', () => {
     expect(points[1].cost).not.toBe(0)
   })
 
+  it("garde l'abscisse d'un nuage numérique, jamais en étiquette", () => {
+    // Formatée en étiquette, l'abscisse deviendrait catégorielle et Recharts espacerait
+    // les points au rang de la ligne au lieu de la valeur — un nuage faussé mais
+    // d'apparence juste.
+    const nuage: Graphique = {
+      type: 'nuage',
+      x: 'cost_tv',
+      etiquettes: [100.5, 300, 200],
+      series: [{ colonne: 'mes', valeurs: [5, 12, 8], axe_secondaire: false }],
+    }
+
+    const points = donneesDe(nuage)
+
+    expect(points).toEqual([
+      { x: 100.5, mes: 5 },
+      { x: 300, mes: 12 },
+      { x: 200, mes: 8 },
+    ])
+    expect(typeof points[0].x).toBe('number')
+  })
+
   it('abrège les dates ISO, laisse les catégories intactes', () => {
     const barres: Graphique = {
       type: 'barres',

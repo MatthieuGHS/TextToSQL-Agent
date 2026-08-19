@@ -14,6 +14,15 @@ Le SQL que le modèle écrit **est** l'expression de son intention : les colonne
 sélectionne sont celles qu'il veut montrer. On lit donc la forme du résultat plutôt que de
 demander au modèle de la décrire une seconde fois.
 
+Trois formes de résultat se tracent, et elles couvrent ce qu'un SQL d'analyse produit :
+
+- **large** — une abscisse, une mesure par colonne : une série par colonne ;
+- **long** — une abscisse, une colonne de catégorie, une mesure : une série par
+  catégorie, après pivot. C'est la forme la plus naturelle d'un `GROUP BY date, canal`,
+  et la refuser privait de graphique les questions d'évolution par canal ;
+- **deux mesures sans abscisse** — un nuage de points. C'est la seule réponse honnête à
+  une question de corrélation : une courbe imposerait un ordre qui n'existe pas.
+
 **Le refus est un résultat de premier ordre**, pas un cas d'erreur. Une bonne part des
 questions du corpus sont des pièges, et « pas de graphique, et voici pourquoi » y est la
 bonne réponse.
@@ -34,6 +43,14 @@ MAX_CATEGORIES = 30
 # Au-delà, aucune palette ne distingue plus les séries les unes des autres.
 MAX_SERIES = 4
 
+# Plafond distinct pour les séries issues d'un pivot : elles partagent la même colonne,
+# donc la même unité et la même échelle — six courbes de coût par canal se lisent, quatre
+# mesures hétérogènes non. La palette de l'interface est calée sur ce maximum.
+MAX_SERIES_PIVOT = 6
+
+# En deçà, un nuage de points ne montre rien : deux points forment toujours une droite.
+MIN_POINTS_NUAGE = 3
+
 # Rapport entre les médianes de deux séries au-delà duquel elles ne partagent plus un axe.
 # Calibré sur les ordres de grandeur du jeu de données : un coût hebdomadaire et un nombre
 # de compteurs se lisent ensemble, des GRP et des clics non. À revoir sur mesure, pas
@@ -42,6 +59,7 @@ FACTEUR_SECOND_AXE = 25
 
 COURBE = "courbe"
 BARRES = "barres"
+NUAGE = "nuage"
 
 _TEMPORELS = (datetime.date, datetime.datetime)
 
@@ -53,7 +71,8 @@ class Serie:
     `valeurs` garde les `None` : un trou dans une série est une information — `cost` est
     NULL sur tout le SEO, non acheté et non gratuit. Les remplacer par zéro raconterait
     une chute qui n'a pas eu lieu, et c'est le genre d'erreur qu'un graphique rend
-    convaincante.
+    convaincante. Après un pivot, le trou dit qu'une catégorie n'a pas de ligne pour
+    cette abscisse — une semaine sans diffusion, qui ne vaut pas zéro non plus.
     """
 
     colonne: str
@@ -63,6 +82,10 @@ class Serie:
 
 @dataclass(frozen=True)
 class Graphique:
+    """Pour `NUAGE`, `x` est la première mesure et `etiquettes` porte ses valeurs :
+    la structure est la même que pour une courbe, seule la nature de l'abscisse change —
+    numérique au lieu de temporelle ou catégorielle."""
+
     type: str
     x: str
     etiquettes: tuple[Any, ...]
@@ -93,15 +116,19 @@ def _est_ordinale(lignes: Sequence[Sequence[Any]], i: int) -> bool:
     regroupement par année, par trimestre ou par numéro de semaine serait refusé.
 
     Deux conditions, toutes deux portées par les données : des valeurs entières, et
-    strictement croissantes. Une mesure ne croît pas strictement à chaque ligne ; un axe
-    ordinal, si — et un `ORDER BY` l'a mis dans cet ordre.
+    strictement monotones — croissantes **ou décroissantes**, un `ORDER BY … DESC` étant
+    une écriture aussi naturelle que l'autre ; la restreindre au sens croissant refusait
+    la forme exacte que les exemples du prompt enseignent. Une mesure, elle, ne varie pas
+    strictement dans un seul sens à chaque ligne.
     """
     valeurs = [l[i] for l in lignes]
     if any(v is None or not _est_numerique(v) for v in valeurs):
         return False
     if any(float(v) != int(v) for v in valeurs):
         return False
-    return all(int(a) < int(b) for a, b in zip(valeurs, valeurs[1:]))
+    entiers = [int(v) for v in valeurs]
+    paires = list(zip(entiers, entiers[1:]))
+    return all(a < b for a, b in paires) or all(a > b for a, b in paires)
 
 
 def _indice_abscisse(
@@ -114,55 +141,6 @@ def _indice_abscisse(
     # Une seule colonne ordinale ne suffit pas : il faut qu'il reste une mesure à tracer.
     if len(numeriques) > 1 and _est_ordinale(lignes, numeriques[0]):
         return numeriques[0]
-    return None
-
-
-def refus(colonnes: Sequence[str], lignes: Sequence[Sequence[Any]]) -> str | None:
-    """Le motif pour lequel ce résultat ne se trace pas, ou `None` s'il se trace.
-
-    Séparé de `proposer()` pour être testable motif par motif : un refus qui ne dirait que
-    « non » rendrait indistinguables sept règles différentes, et le jour où l'une cesse de
-    mordre, rien ne le signalerait.
-    """
-    if not lignes:
-        return "résultat vide"
-    if len(lignes) < 2:
-        return "une seule ligne ne fait ni une évolution ni une comparaison"
-    if not colonnes:
-        return "aucune colonne"
-
-    numeriques = [i for i in range(len(colonnes)) if _colonne_numerique(lignes, i)]
-    if not numeriques:
-        return "aucune colonne numérique à porter en ordonnée"
-
-    x = _indice_abscisse(lignes, numeriques, len(colonnes))
-    if x is None:
-        return "aucune colonne de catégorie, de date ou d'ordinal à porter en abscisse"
-
-    numeriques = [i for i in numeriques if i != x]
-    if not numeriques:
-        return "aucune colonne numérique à porter en ordonnée"
-
-    etiquettes = [l[x] for l in lignes]
-    # L'abscisse doit identifier la ligne. Sinon le résultat n'est pas une série : c'est
-    # le cas d'une table lue à un grain plus fin que celui qu'on croit tracer — par
-    # exemple une table hebdomadaire qui porte aussi une seconde dimension. Superposer
-    # ces lignes produirait un graphique lisible et faux.
-    if len(set(etiquettes)) != len(etiquettes):
-        return "l'abscisse se répète : le résultat n'est pas une série par ligne"
-
-    if len(numeriques) > MAX_SERIES:
-        return f"{len(numeriques)} séries : au-delà de {MAX_SERIES}, aucune n'est lisible"
-
-    if not _est_temporelle(lignes, x) and len(lignes) > MAX_CATEGORIES:
-        return f"{len(lignes)} catégories en abscisse : au-delà de {MAX_CATEGORIES}"
-
-    if len(numeriques) > 2 and _echelles_incompatibles(lignes, numeriques):
-        # Deux séries d'ordres de grandeur éloignés se lisent sur deux axes. Trois ou plus,
-        # non : c'est le cas « GRP, impressions et clics sur le même graphique », que les
-        # unités du jeu de données rendent dénué de sens.
-        return "séries d'ordres de grandeur incompatibles, sans axe commun possible"
-
     return None
 
 
@@ -180,30 +158,94 @@ def _echelles_incompatibles(
     return max(medianes) / min(medianes) > FACTEUR_SECOND_AXE
 
 
-def proposer(
-    colonnes: Sequence[str], lignes: Sequence[Sequence[Any]]
-) -> Graphique | None:
-    """La spécification du graphique, ou `None` si ce résultat ne se trace pas.
+def _trier_si_ordonne(
+    colonnes: Sequence[str], lignes: Sequence[Sequence[Any]], x: int
+) -> list[Sequence[Any]]:
+    """Rend les lignes triées par abscisse croissante quand l'abscisse est un continuum.
 
-    L'abscisse est la première colonne non numérique ; les suivantes sont ignorées plutôt
-    que tracées, la règle d'unicité ci-dessus ayant déjà écarté les résultats où elles
-    portaient une seconde dimension.
+    Un `ORDER BY … DESC` est une écriture légitime, mais un axe du temps se lit de gauche
+    à droite : le sens d'affichage est une règle de lisibilité, donc il appartient au
+    code, pas à la requête. Les abscisses catégorielles gardent l'ordre de la requête —
+    lui seul porte l'intention (un tri par montant décroissant, par exemple).
     """
-    if refus(colonnes, lignes) is not None:
-        return None
+    if _est_temporelle(lignes, x) or _est_ordinale(lignes, x):
+        if all(l[x] is not None for l in lignes):
+            return sorted(lignes, key=lambda l: l[x])
+    return list(lignes)
+
+
+def _analyser(
+    colonnes: Sequence[str], lignes: Sequence[Sequence[Any]]
+) -> Graphique | str:
+    """Le cœur de la décision : une spécification, ou le motif du refus.
+
+    Une seule passe pour les deux fonctions publiques — l'ancienne paire `refus()` /
+    `proposer()` recalculait chacune ses indices, et deux calculs finissent toujours par
+    diverger d'une règle.
+    """
+    if not lignes:
+        return "résultat vide"
+    if len(lignes) < 2:
+        return "une seule ligne ne fait ni une évolution ni une comparaison"
+    if not colonnes:
+        return "aucune colonne"
 
     numeriques = [i for i in range(len(colonnes)) if _colonne_numerique(lignes, i)]
+    if not numeriques:
+        return "aucune colonne numérique à porter en ordonnée"
+
     x = _indice_abscisse(lignes, numeriques, len(colonnes))
-    numeriques = [i for i in numeriques if i != x]
+    if x is None:
+        if len(colonnes) == 2 and len(numeriques) == 2:
+            return _nuage(colonnes, lignes)
+        return "aucune colonne de catégorie, de date ou d'ordinal à porter en abscisse"
+
+    mesures = [i for i in numeriques if i != x]
+    if not mesures:
+        return "aucune colonne numérique à porter en ordonnée"
+
+    lignes = _trier_si_ordonne(colonnes, lignes, x)
+    etiquettes = [l[x] for l in lignes]
+
+    if len(set(etiquettes)) == len(etiquettes):
+        return _large(colonnes, lignes, x, mesures)
+
+    # L'abscisse se répète : soit le résultat est en format long — une colonne de
+    # catégorie l'explique, et le pivot en fait une série par catégorie — soit il est lu
+    # à un grain plus fin qu'on ne croit, et superposer ses lignes produirait un
+    # graphique lisible et faux, c'est-à-dire le pire cas possible.
+    categories = [
+        i for i in range(len(colonnes))
+        if i != x and i not in numeriques and not _est_temporelle(lignes, i)
+    ]
+    if len(categories) == 1 and len(mesures) == 1:
+        return _pivot(colonnes, lignes, x, categories[0], mesures[0])
+    return "l'abscisse se répète : le résultat n'est pas une série par ligne"
+
+
+def _large(
+    colonnes: Sequence[str],
+    lignes: Sequence[Sequence[Any]],
+    x: int,
+    mesures: Sequence[int],
+) -> Graphique | str:
+    """Format large : une série par colonne numérique. Les règles historiques d'E7."""
+    if len(mesures) > MAX_SERIES:
+        return f"{len(mesures)} séries : au-delà de {MAX_SERIES}, aucune n'est lisible"
+
+    if not _est_temporelle(lignes, x) and len(lignes) > MAX_CATEGORIES:
+        return f"{len(lignes)} catégories en abscisse : au-delà de {MAX_CATEGORIES}"
+
+    if len(mesures) > 2 and _echelles_incompatibles(lignes, mesures):
+        # Deux séries d'ordres de grandeur éloignés se lisent sur deux axes. Trois ou
+        # plus, non : c'est le cas « GRP, impressions et clics sur le même graphique »,
+        # que les unités du jeu de données rendent dénué de sens.
+        return "séries d'ordres de grandeur incompatibles, sans axe commun possible"
 
     # Le second axe ne sert que pour exactement deux séries : à trois, un lecteur ne sait
-    # plus quelle courbe se lit sur quel axe, et le refus est déjà tombé plus haut.
-    second = (
-        len(numeriques) == 2 and _echelles_incompatibles(lignes, numeriques)
-    )
-    petite = (
-        min(numeriques, key=lambda i: _mediane(lignes, i)) if second else None
-    )
+    # plus quelle courbe se lit sur quel axe.
+    second = len(mesures) == 2 and _echelles_incompatibles(lignes, mesures)
+    petite = min(mesures, key=lambda i: _mediane(lignes, i)) if second else None
 
     return Graphique(
         # Une abscisse ordinale (année, trimestre, numéro de semaine) est un continuum
@@ -219,11 +261,146 @@ def proposer(
         series=tuple(
             Serie(
                 colonne=colonnes[i],
-                valeurs=tuple(
-                    None if l[i] is None else float(l[i]) for l in lignes
-                ),
+                valeurs=tuple(None if l[i] is None else float(l[i]) for l in lignes),
                 axe_secondaire=(i == petite),
             )
-            for i in numeriques
+            for i in mesures
         ),
     )
+
+
+def _pivot(
+    colonnes: Sequence[str],
+    lignes: Sequence[Sequence[Any]],
+    x: int,
+    categorie: int,
+    mesure: int,
+) -> Graphique | str:
+    """Format long : une série par valeur de la colonne de catégorie.
+
+    Les séries issues du pivot partagent la même colonne — donc, le plus souvent, la
+    même unité. Le plus souvent seulement : mesuré sur le cache d'évaluation, le modèle
+    répond à « GRP de la TV et clics du SEA » par un format long dont la catégorie est
+    le **nom de la métrique**, et la colonne de valeurs mélange alors deux unités. Les
+    gardes d'échelle du format large s'appliquent donc ici aussi : deux séries d'ordres
+    de grandeur éloignés prennent deux axes, au-delà le tracé est refusé.
+
+    Un couple (abscisse, catégorie) dupliqué fait refuser : le résultat porte alors une
+    dimension de plus que ce que le pivot croit lire — le grain caché contre lequel la
+    règle d'unicité existe.
+    """
+    couples = [(l[x], l[categorie]) for l in lignes]
+    if len(set(couples)) != len(couples):
+        return "l'abscisse se répète : le résultat n'est pas une série par ligne"
+
+    valeurs_categorie: list[Any] = []
+    for l in lignes:
+        if l[categorie] not in valeurs_categorie:
+            valeurs_categorie.append(l[categorie])
+    if len(valeurs_categorie) > MAX_SERIES_PIVOT:
+        return (
+            f"{len(valeurs_categorie)} séries après pivot : au-delà de "
+            f"{MAX_SERIES_PIVOT}, aucune n'est lisible"
+        )
+
+    abscisses: list[Any] = []
+    for l in lignes:
+        if l[x] not in abscisses:
+            abscisses.append(l[x])
+    if not _est_temporelle(lignes, x) and len(abscisses) > MAX_CATEGORIES:
+        return f"{len(abscisses)} catégories en abscisse : au-delà de {MAX_CATEGORIES}"
+
+    # Le trou est conservé : une catégorie sans ligne pour une abscisse n'a pas de
+    # valeur, et ce n'est pas zéro — les campagnes fonctionnent par vagues.
+    grille = {(l[x], l[categorie]): l[mesure] for l in lignes}
+    valeurs_par_categorie = {
+        cat: [
+            None if grille.get((a, cat)) is None else float(grille[(a, cat)])
+            for a in abscisses
+        ]
+        for cat in valeurs_categorie
+    }
+
+    medianes = {
+        cat: statistics.median([abs(v) for v in valeurs if v is not None and v != 0])
+        if any(v not in (None, 0.0) for v in valeurs)
+        else 0.0
+        for cat, valeurs in valeurs_par_categorie.items()
+    }
+    non_nulles = [m for m in medianes.values() if m > 0]
+    incompatibles = (
+        len(non_nulles) >= 2 and max(non_nulles) / min(non_nulles) > FACTEUR_SECOND_AXE
+    )
+    if incompatibles and len(valeurs_categorie) > 2:
+        return "séries d'ordres de grandeur incompatibles, sans axe commun possible"
+    petite = (
+        min(medianes, key=medianes.get)
+        if incompatibles and len(valeurs_categorie) == 2
+        else None
+    )
+
+    return Graphique(
+        type=(
+            COURBE
+            if _est_temporelle(lignes, x) or _est_ordinale(lignes, x)
+            else BARRES
+        ),
+        x=colonnes[x],
+        etiquettes=tuple(abscisses),
+        series=tuple(
+            Serie(
+                colonne=str(cat),
+                valeurs=tuple(valeurs_par_categorie[cat]),
+                axe_secondaire=(cat == petite),
+            )
+            for cat in valeurs_categorie
+        ),
+    )
+
+
+def _nuage(
+    colonnes: Sequence[str], lignes: Sequence[Sequence[Any]]
+) -> Graphique | str:
+    """Deux mesures sans abscisse : un nuage de points, jamais une courbe.
+
+    C'est la forme d'une question de corrélation — « investissements TV contre mises en
+    service » — et la seule où relier les points mentirait : l'ordre des lignes n'y porte
+    aucune information. Seuls les couples complets sont tracés : un point dont une
+    coordonnée manque n'est pas un point.
+    """
+    points = [l for l in lignes if l[0] is not None and l[1] is not None]
+    if len(points) < MIN_POINTS_NUAGE:
+        return (
+            f"{len(points)} point(s) complet(s) : en deçà de {MIN_POINTS_NUAGE}, "
+            f"un nuage ne montre rien"
+        )
+    return Graphique(
+        type=NUAGE,
+        x=colonnes[0],
+        etiquettes=tuple(float(l[0]) for l in points),
+        series=(
+            Serie(
+                colonne=colonnes[1],
+                valeurs=tuple(float(l[1]) for l in points),
+            ),
+        ),
+    )
+
+
+def refus(colonnes: Sequence[str], lignes: Sequence[Sequence[Any]]) -> str | None:
+    """Le motif pour lequel ce résultat ne se trace pas, ou `None` s'il se trace.
+
+    Séparé de `proposer()` pour être testable motif par motif : un refus qui ne dirait que
+    « non » rendrait indistinguables les règles, et le jour où l'une cesse de mordre,
+    rien ne le signalerait.
+    """
+    issue = _analyser(colonnes, lignes)
+    return issue if isinstance(issue, str) else None
+
+
+def proposer(
+    colonnes: Sequence[str], lignes: Sequence[Sequence[Any]]
+) -> Graphique | None:
+    """La spécification du graphique, ou `None` si ce résultat ne se trace pas."""
+    issue = _analyser(colonnes, lignes)
+    return issue if isinstance(issue, Graphique) else None

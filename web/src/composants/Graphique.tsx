@@ -6,6 +6,8 @@ import {
   Line,
   LineChart,
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
@@ -21,7 +23,10 @@ import type { Graphique as TypeGraphique } from '../types'
  * placerait hors de portée de ces tests et la dédoublerait ; s'il en manque une, elle va
  * dans `src/charts/specification.py`.
  */
-const COULEURS = ['#38bdf8', '#f472b6', '#a78bfa', '#4ade80']
+// Six couleurs : le maximum de séries qu'une spécification peut porter (pivot par
+// catégorie, `MAX_SERIES_PIVOT` côté serveur). En élargir la liste sans élargir le
+// plafond serveur ne servirait à rien — c'est lui qui décide.
+const COULEURS = ['#38bdf8', '#f472b6', '#a78bfa', '#4ade80', '#fb923c', '#facc15']
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})/
 
@@ -47,6 +52,15 @@ const complet = new Intl.NumberFormat('fr-FR')
  * au lieu de relier deux points de part et d'autre d'une valeur absente.
  */
 export function donneesDe(graphique: TypeGraphique) {
+  // Un nuage garde son abscisse **numérique** : la formater en étiquette en ferait un
+  // axe catégoriel, et Recharts espacerait les points au rang au lieu de la valeur —
+  // un nuage faussé qui aurait pourtant l'air juste.
+  if (graphique.type === 'nuage') {
+    return graphique.etiquettes.map((e, i) => ({
+      x: e as number,
+      [graphique.series[0].colonne]: graphique.series[0].valeurs[i],
+    }))
+  }
   return graphique.etiquettes.map((e, i) => {
     const point: Record<string, string | number | null> = { x: etiquette(e) }
     for (const s of graphique.series) point[s.colonne] = s.valeurs[i]
@@ -103,6 +117,56 @@ export function Graphique({ graphique }: { graphique: TypeGraphique }) {
       />
     </>
   )
+
+  if (graphique.type === 'nuage') {
+    // Le nuage a ses propres axes : tous deux **numériques**, là où courbe et barres
+    // portent une abscisse d'étiquettes. Réutiliser `communs` espacerait les points au
+    // rang de la ligne au lieu de sa valeur.
+    const serie = graphique.series[0]
+    return (
+      <figure className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+        <ResponsiveContainer width="100%" height={280}>
+          <ScatterChart margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={axes.grid} />
+            <XAxis
+              type="number"
+              dataKey="x"
+              name={graphique.x}
+              tick={{ fill: axes.texte, fontSize: 11 }}
+              stroke={axes.grid}
+              tickFormatter={(v) => compact.format(v as number)}
+              domain={['auto', 'auto']}
+            />
+            <YAxis
+              type="number"
+              dataKey={serie.colonne}
+              name={serie.colonne}
+              tick={{ fill: axes.texte, fontSize: 11 }}
+              stroke={axes.grid}
+              tickFormatter={(v) => compact.format(v as number)}
+              width={52}
+              domain={['auto', 'auto']}
+            />
+            <Tooltip
+              contentStyle={{
+                background: '#0f172a',
+                border: '1px solid #334155',
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+              labelStyle={{ color: '#94a3b8' }}
+              formatter={(v) => complet.format(v as number)}
+              cursor={{ strokeDasharray: '3 3' }}
+            />
+            <Scatter data={donnees} fill={COULEURS[0]} fillOpacity={0.75} />
+          </ScatterChart>
+        </ResponsiveContainer>
+        <figcaption className="mt-1 text-center text-xs text-slate-600">
+          {serie.colonne} selon {graphique.x} — chaque point est une ligne du résultat
+        </figcaption>
+      </figure>
+    )
+  }
 
   return (
     <figure className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">

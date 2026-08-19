@@ -90,6 +90,194 @@ def test_un_resultat_sans_mesure_ne_se_trace_pas():
     assert "numérique" in charts.refus(["channel", "performance_metric"], lignes)
 
 
+def test_une_abscisse_ordinale_decroissante_est_acceptee():
+    """`ORDER BY annee DESC` est la forme exacte que les exemples du prompt enseignent.
+
+    Vu en relecture : la monotonie n'était acceptée que croissante, donc la comparaison
+    annuelle canonique du prompt était refusée — alors que les mêmes années en croissant
+    passaient, et que des *dates* décroissantes passaient aussi. L'affichage, lui, est
+    remis en croissant : le sens de lecture d'un axe est une règle de lisibilité.
+    """
+    g = charts.proposer(["annee", "cost"], [(2025, 15.0), (2024, 20.0), (2023, 10.0)])
+
+    assert g is not None
+    assert g.type == charts.COURBE
+    assert g.etiquettes == (2023, 2024, 2025)
+    assert g.series[0].valeurs == (10.0, 20.0, 15.0)
+
+
+def test_des_dates_decroissantes_sont_tracees_en_croissant():
+    """Un axe du temps se lit de gauche à droite, quel que soit l'ORDER BY."""
+    lignes = list(reversed(_serie_temporelle([100.0, 200.0, 150.0, 300.0])))
+
+    g = charts.proposer(["step_date", "cost"], lignes)
+
+    assert g.etiquettes == tuple(SEMAINES)
+    assert g.series[0].valeurs == (100.0, 200.0, 150.0, 300.0)
+
+
+def test_un_ordre_categoriel_est_conserve():
+    """Contre-épreuve du tri : sur des catégories, l'ordre de la requête porte
+    l'intention — un tri par montant décroissant, par exemple — et ne doit pas bouger."""
+    lignes = [("tv", 100.0), ("radio", 50.0), ("display", 25.0)]
+
+    g = charts.proposer(["channel", "cost"], lignes)
+
+    assert g.etiquettes == ("tv", "radio", "display")
+
+
+# --- Le format long : une série par catégorie -----------------------------------------
+
+
+def test_le_format_long_est_pivote_en_une_serie_par_categorie():
+    """`GROUP BY date, canal` est la forme la plus naturelle d'une évolution par canal.
+
+    La refuser (« l'abscisse se répète ») privait de graphique la famille de questions
+    que le client attend le plus. Le pivot est sûr là où la superposition ne l'est pas :
+    les séries partagent la même colonne, donc la même unité.
+    """
+    lignes = [
+        (SEMAINES[0], "tv", 100.0), (SEMAINES[0], "radio", 10.0),
+        (SEMAINES[1], "tv", 200.0), (SEMAINES[1], "radio", 20.0),
+    ]
+
+    g = charts.proposer(["step_date", "channel", "cost"], lignes)
+
+    assert g is not None and g.type == charts.COURBE
+    assert g.x == "step_date"
+    assert g.etiquettes == (SEMAINES[0], SEMAINES[1])
+    assert [s.colonne for s in g.series] == ["tv", "radio"]
+    assert g.series[0].valeurs == (100.0, 200.0)
+    assert g.series[1].valeurs == (10.0, 20.0)
+
+
+def test_le_pivot_garde_les_trous():
+    """Une semaine sans ligne pour un canal n'est pas un zéro : diffusion par vagues."""
+    lignes = [
+        (SEMAINES[0], "tv", 100.0),
+        (SEMAINES[1], "tv", 200.0), (SEMAINES[1], "radio", 20.0),
+    ]
+
+    g = charts.proposer(["step_date", "channel", "cost"], lignes)
+
+    assert g.series[1].colonne == "radio"
+    assert g.series[1].valeurs == (None, 20.0)
+
+
+def test_un_couple_abscisse_categorie_duplique_refuse_le_pivot():
+    """Contre-épreuve : la dimension cachée reste attrapée à travers le pivot.
+
+    Deux lignes pour le même (semaine, canal) signifient qu'une troisième dimension
+    existe — et le pivot superposerait ses valeurs comme l'abscisse répétée le faisait.
+    """
+    lignes = [
+        (SEMAINES[0], "tv", 100.0), (SEMAINES[0], "tv", 40.0),
+        (SEMAINES[1], "tv", 200.0), (SEMAINES[1], "radio", 20.0),
+    ]
+
+    assert "se répète" in charts.refus(["step_date", "channel", "cost"], lignes)
+
+
+def test_trop_de_categories_pivotees_est_refuse():
+    seuil = charts.specification.MAX_SERIES_PIVOT
+    lignes = [
+        (SEMAINES[i], f"canal-{c}", float(c))
+        for i in range(2)
+        for c in range(seuil + 1)
+    ]
+
+    motif = charts.refus(["step_date", "channel", "cost"], lignes)
+
+    assert motif is not None and "séries après pivot" in motif
+
+
+def test_deux_series_pivotees_d_echelles_eloignees_prennent_un_second_axe():
+    """La catégorie peut être un nom de métrique — GRP contre clics, mesuré sur le cache.
+
+    La colonne de valeurs mélange alors deux unités : le pivot porte les mêmes gardes
+    d'échelle que le format large, sinon il superposerait ce que la règle des unités
+    interdit précisément.
+    """
+    lignes = [
+        (SEMAINES[0], "grp", 120.0), (SEMAINES[0], "clicks", 90000.0),
+        (SEMAINES[1], "grp", 150.0), (SEMAINES[1], "clicks", 110000.0),
+    ]
+
+    g = charts.proposer(["step_date", "metrique", "valeur"], lignes)
+
+    assert g is not None
+    assert [s.axe_secondaire for s in g.series] == [True, False]
+
+
+def test_trois_series_pivotees_incompatibles_sont_refusees():
+    lignes = [
+        (SEMAINES[i], cat, val * (i + 1))
+        for i in range(2)
+        for cat, val in (("grp", 100.0), ("clicks", 90000.0), ("impressions", 4e7))
+    ]
+
+    motif = charts.refus(["step_date", "metrique", "valeur"], lignes)
+
+    assert motif is not None and "ordres de grandeur" in motif
+
+
+def test_deux_mesures_et_une_categorie_ne_se_pivotent_pas():
+    """Contre-épreuve : le pivot exige une mesure unique — deux mesures et une catégorie
+    rendraient ambigu ce qu'une série représente."""
+    lignes = [
+        (SEMAINES[0], "tv", 100.0, 5.0), (SEMAINES[0], "radio", 10.0, 2.0),
+        (SEMAINES[1], "tv", 200.0, 6.0), (SEMAINES[1], "radio", 20.0, 3.0),
+    ]
+
+    assert "se répète" in charts.refus(
+        ["step_date", "channel", "cost", "performance"], lignes
+    )
+
+
+# --- Le nuage de points ---------------------------------------------------------------
+
+
+def test_deux_mesures_sans_abscisse_donnent_un_nuage():
+    """La forme d'une question de corrélation : relier ces points mentirait, l'ordre des
+    lignes ne portant aucune information."""
+    lignes = [(100.0, 5.0), (200.0, 9.0), (150.0, 7.0), (300.0, 12.0)]
+
+    g = charts.proposer(["cost_tv", "mes"], lignes)
+
+    assert g is not None and g.type == charts.NUAGE
+    assert g.x == "cost_tv"
+    assert g.etiquettes == (100.0, 200.0, 150.0, 300.0)
+    assert g.series[0].colonne == "mes"
+    assert g.series[0].valeurs == (5.0, 9.0, 7.0, 12.0)
+
+
+def test_un_point_incomplet_ne_figure_pas_dans_le_nuage():
+    """Un point dont une coordonnée manque n'est pas un point à moitié : il n'existe pas."""
+    lignes = [(100.0, 5.0), (None, 9.0), (150.0, None), (300.0, 12.0), (200.0, 8.0)]
+
+    g = charts.proposer(["cost_tv", "mes"], lignes)
+
+    assert g.etiquettes == (100.0, 300.0, 200.0)
+    assert g.series[0].valeurs == (5.0, 12.0, 8.0)
+
+
+def test_un_nuage_trop_pauvre_est_refuse():
+    """Deux points forment toujours une droite : en deçà du plancher, rien n'est montré."""
+    lignes = [(100.0, 5.0), (None, 9.0), (300.0, 12.0)]
+
+    motif = charts.refus(["cost_tv", "mes"], lignes)
+
+    assert motif is not None and "nuage" in motif
+
+
+def test_trois_mesures_sans_abscisse_restent_refusees():
+    """Contre-épreuve : le nuage n'accepte que le couple — à trois mesures, on ne sait
+    plus quoi porter sur quel axe."""
+    lignes = [(100.0, 5.0, 1.0), (200.0, 9.0, 2.0), (150.0, 7.0, 3.0)]
+
+    assert "abscisse" in charts.refus(["a", "b", "c"], lignes)
+
+
 def test_une_abscisse_qui_se_repete_est_refusee():
     """La règle qui attrape un résultat lu à un grain plus fin qu'on ne le croit.
 

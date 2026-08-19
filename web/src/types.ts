@@ -31,7 +31,8 @@ export interface Serie {
  * en fonctions pures et se dédoublerait avec celles du serveur.
  */
 export interface Graphique {
-  type: 'courbe' | 'barres'
+  /** `nuage` : deux mesures sans abscisse — les étiquettes sont alors numériques. */
+  type: 'courbe' | 'barres' | 'nuage'
   x: string
   etiquettes: (string | number)[]
   series: Serie[]
