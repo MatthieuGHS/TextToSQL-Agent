@@ -19,6 +19,7 @@ import decimal
 import uuid
 from typing import Any
 
+from src import charts
 from src.agent.reponse import AgentResponse
 from src.app import schemas
 
@@ -55,6 +56,17 @@ def cellule(valeur: Any) -> Any:
 
 
 def requete(executee) -> schemas.RequeteSortante:
+    """Chaque requête réussie porte la spécification que son résultat *permettrait*.
+
+    Calculée ici par les mêmes règles pures que le graphique principal — aucun appel,
+    aucun état — pour que l'interface puisse proposer « tracer » sur un bloc de requête
+    sans redéployer de logique de lisibilité côté navigateur.
+    """
+    tracable = (
+        charts.proposer(executee.colonnes, executee.lignes)
+        if executee.a_reussi
+        else None
+    )
     return schemas.RequeteSortante(
         sql=executee.sql,
         colonnes=list(executee.colonnes),
@@ -62,6 +74,7 @@ def requete(executee) -> schemas.RequeteSortante:
         tronque=executee.tronque,
         duree_ms=executee.duree_ms,
         erreur=executee.erreur,
+        graphique=graphique(tracable),
     )
 
 
@@ -86,6 +99,8 @@ def graphique(spec) -> schemas.GraphiqueSortant | None:
             )
             for s in spec.series
         ],
+        variantes=list(spec.variantes),
+        empilable=spec.empilable,
     )
 
 

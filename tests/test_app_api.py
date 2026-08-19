@@ -202,6 +202,20 @@ def test_la_specification_de_graphique_traverse_la_frontiere(client):
     ]
 
 
+def test_chaque_requete_reussie_porte_sa_specification_de_graphique(client):
+    """Le « tracer à la demande » des blocs de requête : mêmes règles, calcul pur.
+
+    Le tracé automatique reste réservé à la dernière requête — celle de la conclusion —
+    mais l'interface doit pouvoir proposer les autres sans redéployer de logique de
+    lisibilité côté navigateur.
+    """
+    charge = client.post("/api/question", json={"question": "Quelles dépenses ?"}).json()
+
+    assert charge["requetes"][0]["graphique"] is not None
+    assert charge["requetes"][0]["graphique"]["type"] == "courbe"
+    assert "variantes" in charge["requetes"][0]["graphique"]
+
+
 def test_l_absence_de_graphique_est_explicite_et_non_une_omission(client, monkeypatch):
     """`null` plutôt qu'un champ manquant : le refus est un résultat, pas un oubli."""
     def agent_sans_trace():

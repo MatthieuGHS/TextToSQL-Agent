@@ -42,6 +42,12 @@ class RequeteSortante(BaseModel):
     Les échecs sont exposés au même titre que les succès. Ils ne sont pas des fautes :
     la boucle est faite pour se reprendre, et les masquer donnerait de l'exécution une
     image plus lisse que la réalité.
+
+    `graphique` : la spécification que ce résultat *permettrait*, calculée par les mêmes
+    règles que le graphique principal. L'interface l'affiche à la demande — le tracé
+    automatique reste réservé à la dernière requête, celle qui porte la conclusion ;
+    les précédentes sont des explorations, et les tracer d'office illustrerait le
+    raisonnement au lieu de la réponse.
     """
 
     sql: str
@@ -50,6 +56,8 @@ class RequeteSortante(BaseModel):
     tronque: bool
     duree_ms: int
     erreur: str | None
+    # Défini plus bas dans le module ; résolu à la première validation.
+    graphique: GraphiqueSortant | None
 
 
 class SerieSortante(BaseModel):
@@ -74,6 +82,10 @@ class GraphiqueSortant(BaseModel):
     x: str
     etiquettes: list[Any]
     series: list[SerieSortante]
+    # Ce que l'interface a le droit d'offrir en bascule : décidé par `src/charts`,
+    # jamais élargi côté navigateur.
+    variantes: list[str]
+    empilable: bool
 
 
 class UsageSortant(BaseModel):
