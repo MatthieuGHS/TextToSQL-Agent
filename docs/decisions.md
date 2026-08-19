@@ -820,7 +820,8 @@ données — jamais par un choix du modèle :
   les couples sont uniques — un couple dupliqué signale la dimension cachée, et le refus
   demeure. La mesure a immédiatement corrigé une hypothèse : « même colonne, donc même
   unité » est faux quand la catégorie est un *nom de métrique* (GRP contre clics, vu sur
-  le cache). Les gardes d'échelle du format large s'appliquent donc au pivot aussi.
+  le cache). Deux séries d'échelles éloignées prennent donc deux axes ici aussi — mais
+  seulement deux, voir la correction du soir même ci-dessous.
 - **Deux mesures sans abscisse font un nuage de points.** C'est la forme d'une question
   de corrélation, qui n'avait aucun tracé possible ; une courbe y mentirait, l'ordre des
   lignes ne portant aucune information. Plancher à trois points complets — deux points
@@ -907,6 +908,37 @@ pour que personne ne lise le 47/51 comme s'il portait sur la configuration actue
 
 Les règles de graphique, elles, ne sont dans aucune clé — c'est le paragraphe suivant, et
 c'est la raison pour laquelle le relèvement du plafond de pivot, lui, ne périme rien.
+
+**Et le plafond ne suffisait pas : la garde d'échelle du pivot a dû partir.** Le
+relèvement à 12 ne débloquait rien, parce que le refus venait d'ailleurs — de la garde
+ajoutée le matin même, qui comparait TV (2,7 M€) à affiliation (12,8 k€) et concluait
+« ordres de grandeur incompatibles ». Or les onze séries sont **en euros** : un rapport
+de 209 y est un écart de budget, pas un mélange d'unités. La garde avait été calibrée
+sur un vrai cas — GRP contre clics — mais ce cas-là est à **deux** séries, où le second
+axe le règle ; l'étendre au-delà était une généralisation que rien n'avait mesurée.
+
+Elle est donc retirée pour trois séries et plus, et le raisonnement mérite d'être gardé
+parce qu'il distingue deux situations qu'on confond facilement. Dans un format **large**,
+deux colonnes sont deux mesures distinctes : la règle d'E7 y garde tout son sens. Dans un
+**pivot**, tout vient d'une seule colonne, donc d'une seule unité sauf quand la catégorie
+est une dimension de métrique — cas déjà couvert à deux séries. Refuser au-delà coûtait
+le résultat le plus attendu du jeu de données ; tracer ne coûte que de voir les petites
+séries petites, ce qui n'est pas une erreur mais une donnée. Le vrai piège — superposer
+deux grains — reste attrapé par l'unicité des couples.
+
+Mesuré avant retrait, sur les 214 requêtes distinctes du cache : **une seule décision
+change**, un `entity × channel` en euros qui passe d'un refus à des barres légitimes.
+Aucun graphique existant n'est modifié, et le cas à deux unités garde son second axe.
+
+Trois choses à retenir de cette séquence, au-delà du cas. **Une garde ajoutée le matin a
+produit le défaut du soir** — c'est exactement le motif que ce document recense, un
+mécanisme posé pour couvrir un cas qui en casse un autre ; la correction retire du
+mécanisme, comme la doctrine le prescrit. **La mesure sur cache ne l'avait pas vu** : les
+171 exécutions dataient d'avant E7, le modèle n'y produisait pas encore de format long
+par canal, et l'échantillon ne contenait donc pas le cas nominal — un rejeu à blanc
+vert ne prouve que ce qu'il contient. **C'est la répétition à la main qui l'a trouvé**,
+et aucun test unitaire ne l'aurait fait, puisque le jeu d'essai aurait porté les mêmes
+hypothèses que le code.
 
 Limite d'indexation, à connaître avant de lire un rejeu à blanc : les règles de graphique
 n'entrent dans aucune clé du cache — `Resultat.graphique` est un booléen figé à
