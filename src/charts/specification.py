@@ -31,6 +31,7 @@ bonne réponse.
 from __future__ import annotations
 
 import datetime
+import math
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Sequence
@@ -50,6 +51,15 @@ MAX_SERIES_PIVOT = 6
 # En deçà, un nuage de points ne montre rien : deux points forment toujours une droite.
 MIN_POINTS_NUAGE = 3
 
+# En deçà, une distribution n'a pas de forme : les tranches porteraient une ou deux
+# valeurs chacune, et l'histogramme raconterait le hasard de l'échantillon.
+MIN_POINTS_HISTOGRAMME = 20
+
+# Plafond de tranches — la règle de Freedman-Diaconis peut en demander beaucoup plus sur
+# une distribution à queue lourde, et l'axe redeviendrait la bouillie d'étiquettes que
+# MAX_CATEGORIES existe pour éviter.
+MAX_TRANCHES = 20
+
 # Rapport entre les **étendues** (max hors zéros) de deux séries au-delà duquel elles ne
 # partagent plus un axe. L'étendue et non la médiane : l'axe se cale sur le max, donc
 # c'est lui qui décide de la place laissée à l'autre série — une série en vagues (médiane
@@ -61,6 +71,7 @@ FACTEUR_SECOND_AXE = 25
 COURBE = "courbe"
 BARRES = "barres"
 NUAGE = "nuage"
+HISTOGRAMME = "histogramme"
 
 _TEMPORELS = (datetime.date, datetime.datetime)
 
@@ -85,12 +96,21 @@ class Serie:
 class Graphique:
     """Pour `NUAGE`, `x` est la première mesure et `etiquettes` porte ses valeurs :
     la structure est la même que pour une courbe, seule la nature de l'abscisse change —
-    numérique au lieu de temporelle ou catégorielle."""
+    numérique au lieu de temporelle ou catégorielle.
+
+    `variantes` et `empilable` déclarent ce que l'interface a le *droit* d'offrir en
+    bascule — c'est toujours le code qui décide de ce qui est licite, l'interface ne
+    fait que choisir parmi le déclaré. Un continuum se lit aussi en barres ; l'inverse
+    est faux, des catégories reliées par une courbe inventeraient une continuité.
+    `empilable` n'est vrai que pour des séries issues d'un pivot sans second axe : même
+    colonne d'origine donc même unité — la seule situation où empiler a un sens."""
 
     type: str
     x: str
     etiquettes: tuple[Any, ...]
     series: tuple[Serie, ...]
+    variantes: tuple[str, ...] = ()
+    empilable: bool = False
 
 
 def _est_numerique(v: Any) -> bool:
@@ -198,6 +218,8 @@ def _analyser(
 
     x = _indice_abscisse(lignes, numeriques, len(colonnes))
     if x is None:
+        if len(colonnes) == 1:
+            return _histogramme(colonnes[0], lignes)
         if len(colonnes) == 2 and len(numeriques) == 2:
             return _nuage(colonnes, lignes)
         return "aucune colonne de catégorie, de date ou d'ordinal à porter en abscisse"
@@ -249,15 +271,12 @@ def _large(
     second = len(mesures) == 2 and _echelles_incompatibles(lignes, mesures)
     petite = min(mesures, key=lambda i: _etendue(lignes, i)) if second else None
 
+    # Une abscisse ordinale (année, trimestre, numéro de semaine) est un continuum
+    # ordonné au même titre qu'une date : la courbe y est la bonne lecture. Seule une
+    # abscisse catégorielle appelle des barres.
+    continuum = _est_temporelle(lignes, x) or _est_ordinale(lignes, x)
     return Graphique(
-        # Une abscisse ordinale (année, trimestre, numéro de semaine) est un continuum
-        # ordonné au même titre qu'une date : la courbe y est la bonne lecture. Seule une
-        # abscisse catégorielle appelle des barres.
-        type=(
-            COURBE
-            if _est_temporelle(lignes, x) or _est_ordinale(lignes, x)
-            else BARRES
-        ),
+        type=COURBE if continuum else BARRES,
         x=colonnes[x],
         etiquettes=tuple(l[x] for l in lignes),
         series=tuple(
@@ -268,6 +287,7 @@ def _large(
             )
             for i in mesures
         ),
+        variantes=(BARRES,) if continuum else (),
     )
 
 
@@ -339,12 +359,9 @@ def _pivot(
         else None
     )
 
+    continuum = _est_temporelle(lignes, x) or _est_ordinale(lignes, x)
     return Graphique(
-        type=(
-            COURBE
-            if _est_temporelle(lignes, x) or _est_ordinale(lignes, x)
-            else BARRES
-        ),
+        type=COURBE if continuum else BARRES,
         x=colonnes[x],
         etiquettes=tuple(abscisses),
         series=tuple(
@@ -355,6 +372,59 @@ def _pivot(
             )
             for cat in valeurs_categorie
         ),
+        variantes=(BARRES,) if continuum else (),
+        empilable=petite is None,
+    )
+
+
+def _compact(v: float) -> str:
+    """« 1500000 » → « 1,5 M » : une borne de tranche se lit, elle ne se recopie pas."""
+    for seuil, suffixe in ((1e9, " Md"), (1e6, " M"), (1e3, " k")):
+        if abs(v) >= seuil:
+            return f"{v / seuil:.3g}{suffixe}".replace(".", ",")
+    return f"{v:.3g}".replace(".", ",")
+
+
+def _histogramme(colonne: str, lignes: Sequence[Sequence[Any]]) -> Graphique | str:
+    """Une colonne numérique seule : la forme d'une question de distribution.
+
+    Le nombre de tranches vient de Freedman-Diaconis — largeur 2·IQR/n^⅓, un choix
+    classique et robuste aux valeurs extrêmes — borné par `MAX_TRANCHES`. Le découpage
+    est une décision de lisibilité : il appartient au code, pas au modèle, qui peut
+    toujours binner lui-même en SQL s'il veut des tranches métier (elles arriveront
+    alors comme des barres ordinaires).
+    """
+    valeurs = sorted(float(l[0]) for l in lignes if l[0] is not None)
+    if len(valeurs) < MIN_POINTS_HISTOGRAMME:
+        return (
+            f"{len(valeurs)} valeur(s) : en deçà de {MIN_POINTS_HISTOGRAMME}, "
+            f"une distribution n'a pas de forme"
+        )
+    mini, maxi = valeurs[0], valeurs[-1]
+    n = len(valeurs)
+    iqr = valeurs[(3 * n) // 4] - valeurs[n // 4]
+    if maxi == mini or iqr == 0:
+        # La masse est concentrée sur une valeur : un histogramme n'y montrerait qu'une
+        # barre et du vide. Le tableau dit déjà tout.
+        return "valeurs quasi constantes : une distribution n'a rien à montrer"
+
+    largeur_fd = 2 * iqr / n ** (1 / 3)
+    tranches = min(MAX_TRANCHES, max(1, math.ceil((maxi - mini) / largeur_fd)))
+    largeur = (maxi - mini) / tranches
+
+    effectifs = [0] * tranches
+    for v in valeurs:
+        # La borne haute appartient à la dernière tranche, sinon le max créerait la sienne.
+        effectifs[min(tranches - 1, int((v - mini) / largeur))] += 1
+
+    return Graphique(
+        type=HISTOGRAMME,
+        x=colonne,
+        etiquettes=tuple(
+            f"{_compact(mini + i * largeur)} – {_compact(mini + (i + 1) * largeur)}"
+            for i in range(tranches)
+        ),
+        series=(Serie(colonne="effectif", valeurs=tuple(float(e) for e in effectifs)),),
     )
 
 

@@ -234,6 +234,84 @@ def test_deux_mesures_et_une_categorie_ne_se_pivotent_pas():
     )
 
 
+# --- Les bascules déclarées à l'interface ---------------------------------------------
+
+
+def test_un_continuum_declare_la_variante_barres_et_pas_l_inverse():
+    """L'interface ne choisit que parmi le déclaré : un continuum se lit aussi en
+    barres, mais relier des catégories par une courbe inventerait une continuité."""
+    courbe = charts.proposer(
+        ["step_date", "cost"], _serie_temporelle([100.0, 200.0, 150.0, 300.0])
+    )
+    barres = charts.proposer(
+        ["channel", "cost"], [("tv", 100.0), ("radio", 50.0)]
+    )
+
+    assert charts.BARRES in courbe.variantes
+    assert barres.variantes == ()
+
+
+def test_seul_un_pivot_sans_second_axe_est_empilable():
+    """Empiler exige la même unité : vrai pour un pivot (même colonne d'origine),
+    faux dès qu'un second axe sépare les échelles — et faux pour le format large,
+    dont les colonnes portent des grandeurs différentes."""
+    meme_unite = [
+        (SEMAINES[0], "tv", 100.0), (SEMAINES[0], "radio", 60.0),
+        (SEMAINES[1], "tv", 200.0), (SEMAINES[1], "radio", 80.0),
+    ]
+    unites_eloignees = [
+        (SEMAINES[0], "grp", 120.0), (SEMAINES[0], "clicks", 90000.0),
+        (SEMAINES[1], "grp", 150.0), (SEMAINES[1], "clicks", 110000.0),
+    ]
+    large = _serie_temporelle([100.0, 200.0], [90.0, 110.0])
+
+    assert charts.proposer(["step_date", "channel", "cost"], meme_unite).empilable
+    assert not charts.proposer(["step_date", "m", "v"], unites_eloignees).empilable
+    assert not charts.proposer(["step_date", "cost", "mes"], large[:2]).empilable
+
+
+# --- L'histogramme --------------------------------------------------------------------
+
+
+def test_une_colonne_numerique_seule_donne_un_histogramme():
+    """La forme d'une question de distribution — refusée avant, faute d'abscisse."""
+    lignes = [(float(v),) for v in list(range(10, 30)) + [12, 13, 13, 14, 25]]
+
+    g = charts.proposer(["cost"], lignes)
+
+    assert g is not None and g.type == charts.HISTOGRAMME
+    assert g.x == "cost"
+    assert g.series[0].colonne == "effectif"
+    assert sum(g.series[0].valeurs) == len(lignes)
+    assert len(g.etiquettes) <= charts.specification.MAX_TRANCHES
+
+
+def test_un_echantillon_trop_petit_ne_fait_pas_de_distribution():
+    """Contre-épreuve : dix valeurs ne dessinent que le hasard de l'échantillon."""
+    lignes = [(float(v),) for v in range(10)]
+
+    motif = charts.refus(["cost"], lignes)
+
+    assert motif is not None and "distribution" in motif
+
+
+def test_des_valeurs_quasi_constantes_ne_font_pas_d_histogramme():
+    """Toute la masse sur une valeur : une barre et du vide, le tableau dit déjà tout."""
+    lignes = [(0.0,)] * 30 + [(500.0,), (800.0,)]
+
+    motif = charts.refus(["cost"], lignes)
+
+    assert motif is not None and "constantes" in motif
+
+
+def test_l_histogramme_ignore_les_null_sans_les_compter():
+    lignes = [(float(v),) for v in range(10, 35)] + [(None,)] * 5
+
+    g = charts.proposer(["cost"], lignes)
+
+    assert sum(g.series[0].valeurs) == 25
+
+
 # --- Le nuage de points ---------------------------------------------------------------
 
 
