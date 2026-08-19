@@ -597,6 +597,7 @@ Recensement de toutes les clés du projet, ce qu'elles contiennent, et ce qui le
 | `empreinte_prompt` | hachage des `.md` et de la partie générée | ne contient pas la description d'outil — reportée sur les réglages |
 | registre des campagnes | une entrée par empreinte de réglages | complète depuis le 14/08/2026 |
 | jeu de contrôle | trois noms de propriétés, écrits | ancré au corpus depuis le 18/08/2026 |
+| `Resultat.graphique` (cache) | décision de tracé figée à l'exécution | **hors de toute clé, à dessein** : les règles de `src/charts` ne changent pas la réponse du modèle ; un rejeu à blanc après modification de ces règles ressert l'ancienne décision (une seule assertion concernée) |
 
 Les deux dernières colonnes du 18/08 se lisent ensemble avec ce qui précède : le
 correctif du 14/08 sur le scellé — passer d'un tirage à une constante écrite — avait
@@ -768,6 +769,83 @@ Le journal affiché est celui de l'ETL, relayé tel quel. Il porte déjà la vol
 table, les invariants et les avertissements du contrat : réinventer une notion
 d'avancement à côté aurait produit un affichage plus pauvre que ce que l'exploitant lit
 dans son terminal.
+
+### Relecture du 19/08 — deux défauts confirmés, et comment ils ont été trouvés
+
+Une relecture extérieure complète, avec la consigne de tout vérifier empiriquement.
+Deux défauts confirmés par reproduction, plusieurs écarts documentés. La méthode a payé
+dans les deux sens : chaque soupçon a été rejoué avant d'être retenu, et deux soupçons
+sur quatre ne l'ont pas été.
+
+**Le flux pendait quand l'assemblage de l'agent échouait.** Dans les deux routes de
+flux, du code vivait *avant* le `try/finally` du fil de travail — l'assemblage de
+l'agent, la création du dossier d'attente. Une exception y emportait le fil sans poser
+le sentinelle dans la file : le générateur attendait pour toujours, la requête HTTP
+pendait au lieu de rendre une erreur, et sur la page de données le verrou de
+reconstruction n'était jamais rendu. Reproduit avec le geste de bonne foi (base absente
+au premier appel), corrigé, testé dans les deux sens. Règle qui en sort : **dans un fil
+producteur, rien ne vit avant le `try` dont le `finally` pose le sentinelle.**
+
+**La fermeture de connexion d'E9 contredisait un invariant écrit d'E2.** `sql.py`
+documente qu'on ne referme pas une connexion sous un fil vivant ; `api.py` referme la
+sienne en `finally` sans pouvoir le savoir. Correction minimale : après `interrupt()`,
+`sql.py` attend la mort effective du fil (30 s au lieu de 5) — c'est ce qui rend la
+fermeture de l'appelant sûre — et journalise en erreur le cas pathologique restant.
+*Écarté :* propager `connexion_liberee` à travers `outil`, `boucle` et `api` (trois
+couches de mécanisme pour un défaut jamais observé) ; un wrapper de connexion (idem).
+
+**L'orchestration du rechargement est sortie de l'API.** Le dossier d'attente et la
+promotion sont des règles de la pipeline — « un fichier mal formé ne dégrade rien » —
+et vivaient dans le fichier qui s'interdit toute logique métier. `src/etl/rechargement.py`
+les porte désormais, testables sans HTTP ; l'API garde la validation d'upload (le refus
+doit arriver en erreur HTTP, avant d'ouvrir le flux), le verrou et la traduction en
+événements. L'oubli de l'agent partagé reste dans l'API : l'ETL n'a pas à connaître
+l'agent.
+
+### Graphiques — trois formes au lieu d'une, mesuré avant d'être payé
+
+La relecture du système E7 a montré que ses refus étaient sains mais qu'il ratait les
+formes de résultat les plus utiles. Trois extensions, chacune déclenchée par une forme de
+données — jamais par un choix du modèle :
+
+- **La monotonie ordinale accepte les deux sens.** `ORDER BY annee DESC` — la forme
+  exacte que les exemples du prompt enseignent — était refusée, quand les mêmes années en
+  croissant passaient et que des *dates* décroissantes passaient aussi. Confirmé par
+  exécution, corrigé. L'affichage remet tout continuum en croissant : le sens de lecture
+  d'un axe est une règle de lisibilité, donc du code ; l'ordre d'une abscisse
+  catégorielle, lui, est conservé — c'est l'intention de la requête (un tri par montant).
+- **Le format long est pivoté.** `GROUP BY date, canal` est la façon naturelle d'écrire
+  une évolution par canal, et « l'abscisse se répète » la privait de graphique. Le pivot
+  fait une série par catégorie quand la forme est (abscisse, catégorie, mesure) et que
+  les couples sont uniques — un couple dupliqué signale la dimension cachée, et le refus
+  demeure. La mesure a immédiatement corrigé une hypothèse : « même colonne, donc même
+  unité » est faux quand la catégorie est un *nom de métrique* (GRP contre clics, vu sur
+  le cache). Les gardes d'échelle du format large s'appliquent donc au pivot aussi.
+- **Deux mesures sans abscisse font un nuage de points.** C'est la forme d'une question
+  de corrélation, qui n'avait aucun tracé possible ; une courbe y mentirait, l'ordre des
+  lignes ne portant aucune information. Plancher à trois points complets — deux points
+  forment toujours une droite.
+
+Vérifié à blanc sur les 171 exécutions en cache, gratuitement : **aucun tracé existant ne
+change ni ne devient un refus** ; un refus devient une courbe à deux axes, honnête. Les
+réponses en cache datant d'avant E7, le modèle n'y visait pas encore de forme traçable :
+le gain réel se lira sur la nouvelle ligne de base. Le prompt décrit désormais les trois
+formes (`role.md`), pour que le modèle puisse les viser — c'est la modification qui
+périme le cache, groupée avec le reste avant la campagne de référence.
+
+*Écarté :* camembert (les barres couvrent le cas et se lisent mieux) ; barres empilées et
+horizontales (aucun déclencheur de forme aujourd'hui — à rouvrir sur demande du client).
+Limite connue, non couverte : un format long à abscisse *ordinale* (année, canal, mesure)
+choisit le canal comme abscisse et refuse — le cas réel passe par `step_date`, on ne
+corrige pas un défaut anticipé.
+
+Limite d'indexation, à connaître avant de lire un rejeu à blanc : les règles de graphique
+n'entrent dans aucune clé du cache — `Resultat.graphique` est un booléen figé à
+l'exécution. Elles ne changent pas ce que le *modèle* répond, donc les mettre dans
+`empreinte_reglages` ferait repayer une campagne pour rien ; mais un rejeu à blanc après
+modification de `src/charts` ressert la décision de tracé de l'ancien code. Une seule
+assertion la consomme (`PasDeGraphiqueSurResultatVide`). Ligne ajoutée au recensement
+des clés ci-dessous.
 
 ### L'alias n'est pas l'identifiant
 

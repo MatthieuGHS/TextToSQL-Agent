@@ -172,13 +172,17 @@ géographique ni démographique · les trois tables n'ont pas les mêmes bornes 
   y compris dans les commentaires et les exemples de docstring. Vérifier avant de committer.
   La règle se viole le plus facilement en *justifiant une mesure* : citer un montant réel
   pour illustrer un correctif est la fuite typique. Utiliser un chiffre inventé.
-- Reste à trancher : `EDF` apparaît dans une question du corpus et dans une docstring de
-  `transforms.py`, `Twitch` dans trois cas de test. Ce sont des valeurs du jeu de données,
-  versionnées depuis les premiers commits. Anonymiser demanderait une purge d'historique —
-  décision à prendre avant toute publication du dépôt.
+- Reste à trancher avant toute publication (portfolio compris) : des valeurs du jeu de
+  données réel sont versionnées depuis les premiers commits — `EDF` et `Twitch` sont les
+  exemples connus, mais le périmètre est plus large. Le **recensement exhaustif** (huit
+  termes, avec fichiers et commits) et la **procédure de purge** (jeu de données inventé
+  puis `git filter-repo`) sont tenus dans `docs/prive/confidentialite-recensement.md`,
+  hors Git : versionner cette liste serait la fuite qu'elle recense. On n'anonymise pas
+  avant la livraison — corpus et gardes ETL doivent viser les vraies valeurs tant que
+  l'agent opère sur les vraies données.
 - Aucune clé API dans le code : tout passe par les variables d'environnement.
 
-## État au 19 août 2026 (graphiques)
+## État au 19 août 2026 (relecture et refonte graphiques)
 
 Fait : socle · ETL et contrat de données (E1) · accès SQL unique et durci (E2) · prompt
 système généré (E3) · boucle agent (E4) · harnais d'évaluation en conditions réelles (E5)
@@ -208,9 +212,25 @@ les applique, sont descendues dans le code. Les deux contraintes posées ont ten
 assertion ajoutée au harnais — `PasDeGraphiqueSurResultatVide` a seulement été rendue
 vivante — et aucune boucle de correction.
 
-⚠ **La ligne de base est à refaire.** Le prompt a changé (empreinte `a765b1c05f82`), donc
-les 171 exécutions en cache ne se rejouent plus. Aucune mesure n'est comparable tant que
-la campagne de référence n'a pas été rejouée — compter environ 4,50 $.
+**Relecture du 19/08, corrigée le jour même** (détail dans `docs/decisions.md`) :
+le flux ne peut plus pendre (sentinelle posé en `finally` extérieur, règle à respecter
+dans tout fil producteur) ; `sql.py` attend la mort effective du fil après `interrupt()`,
+ce qui rend sûre la fermeture par requête d'E9 ; l'orchestration du rechargement vit dans
+`src/etl/rechargement.py`, testable sans HTTP.
+
+**Les graphiques couvrent trois formes** : large (une série par colonne), long (pivot —
+une série par catégorie, gardes d'échelle incluses : la catégorie peut être un nom de
+métrique), et nuage de points (deux mesures sans abscisse, la forme d'une corrélation).
+Monotonie ordinale dans les deux sens, continuum affiché en croissant. Vérifié à blanc
+sur les 171 exécutions en cache : aucune régression. Attention en rejouant à blanc : les
+règles de `src/charts` ne sont dans aucune clé de cache, à dessein — voir le recensement
+des clés dans `docs/decisions.md`.
+
+⚠ **La ligne de base est à refaire.** Le prompt a changé deux fois (E7, puis la
+description des trois formes traçables dans `role.md` le 19/08) : les 171 exécutions en
+cache ne se rejouent plus. Aucune mesure n'est comparable tant que la campagne de
+référence n'a pas été rejouée — compter environ 4,50 $. Séquence : peuplement `--k 1` →
+`--a-blanc` → référence.
 
 Puis E8 (réglage), E10 (observabilité), E11 (livraison). Le jeu de
 contrôle sous scellé ne s'ouvre qu'à la fin d'E8, et il mesure une non-régression sur les
