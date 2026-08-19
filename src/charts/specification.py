@@ -307,9 +307,18 @@ def _pivot(
     Les séries issues du pivot partagent la même colonne — donc, le plus souvent, la
     même unité. Le plus souvent seulement : mesuré sur le cache d'évaluation, le modèle
     répond à « GRP de la TV et clics du SEA » par un format long dont la catégorie est
-    le **nom de la métrique**, et la colonne de valeurs mélange alors deux unités. Les
-    gardes d'échelle du format large s'appliquent donc ici aussi : deux séries d'ordres
-    de grandeur éloignés prennent deux axes, au-delà le tracé est refusé.
+    le **nom de la métrique**, et la colonne de valeurs mélange alors deux unités. Deux
+    séries d'ordres de grandeur éloignés prennent donc deux axes, ce qui couvre ce cas.
+
+    **Au-delà de deux séries, en revanche, l'écart d'échelle ne fait pas refuser** — et
+    c'est une correction, pas un oubli. Le refus existait ici jusqu'au 19/08/2026, par
+    généralisation de la règle du format large ; il s'est révélé faux le soir même sur
+    le cas le plus attendu du jeu de données : onze canaux en euros, de 12 k€ à 2,7 M€,
+    soit un rapport de 209 qui n'est pas un mélange d'unités mais un écart de budget
+    réel. Dans un format large, deux colonnes distinctes sont deux mesures distinctes,
+    et la règle d'E7 garde son sens ; ici tout vient d'une seule colonne, et refuser
+    coûtait le cas nominal quand tracer ne coûte que de voir les petites séries petites.
+    Le vrai piège — superposer deux grains — reste attrapé par l'unicité des couples.
 
     Un couple (abscisse, catégorie) dupliqué fait refuser : le résultat porte alors une
     dimension de plus que ce que le pivot croit lire — le grain caché contre lequel la
@@ -355,8 +364,6 @@ def _pivot(
     incompatibles = (
         len(non_nulles) >= 2 and max(non_nulles) / min(non_nulles) > FACTEUR_SECOND_AXE
     )
-    if incompatibles and len(valeurs_categorie) > 2:
-        return "séries d'ordres de grandeur incompatibles, sans axe commun possible"
     petite = (
         min(etendues, key=etendues.get)
         if incompatibles and len(valeurs_categorie) == 2

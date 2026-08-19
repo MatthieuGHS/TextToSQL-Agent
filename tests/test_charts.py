@@ -227,16 +227,31 @@ def test_deux_series_pivotees_d_echelles_eloignees_prennent_un_second_axe():
     assert [s.axe_secondaire for s in g.series] == [True, False]
 
 
-def test_trois_series_pivotees_incompatibles_sont_refusees():
+def test_un_ecart_de_budget_ne_fait_pas_refuser_un_pivot():
+    """Contre-épreuve d'une garde retirée le 19/08/2026, et de sa raison.
+
+    Le refus d'un pivot pour « ordres de grandeur incompatibles » avait été généralisé
+    depuis le format large ; il s'est révélé faux sur le cas le plus attendu du jeu de
+    données — onze canaux en euros, de 12 k€ à 2,7 M€. Un rapport de 209 n'y est pas un
+    mélange d'unités mais un écart de budget réel, et tout vient d'une seule colonne.
+    Au-delà de deux séries, le pivot trace donc, quelles que soient les échelles.
+    """
     lignes = [
         (SEMAINES[i], cat, val * (i + 1))
         for i in range(2)
-        for cat, val in (("grp", 100.0), ("clicks", 90000.0), ("impressions", 4e7))
+        for cat, val in (("tv", 2_700_000.0), ("sea", 1_000_000.0),
+                         ("affiliation", 12_800.0))
     ]
 
-    motif = charts.refus(["step_date", "metrique", "valeur"], lignes)
+    g = charts.proposer(["step_date", "channel", "cost"], lignes)
 
-    assert motif is not None and "ordres de grandeur" in motif
+    assert g is not None
+    assert len(g.series) == 3
+    # Aucun second axe non plus : à trois séries, un lecteur ne saurait plus laquelle se
+    # lit sur quel axe — la règle est la même que pour le format large.
+    assert not any(s.axe_secondaire for s in g.series)
+    # Même unité, donc l'empilement garde un sens : c'est la vue « budget par canal ».
+    assert g.empilable
 
 
 def test_deux_mesures_et_une_categorie_ne_se_pivotent_pas():
