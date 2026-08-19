@@ -202,21 +202,32 @@ def test_l_usage_est_dans_les_cles_attendues_par_le_runner(con):
 
 AGENT_NU = boucle.Agent(modele=None, systeme=None, empreinte_prompt="")
 
-# Empreinte de référence, épinglée. Elle n'a pas de valeur en soi : elle existe pour
-# qu'une modification soit **consciente**, comme `EMPREINTE_ATTENDUE` pour le schéma
-# d'outil. C'est celle de la campagne `medium` du 11/08/2026, qui est la ligne de base.
-EMPREINTE_MEDIUM = "4f7a1f99217d"
+# Empreinte des réglages **courants** à l'effort `medium`, épinglée. Elle n'a pas de
+# valeur en soi : elle existe pour qu'une modification soit **consciente**, comme
+# `EMPREINTE_ATTENDUE` pour le schéma d'outil. Chaque changement porte sa date et son
+# motif — c'est ce qui distingue une empreinte qu'on a décidé de faire bouger d'une
+# empreinte qui a bougé sans qu'on le voie.
+#
+# 11/08/2026 · 4f7a1f99217d — campagne de référence, celle de la ligne de base.
+# 19/08/2026 · f03a91e8d24d — `MAX_ITERATIONS` 4 → 5, sur défaut constaté deux fois.
+EMPREINTE_MEDIUM = "f03a91e8d24d"
 
 
-def test_l_empreinte_de_la_ligne_de_base_est_epinglee():
-    """Si ce test échoue, les campagnes en cache ne se rejouent plus.
+def test_l_empreinte_des_reglages_courants_est_epinglee():
+    """Si ce test échoue, les campagnes en cache ne se rejouent plus sous ces réglages.
 
     Ce n'est pas un défaut à corriger en mettant à jour la constante sans réfléchir : une
     empreinte qui bouge veut dire qu'un réglage a changé, donc que les réponses en cache
-    ont été produites sous une autre configuration. Deux issues, et une seule est gratuite
-    — annuler le changement de réglage, ou repayer la campagne. Re-cléer le cache n'est
-    légitime que si le réglage n'a pas *réellement* changé depuis les campagnes, ce qui se
-    vérifie dans l'historique et pas au jugé.
+    ont été produites sous une autre configuration. Trois issues, et une seule est
+    gratuite — annuler le changement de réglage, ou repayer la campagne, ou assumer que
+    les deux configurations coexistent. Re-cléer le cache n'est légitime que si le
+    réglage n'a pas *réellement* changé depuis les campagnes, ce qui se vérifie dans
+    l'historique et pas au jugé.
+
+    La troisième issue est celle prise le 19/08/2026, et elle ne coûte rien parce que le
+    registre indexe les campagnes **par empreinte** : la ligne de base reste lisible sous
+    la sienne (`--campagne 4f7a1f99217d`), et la campagne à 5 itérations viendra s'ajouter
+    à côté. Ce qui serait faux, c'est de comparer les deux sans le dire.
     """
     assert agent_reel.empreinte_reglages(AGENT_NU, "medium") == EMPREINTE_MEDIUM
 

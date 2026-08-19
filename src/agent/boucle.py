@@ -57,7 +57,12 @@ EFFORT = "medium"
 # Le déterminisme ne peut donc pas venir du modèle — il ne peut venir que du code. C'est
 # exactement ce que E2 verrouille, et ce n'est plus un choix de style.
 
-MAX_ITERATIONS = 4
+# 4 → 5 le 19/08/2026, sur défaut constaté deux fois : deux `plafond_iterations` dans la
+# ligne de base, et le cas vu en direct — l'agent découvre en route le grain de
+# `kpi_compteurs` (une ligne par énergie), dépense un tour à le vérifier, et bute au
+# plafond avec la bonne réponse à un tour près. Le réglage entre dans
+# `empreinte_reglages` : la comparaison chiffrée 4 vs 5 est la première mesure d'E8.
+MAX_ITERATIONS = 5
 MAX_ECHECS_SQL = 3
 HISTORIQUE_MAX = 5
 
