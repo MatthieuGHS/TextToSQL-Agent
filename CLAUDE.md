@@ -241,6 +241,28 @@ d'être retenus, dessinent les pistes d'E8 — et aucun n'accuse l'instrument :
 - une question de grille au libellé tronqué (« Evolution trafic SEA Est-ce que… ») finit
   en `plafond_iterations` — à regarder avant d'en faire une piste.
 
-Puis E8 (réglage), E10 (observabilité), E11 (livraison). Le jeu de
-contrôle sous scellé ne s'ouvre qu'à la fin d'E8, et il mesure une non-régression sur les
-refus — pas une généralisation.
+**Graphiques étendus le 19/08 au soir** (détail dans `docs/decisions.md`) : second axe
+décidé à l'étendue et non à la médiane, réglette de zoom, histogramme natif, « tracer à
+la demande » sur chaque bloc de requête, bascules courbe/barres/empilées déclarées par
+le serveur. Aucun de ces changements ne touche le prompt : la ligne de base tient.
+
+**Suite arrêtée (après la démo client du 20/08) — E8, puis E10, E11 :**
+
+- **E8, campagne 1, trois hypothèses groupées en une seule péremption du cache** :
+  la somme faite de tête (propriété générale dans `principes.md` — tout agrégat se
+  calcule par requête) ; le grain de `kpi_compteurs` (phrase `metier.md` *ou* plafond
+  d'itérations 4→5 — le plafond ne touche pas le prompt et peut se mesurer seul) ; la
+  phrase histogramme de `role.md`, en attente exprès. Avant : vérifier dans le xlsx si
+  « Evolution trafic SEA… » est réellement tronquée côté client. Puis décision d'effort
+  `low`/`medium` sur les campagnes du balayage, ouverture du scellé (non-régression sur
+  les refus, rien de plus), notation manuelle finale.
+- **E10** : consolidation d'observabilité (coût par question en production, taux de
+  cache, arrêts anormaux) — mince, l'essentiel existe.
+- **E11** : image Docker reconstruite et vérifiée (pas rebâtie depuis les changements
+  web), vérification visuelle complète de l'interface (jamais faite), doc de reprise
+  pour l'équipe client, recette sur la grille.
+- **Post-livraison, portfolio** : procédure de purge déjà écrite dans
+  `docs/prive/confidentialite-recensement.md`.
+
+Le jeu de contrôle sous scellé ne s'ouvre qu'à la fin d'E8, et il mesure une
+non-régression sur les refus — pas une généralisation.
