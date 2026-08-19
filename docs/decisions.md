@@ -874,6 +874,40 @@ Limite connue, non couverte : un format long à abscisse *ordinale* (année, can
 choisit le canal comme abscisse et refuse — le cas réel passe par `step_date`, on ne
 corrige pas un défaut anticipé.
 
+### Deux plafonds relevés, l'un et l'autre sur défaut constaté
+
+La répétition générale du 19/08 au soir — l'interface jouée à la main, ce qu'aucun test
+ne remplace — a fait tomber deux refus sur des cas parfaitement nominaux. Les deux
+plafonds en cause avaient été posés par prudence, sans mesure ; les deux ont été relevés
+avec leur motif écrit à côté de la constante.
+
+**Séries pivotées : 6 → 12.** « Comment les investissements ont-ils évolué par canal ? »
+est la question que le client attend le plus, et elle produit structurellement dix
+séries sur ce jeu de données — le pivot était refusé sur sa forme normale. Le plafond
+garde une portée réelle à 12 : un pivot sur `support` (81 valeurs) reste refusé, et les
+séries pivotées partageant la même unité, la seule limite qui compte ici est la
+lisibilité d'une légende. Effet second, gratuit : le bouton « tracer ce résultat » de ces
+blocs de requête réapparaît, puisqu'il suit la même règle serveur.
+
+**Itérations de la boucle : 4 → 5.** Constaté deux fois — deux `plafond_iterations` dans
+la ligne de base, puis en direct sur une question de corrélation, où l'agent découvre en
+route le grain de `kpi_compteurs`, dépense un tour à le vérifier, et bute avec la bonne
+réponse à un tour près. C'est l'une des deux issues que la section sur ce grain laissait
+ouvertes ; la répétition du constat la fait prendre maintenant plutôt qu'à E8.
+
+**Ce que ça fait au dispositif de mesure, et pourquoi ça ne coûte rien.** Le plafond
+d'itérations entre dans `empreinte_reglages` : les réglages courants passent de
+`4f7a1f99217d` à `f03a91e8d24d`. La ligne de base n'est ni perdue ni périmée — le
+registre indexe les campagnes **par empreinte**, elle reste rejouable à blanc sous la
+sienne, ce qui a été vérifié (69 exécutions relues, rapport reproduit à l'identique). Ce
+qui serait faux, c'est de comparer les deux sans le dire : la comparaison chiffrée
+4 vs 5 devient la première mesure d'E8, sur une campagne qui reste à payer. En attendant,
+**le système démontré n'est pas celui que la ligne de base mesure**, et c'est écrit ici
+pour que personne ne lise le 47/51 comme s'il portait sur la configuration actuelle.
+
+Les règles de graphique, elles, ne sont dans aucune clé — c'est le paragraphe suivant, et
+c'est la raison pour laquelle le relèvement du plafond de pivot, lui, ne périme rien.
+
 Limite d'indexation, à connaître avant de lire un rejeu à blanc : les règles de graphique
 n'entrent dans aucune clé du cache — `Resultat.graphique` est un booléen figé à
 l'exécution. Elles ne changent pas ce que le *modèle* répond, donc les mettre dans

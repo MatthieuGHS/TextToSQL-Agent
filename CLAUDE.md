@@ -248,11 +248,15 @@ le serveur. Aucun de ces changements ne touche le prompt : la ligne de base tien
 
 **Suite arrêtée (après la démo client du 20/08) — E8, puis E10, E11 :**
 
-- **E8, campagne 1, trois hypothèses groupées en une seule péremption du cache** :
+- **E8, campagne 1, deux hypothèses groupées en une seule péremption du cache** :
   la somme faite de tête (propriété générale dans `principes.md` — tout agrégat se
-  calcule par requête) ; le grain de `kpi_compteurs` (phrase `metier.md` *ou* plafond
-  d'itérations 4→5 — le plafond ne touche pas le prompt et peut se mesurer seul) ; la
-  phrase histogramme de `role.md`, en attente exprès. Avant : vérifier dans le xlsx si
+  calcule par requête) et la phrase histogramme de `role.md`, en attente exprès.
+  ⚠ **Le plafond d'itérations 4 → 5 est déjà pris** (défaut constaté deux fois, le
+  19/08) : réglages courants `f03a91e8d24d`, quand la ligne de base est mesurée sous
+  `4f7a1f99217d`. Elle reste rejouable à blanc sous la sienne — vérifié — mais **le
+  47/51 ne décrit plus la configuration courante** ; la comparaison 4 vs 5 est la
+  première mesure à produire. Reste ouverte pour le grain de `kpi_compteurs` : la
+  phrase de `metier.md`, si le plafond n'a pas suffi. Avant : vérifier dans le xlsx si
   « Evolution trafic SEA… » est réellement tronquée côté client. Puis décision d'effort
   `low`/`medium` sur les campagnes du balayage, ouverture du scellé (non-régression sur
   les refus, rien de plus), notation manuelle finale.
