@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * La zone de saisie.
@@ -6,19 +6,31 @@ import { useEffect, useRef } from 'react'
  * Entrée envoie, Maj+Entrée passe à la ligne — la convention des interfaces de discussion.
  * La hauteur suit le contenu jusqu'à un plafond : une question sur les données tient
  * souvent en deux lignes, et un champ d'une seule ligne oblige à relire à l'aveugle.
+ *
+ * **Le texte en cours de frappe est détenu ici, pas par `App`.** Il y vivait, et chaque
+ * caractère re-rendait donc toute la conversation — graphiques Recharts compris. Le
+ * garder local est ce qui rend la frappe indépendante de ce que la page affiche déjà.
+ * `App` n'apprend le texte qu'à l'envoi, et le champ se vide lui-même à ce moment-là.
  */
 export function Saisie({
-  valeur,
-  onChange,
   onEnvoyer,
   occupe,
 }: {
-  valeur: string
-  onChange: (v: string) => void
-  onEnvoyer: () => void
+  onEnvoyer: (texte: string) => void
   occupe: boolean
 }) {
+  const [valeur, setValeur] = useState('')
   const champ = useRef<HTMLTextAreaElement>(null)
+
+  function envoyer() {
+    const propre = valeur.trim()
+    if (!propre || occupe) return
+    // Vidé ici et non par l'appelant : c'est la contrepartie de détenir le texte. Vidé
+    // *avant* l'appel, pour que le champ soit libre même si l'envoi échoue — une
+    // question refusée par le réseau se repose, elle ne se retape pas.
+    setValeur('')
+    onEnvoyer(propre)
+  }
 
   useEffect(() => {
     const e = champ.current
@@ -41,11 +53,11 @@ export function Saisie({
         rows={1}
         value={valeur}
         disabled={occupe}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => setValeur(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
-            onEnvoyer()
+            envoyer()
           }
         }}
         placeholder="Poser une question sur les données média…"
@@ -53,7 +65,7 @@ export function Saisie({
                    outline-none text-[15px] leading-relaxed disabled:opacity-50 py-1"
       />
       <button
-        onClick={onEnvoyer}
+        onClick={envoyer}
         disabled={occupe || !valeur.trim()}
         aria-label="Envoyer"
         className="shrink-0 size-9 rounded-xl bg-sky-600 text-white grid place-items-center

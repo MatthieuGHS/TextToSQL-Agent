@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import type { Message as TypeMessage } from '../types'
 import { BlocRequete } from './BlocRequete'
 import { Graphique } from './Graphique'
@@ -35,7 +35,16 @@ function BoutonCopier({ texte }: { texte: string }) {
 }
 
 
-export function Message({ message }: { message: TypeMessage }) {
+/**
+ * Mémoïsé, et ce n'est pas une optimisation de confort.
+ *
+ * Un message est immuable une fois ajouté : `App` empile de nouveaux objets, il ne
+ * réécrit jamais les précédents. Sans mémoïsation, la moindre frappe dans la zone de
+ * saisie re-rendait toute la conversation — donc chaque graphique Recharts, soit
+ * plusieurs milliers de nœuds SVG reconstruits par caractère. Symptôme observé : latence
+ * à la frappe et ventilateur à fond après quelques questions.
+ */
+export const Message = memo(function Message({ message }: { message: TypeMessage }) {
   if (message.role === 'utilisateur') {
     return (
       <div className="flex justify-end">
@@ -88,4 +97,4 @@ export function Message({ message }: { message: TypeMessage }) {
       )}
     </div>
   )
-}
+})

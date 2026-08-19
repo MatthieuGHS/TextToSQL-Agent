@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -78,8 +78,17 @@ export function donneesDe(graphique: TypeGraphique) {
   })
 }
 
-export function Graphique({ graphique }: { graphique: TypeGraphique }) {
-  const donnees = donneesDe(graphique)
+/**
+ * Mémoïsé, comme `Message` et pour la même raison : une spécification ne change pas une
+ * fois la réponse rendue, et re-transposer plusieurs centaines de points à chaque frappe
+ * dans la zone de saisie coûtait cher pour un résultat identique.
+ */
+export const Graphique = memo(function Graphique({
+  graphique,
+}: {
+  graphique: TypeGraphique
+}) {
+  const donnees = useMemo(() => donneesDe(graphique), [graphique])
 
   // La bascule ne choisit que parmi ce que le serveur a déclaré licite (`variantes`,
   // `empilable`) : aucune règle de lisibilité ne naît ici.
@@ -176,7 +185,12 @@ export function Graphique({ graphique }: { graphique: TypeGraphique }) {
               formatter={(v) => complet.format(v as number)}
               cursor={{ strokeDasharray: '3 3' }}
             />
-            <Scatter data={donnees} fill={COULEURS[0]} fillOpacity={0.75} />
+            <Scatter
+              data={donnees}
+              fill={COULEURS[0]}
+              fillOpacity={0.75}
+              isAnimationActive={false}
+            />
           </ScatterChart>
         </ResponsiveContainer>
         <figcaption className="mt-1 text-center text-xs text-slate-600">
@@ -245,6 +259,9 @@ export function Graphique({ graphique }: { graphique: TypeGraphique }) {
                 // points de part et d'autre d'une valeur absente, ce qui inventerait une
                 // continuité que les données ne portent pas.
                 connectNulls={false}
+                // L'animation d'entrée se rejoue à chaque rendu : sur onze séries
+                // de plus de cent points, c'est le poste le plus coûteux.
+                isAnimationActive={false}
               />
             ))}
           </LineChart>
@@ -265,6 +282,7 @@ export function Graphique({ graphique }: { graphique: TypeGraphique }) {
                 stackId={empile ? 'pile' : undefined}
                 fill={COULEURS[i % COULEURS.length]}
                 radius={empile ? undefined : [3, 3, 0, 0]}
+                isAnimationActive={false}
               />
             ))}
           </BarChart>
@@ -278,4 +296,4 @@ export function Graphique({ graphique }: { graphique: TypeGraphique }) {
       </figcaption>
     </figure>
   )
-}
+})

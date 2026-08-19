@@ -38,7 +38,6 @@ const AVERTISSEMENTS: Record<string, string> = {
 
 export default function App() {
   const [messages, setMessages] = useState<TypeMessage[]>([])
-  const [saisie, setSaisie] = useState('')
   const [etapes, setEtapes] = useState<Etape[]>([])
   const [occupe, setOccupe] = useState(false)
   const [page, setPage] = useState<Page>('conversation')
@@ -73,7 +72,6 @@ export default function App() {
       // c'est exactement ce qu'on veut envoyer — l'historique *avant* la nouvelle question.
       const precedents = messages
       setMessages([...precedents, { role: 'utilisateur', texte: propre }])
-      setSaisie('')
       setEtapes([])
       setOccupe(true)
 
@@ -178,12 +176,9 @@ export default function App() {
 
       <footer className="shrink-0 border-t border-slate-800 bg-slate-950">
         <div className="mx-auto max-w-3xl px-6 py-4">
-          <Saisie
-            valeur={saisie}
-            onChange={setSaisie}
-            onEnvoyer={() => envoyer(saisie)}
-            occupe={occupe}
-          />
+          {/* Le texte en cours de frappe vit dans `Saisie` : sans ça, chaque
+              caractère re-rendait toute la conversation, graphiques compris. */}
+          <Saisie onEnvoyer={envoyer} occupe={occupe} />
           <p className="mt-2 text-center text-xs text-slate-600">
             L'agent ne lit que la base fournie, en lecture seule. Il ne fait pas de
             modélisation d'attribution.
