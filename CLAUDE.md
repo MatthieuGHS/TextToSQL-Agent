@@ -71,7 +71,8 @@ src/
 │   └── sql.py          run_sql() : valide, borne, exécute. Point d'entrée unique.
 ├── agent/
 │   └── prompt/         description des données : générée (schema.py) + écrite (*.md)
-├── charts/   (à venir) spécification de graphique + règles de lisibilité
+├── charts/   spécification de graphique — décide s'il y a un graphique, et lequel
+│   └── specification.py  fonctions pures ; le refus est un résultat de premier ordre
 └── app/      API HTTP — coquille mince, aucune logique métier
     ├── schemas.py        types de la frontière (distincts de ceux du noyau)
     ├── serialisation.py  Decimal, date, tuple -> JSON
@@ -176,7 +177,7 @@ géographique ni démographique · les trois tables n'ont pas les mêmes bornes 
   décision à prendre avant toute publication du dépôt.
 - Aucune clé API dans le code : tout passe par les variables d'environnement.
 
-## État au 18 août 2026 (interface)
+## État au 19 août 2026 (graphiques)
 
 Fait : socle · ETL et contrat de données (E1) · accès SQL unique et durci (E2) · prompt
 système généré (E3) · boucle agent (E4) · harnais d'évaluation en conditions réelles (E5)
@@ -188,17 +189,20 @@ description d'outil entrent dans l'empreinte de réglages, et le cache a été r
 repayer — ligne de base reproduite à l'identique.
 
 **E9 (interface) a été avancé avant E7**, pour une démonstration client. React + Vite,
-API FastAPI, étapes diffusées pendant que l'agent travaille, image Docker livrable. Les
-réponses portent les lignes et colonnes brutes de chaque requête : E7 branchera ses
-graphiques dessus sans retoucher la frontière.
+API FastAPI, étapes diffusées pendant que l'agent travaille, image Docker livrable.
 
-**Prochaine étape : E7, les graphiques** — 8 des 18 questions du client en sont, et
-l'agent répond aujourd'hui qu'il ne sait pas dessiner. Passe avant E6, qui est supprimé
-(voir `docs/decisions.md`). Deux contraintes posées et à respecter : **E7 n'ajoute aucune
-assertion au harnais** — le « Chart Check » est une colonne de notation manuelle — et
-**E7 n'a pas de boucle de correction**, le modèle n'ayant produit aucune requête fautive
-sur 171 exécutions.
+**E7 (graphiques) est fait**, en option « le code décide » : `src/charts` lit la forme du
+résultat de la dernière requête réussie et en déduit s'il y a un graphique et lequel. Le
+modèle n'a ni outil de dessin ni spécification à produire — son SQL *est* l'expression de
+son intention. Les règles de lisibilité, qui vivaient dans `principes.md` sans que rien ne
+les applique, sont descendues dans le code. Les deux contraintes posées ont tenu : aucune
+assertion ajoutée au harnais — `PasDeGraphiqueSurResultatVide` a seulement été rendue
+vivante — et aucune boucle de correction.
 
-Puis E8 (réglage), E9 (interface), E10 (observabilité), E11 (livraison). Le jeu de
+⚠ **La ligne de base est à refaire.** Le prompt a changé (empreinte `a765b1c05f82`), donc
+les 171 exécutions en cache ne se rejouent plus. Aucune mesure n'est comparable tant que
+la campagne de référence n'a pas été rejouée — compter environ 4,50 $.
+
+Puis E8 (réglage), E10 (observabilité), E11 (livraison). Le jeu de
 contrôle sous scellé ne s'ouvre qu'à la fin d'E8, et il mesure une non-régression sur les
 refus — pas une généralisation.

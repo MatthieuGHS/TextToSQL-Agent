@@ -680,6 +680,52 @@ rappelé autrement (une phrase de `metier.md` sur les tables à plusieurs lignes
 ou si c'est le plafond d'itérations qui est trop bas. Les deux se mesurent sur le corpus
 entier, et pas sur cette question.
 
+### E7 — le code décide du graphique, pas le modèle
+
+Trois façons de produire un graphique étaient possibles : le modèle appelle un second
+outil avec une spécification, le modèle émet un bloc balisé dans son texte, ou le code lit
+la forme du résultat. **La troisième a été retenue.**
+
+Le raisonnement tient en une phrase : *le SQL que le modèle écrit est déjà l'expression de
+son intention*. Quand il sélectionne une date et deux mesures, il dit ce qu'il veut
+montrer ; lui demander de le décrire une seconde fois n'ajoute pas d'information, ça ajoute
+une occasion de diverger.
+
+Trois raisons concrètes s'y ajoutent :
+
+- un second outil entre dans le préfixe mis en cache **et** coûte un aller-retour, contre
+  un plafond d'itérations dont on venait de mesurer qu'il mord déjà — deux exécutions sur
+  neuf de la question « grain distinct » finissaient en `plafond_iterations` ;
+- il confierait au modèle un choix qui varie d'une exécution à l'autre, alors que les
+  règles en jeu sont des propriétés des données : deux unités ne se superposent pas, un
+  NULL n'est pas un zéro, un résultat vide ne se trace pas ;
+- analyser un bloc balisé dans une sortie de modèle est fragile, et le projet tient qu'un
+  texte se contourne.
+
+**Ce qu'E7 a surtout fait, c'est déplacer des règles existantes.** `principes.md` portait
+déjà « Ne trace jamais de graphique sur un résultat vide » et « Ne mets pas GRP,
+impressions et clics sur le même axe » — dans un texte que rien n'appliquait. Elles sont
+descendues dans `src/charts`, où elles sont exécutables et vues mordre par des tests. La
+première a été retirée du prompt, devenue sans objet ; la seconde a été recalée vers le
+SQL, qui est l'endroit amont où elle sert encore.
+
+Une règle nouvelle mérite d'être signalée parce qu'elle attrape un défaut réel : **une
+abscisse qui se répète fait refuser le graphique**. Le résultat est alors lu à un grain
+plus fin qu'on ne le croit — le cas `kpi_compteurs` consigné la veille — et superposer ces
+lignes produirait un graphique lisible et faux, c'est-à-dire le pire cas possible.
+
+Le prix payé, une fois : le prompt gagne deux faits qu'il taisait — les résultats sont
+tracés automatiquement, la réponse est rendue en Markdown. L'empreinte change, donc les
+171 exécutions en cache ne se rejouent plus. Les deux modifications ont été groupées pour
+ne périmer la ligne de base qu'une seule fois, et l'hypothèse sur le grain de
+`kpi_compteurs` en a été **exclue volontairement** : la mélanger aurait confondu deux
+mesures.
+
+Vérifié après coup sur trois questions de graphique réelles, avant de payer la campagne :
+le tracé sort correctement, et l'énumération en toutes lettres de ce qui est déjà tracé
+n'apparaît que sur un cas — des barres à dix catégories, où un tableau de dix lignes se
+défend. Pas de correctif, donc : la mesure a de nouveau contredit l'intuition.
+
 ### L'alias n'est pas l'identifiant
 
 Le nom de modèle écrit dans le code est un **alias** : il désigne aujourd'hui une génération
