@@ -833,6 +833,16 @@ le gain réel se lira sur la nouvelle ligne de base. Le prompt décrit désormai
 formes (`role.md`), pour que le modèle puisse les viser — c'est la modification qui
 périme le cache, groupée avec le reste avant la campagne de référence.
 
+**Le partage d'axe se juge à l'étendue, pas à la médiane** (constaté le 19/08 dans
+l'interface, corrigé le jour même). L'axe se cale sur le max d'une série : c'est donc le
+rapport des max hors zéros qui décide de la place laissée à l'autre, et une série en
+vagues — médiane basse, pics hauts, le régime normal d'un investissement TV — écrasait
+sa voisine (2 % de la hauteur) sans déclencher le second axe, les médianes étant
+proches. Mesuré avant d'être appliqué, sur les 142 requêtes distinctes du cache : le
+passage médiane → max ne change **qu'un seul cas**, précisément celui du défaut constaté
+(rapport des max ×43, des médianes ×5). Une réglette de zoom (Brush) s'ajoute côté
+interface sur les courbes de plus de 24 points — un confort de lecture, aucune décision.
+
 *Écarté :* camembert (les barres couvrent le cas et se lisent mieux) ; barres empilées et
 horizontales (aucun déclencheur de forme aujourd'hui — à rouvrir sur demande du client).
 Limite connue, non couverte : un format long à abscisse *ordinale* (année, canal, mesure)

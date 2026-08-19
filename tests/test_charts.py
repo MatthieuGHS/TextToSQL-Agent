@@ -351,6 +351,25 @@ def test_deux_series_de_meme_ordre_partagent_l_axe():
     assert [s.axe_secondaire for s in g.series] == [False, False]
 
 
+def test_une_serie_en_vagues_ecrasant_l_autre_prend_un_second_axe():
+    """Le partage d'axe se juge à l'étendue, pas à la médiane — défaut constaté.
+
+    Une série en vagues (médiane basse, pics hauts) laissait le critère médian muet :
+    l'axe se calait sur son pic et écrasait la série voisine dans quelques pourcents de
+    la hauteur. Ici les médianes hors zéros sont proches (rapport < 25) mais le pic est
+    43 fois l'autre série : sans le critère d'étendue, ce test échoue — c'est la
+    contre-épreuve du correctif.
+    """
+    vagues = [80.0, 90.0, 4300.0, 85.0]     # médiane ~87, pic 4300
+    stable = [95.0, 100.0, 105.0, 100.0]    # médiane ~100, max 105
+    lignes = _serie_temporelle(vagues, stable)
+
+    g = charts.proposer(["step_date", "cout_tv", "mises_en_service"], lignes)
+
+    assert g is not None
+    assert [s.axe_secondaire for s in g.series] == [False, True]
+
+
 def test_trois_series_d_echelles_incompatibles_sont_refusees():
     """« GRP, impressions et clics sur le même graphique » : deux axes n'y suffisent pas."""
     lignes = _serie_temporelle([100.0] * 4, [50_000.0] * 4, [2_000_000.0] * 4)

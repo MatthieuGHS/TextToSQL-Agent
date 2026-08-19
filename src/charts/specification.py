@@ -31,7 +31,6 @@ bonne réponse.
 from __future__ import annotations
 
 import datetime
-import statistics
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Sequence
@@ -51,10 +50,12 @@ MAX_SERIES_PIVOT = 6
 # En deçà, un nuage de points ne montre rien : deux points forment toujours une droite.
 MIN_POINTS_NUAGE = 3
 
-# Rapport entre les médianes de deux séries au-delà duquel elles ne partagent plus un axe.
-# Calibré sur les ordres de grandeur du jeu de données : un coût hebdomadaire et un nombre
-# de compteurs se lisent ensemble, des GRP et des clics non. À revoir sur mesure, pas
-# d'intuition.
+# Rapport entre les **étendues** (max hors zéros) de deux séries au-delà duquel elles ne
+# partagent plus un axe. L'étendue et non la médiane : l'axe se cale sur le max, donc
+# c'est lui qui décide de la place laissée à l'autre série — une série en vagues (médiane
+# basse, pics hauts) écrasait sa voisine sans déclencher le second axe. Mesuré sur les
+# 142 requêtes distinctes du cache : le passage médiane → max ne change qu'un seul cas,
+# précisément celui du défaut constaté (coût TV ×43 au-dessus des mises en service).
 FACTEUR_SECOND_AXE = 25
 
 COURBE = "courbe"
@@ -144,18 +145,19 @@ def _indice_abscisse(
     return None
 
 
-def _mediane(lignes: Sequence[Sequence[Any]], i: int) -> float:
+def _etendue(lignes: Sequence[Sequence[Any]], i: int) -> float:
+    """Le max hors zéros : ce sur quoi l'axe se cale, donc ce qui décide du partage."""
     valeurs = [abs(float(l[i])) for l in lignes if l[i] is not None and float(l[i]) != 0]
-    return statistics.median(valeurs) if valeurs else 0.0
+    return max(valeurs) if valeurs else 0.0
 
 
 def _echelles_incompatibles(
     lignes: Sequence[Sequence[Any]], numeriques: Sequence[int]
 ) -> bool:
-    medianes = [m for m in (_mediane(lignes, i) for i in numeriques) if m > 0]
-    if len(medianes) < 2:
+    etendues = [e for e in (_etendue(lignes, i) for i in numeriques) if e > 0]
+    if len(etendues) < 2:
         return False
-    return max(medianes) / min(medianes) > FACTEUR_SECOND_AXE
+    return max(etendues) / min(etendues) > FACTEUR_SECOND_AXE
 
 
 def _trier_si_ordonne(
@@ -245,7 +247,7 @@ def _large(
     # Le second axe ne sert que pour exactement deux séries : à trois, un lecteur ne sait
     # plus quelle courbe se lit sur quel axe.
     second = len(mesures) == 2 and _echelles_incompatibles(lignes, mesures)
-    petite = min(mesures, key=lambda i: _mediane(lignes, i)) if second else None
+    petite = min(mesures, key=lambda i: _etendue(lignes, i)) if second else None
 
     return Graphique(
         # Une abscisse ordinale (année, trimestre, numéro de semaine) est un continuum
@@ -321,20 +323,18 @@ def _pivot(
         for cat in valeurs_categorie
     }
 
-    medianes = {
-        cat: statistics.median([abs(v) for v in valeurs if v is not None and v != 0])
-        if any(v not in (None, 0.0) for v in valeurs)
-        else 0.0
+    etendues = {
+        cat: max((abs(v) for v in valeurs if v is not None and v != 0), default=0.0)
         for cat, valeurs in valeurs_par_categorie.items()
     }
-    non_nulles = [m for m in medianes.values() if m > 0]
+    non_nulles = [e for e in etendues.values() if e > 0]
     incompatibles = (
         len(non_nulles) >= 2 and max(non_nulles) / min(non_nulles) > FACTEUR_SECOND_AXE
     )
     if incompatibles and len(valeurs_categorie) > 2:
         return "séries d'ordres de grandeur incompatibles, sans axe commun possible"
     petite = (
-        min(medianes, key=medianes.get)
+        min(etendues, key=etendues.get)
         if incompatibles and len(valeurs_categorie) == 2
         else None
     )
