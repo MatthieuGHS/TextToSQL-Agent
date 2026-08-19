@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Requete } from '../types'
+import { Graphique } from './Graphique'
 import { SqlColore } from './SqlColore'
 import { TableauResultat } from './TableauResultat'
 
@@ -12,6 +13,9 @@ import { TableauResultat } from './TableauResultat'
  */
 export function BlocRequete({ requete }: { requete: Requete }) {
   const [ouvert, setOuvert] = useState(false)
+  // À la demande seulement : le tracé automatique reste réservé à la dernière requête,
+  // celle qui porte la conclusion. Les précédentes sont des explorations.
+  const [trace, setTrace] = useState(false)
   const enEchec = requete.erreur !== null
 
   return (
@@ -65,6 +69,22 @@ export function BlocRequete({ requete }: { requete: Requete }) {
                 lignes={requete.lignes}
                 tronque={requete.tronque}
               />
+              {requete.graphique && (
+                <div className="border-t border-slate-800 p-2">
+                  <button
+                    onClick={() => setTrace(!trace)}
+                    className="text-xs text-slate-500 hover:text-slate-300
+                               transition-colors"
+                  >
+                    {trace ? '▾ masquer le graphique' : '▸ tracer ce résultat'}
+                  </button>
+                  {trace && (
+                    <div className="mt-2">
+                      <Graphique graphique={requete.graphique} />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

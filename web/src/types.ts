@@ -14,6 +14,8 @@ export interface Requete {
   duree_ms: number
   /** Non nulle sur un tâtonnement : la boucle se reprend, on l'affiche sans le cacher. */
   erreur: string | null
+  /** Ce que ce résultat permettrait de tracer — affiché à la demande, jamais d'office. */
+  graphique: Graphique | null
 }
 
 export interface Serie {
@@ -32,10 +34,13 @@ export interface Serie {
  */
 export interface Graphique {
   /** `nuage` : deux mesures sans abscisse — les étiquettes sont alors numériques. */
-  type: 'courbe' | 'barres' | 'nuage'
+  type: 'courbe' | 'barres' | 'nuage' | 'histogramme'
   x: string
   etiquettes: (string | number)[]
   series: Serie[]
+  /** Les bascules licites, décidées côté serveur — jamais élargies ici. */
+  variantes: string[]
+  empilable: boolean
 }
 
 export interface Usage {

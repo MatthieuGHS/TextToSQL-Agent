@@ -15,6 +15,8 @@ const COURBE: Graphique = {
     { colonne: 'cost', valeurs: [100, null, 300], axe_secondaire: false },
     { colonne: 'mes', valeurs: [10, 20, 30], axe_secondaire: true },
   ],
+  variantes: ['barres'],
+  empilable: false,
 }
 
 describe('données du graphique', () => {
@@ -45,6 +47,8 @@ describe('données du graphique', () => {
       x: 'cost_tv',
       etiquettes: [100.5, 300, 200],
       series: [{ colonne: 'mes', valeurs: [5, 12, 8], axe_secondaire: false }],
+      variantes: [],
+      empilable: false,
     }
 
     const points = donneesDe(nuage)
@@ -63,6 +67,8 @@ describe('données du graphique', () => {
       x: 'channel',
       etiquettes: ['tv', 'sea'],
       series: [{ colonne: 'cost', valeurs: [1, 2], axe_secondaire: false }],
+      variantes: [],
+      empilable: false,
     }
 
     expect(donneesDe(barres).map((p) => p.x)).toEqual(['tv', 'sea'])

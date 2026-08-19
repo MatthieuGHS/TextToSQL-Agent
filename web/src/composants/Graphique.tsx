@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -75,6 +76,14 @@ export function donneesDe(graphique: TypeGraphique) {
 
 export function Graphique({ graphique }: { graphique: TypeGraphique }) {
   const donnees = donneesDe(graphique)
+
+  // La bascule ne choisit que parmi ce que le serveur a déclaré licite (`variantes`,
+  // `empilable`) : aucune règle de lisibilité ne naît ici.
+  const [affiche, setAffiche] = useState(graphique.type)
+  const [empile, setEmpile] = useState(false)
+  const bascules = [graphique.type, ...graphique.variantes]
+  const peutEmpiler =
+    graphique.empilable && graphique.series.length > 1 && affiche === 'barres'
 
   const double = graphique.series.some((s) => s.axe_secondaire)
   const axes = { grid: '#1e293b', texte: '#64748b' }
@@ -175,8 +184,38 @@ export function Graphique({ graphique }: { graphique: TypeGraphique }) {
 
   return (
     <figure className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+      {(graphique.variantes.length > 0 || peutEmpiler) && (
+        <div className="flex justify-end gap-1 pb-1">
+          {graphique.variantes.length > 0 &&
+            bascules.map((b) => (
+              <button
+                key={b}
+                onClick={() => setAffiche(b as TypeGraphique['type'])}
+                className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                  affiche === b
+                    ? 'bg-slate-700 text-slate-200'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                {b}
+              </button>
+            ))}
+          {peutEmpiler && (
+            <button
+              onClick={() => setEmpile(!empile)}
+              className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                empile
+                  ? 'bg-slate-700 text-slate-200'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              empilées
+            </button>
+          )}
+        </div>
+      )}
       <ResponsiveContainer width="100%" height={280}>
-        {graphique.type === 'courbe' ? (
+        {affiche === 'courbe' ? (
           <LineChart data={donnees} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
             {communs}
             {donnees.length > SEUIL_ZOOM && (
@@ -206,22 +245,31 @@ export function Graphique({ graphique }: { graphique: TypeGraphique }) {
             ))}
           </LineChart>
         ) : (
-          <BarChart data={donnees} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+          <BarChart
+            data={donnees}
+            margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+            // Un histogramme est un continuum découpé : ses barres se touchent, là où
+            // des catégories distinctes gardent leur espacement.
+            barCategoryGap={affiche === 'histogramme' ? '2%' : '10%'}
+          >
             {communs}
             {graphique.series.map((s, i) => (
               <Bar
                 key={s.colonne}
                 yAxisId={s.axe_secondaire ? 'droite' : 'gauche'}
                 dataKey={s.colonne}
+                stackId={empile ? 'pile' : undefined}
                 fill={COULEURS[i % COULEURS.length]}
-                radius={[3, 3, 0, 0]}
+                radius={empile ? undefined : [3, 3, 0, 0]}
               />
             ))}
           </BarChart>
         )}
       </ResponsiveContainer>
       <figcaption className="mt-1 text-center text-xs text-slate-600">
-        {graphique.series.map((s) => s.colonne).join(' · ')} par {graphique.x}
+        {graphique.type === 'histogramme'
+          ? `distribution de ${graphique.x}`
+          : `${graphique.series.map((s) => s.colonne).join(' · ')} par ${graphique.x}`}
         {double && ' — deux axes, les échelles ne sont pas comparables'}
       </figcaption>
     </figure>
