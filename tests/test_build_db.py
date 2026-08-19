@@ -113,3 +113,60 @@ def test_idempotence_du_contenu(tmp_path):
     build_db.main(["--out", str(out), "--quiet"])
 
     assert empreinte(out) == premiere
+
+
+# --- La pipeline sans ligne de commande -----------------------------------------------
+
+
+def test_construire_leve_au_lieu_de_rendre_un_code(base_existante, tmp_path):
+    """Un appelant qui n'est pas un terminal a besoin de savoir *pourquoi*.
+
+    `main()` traduit les exceptions en codes de sortie parce que c'est ce qu'un shell
+    attend. L'interface, elle, doit dire à son utilisateur ce qui a échoué — et un entier
+    ne le dit pas.
+    """
+    with pytest.raises(FileNotFoundError):
+        build_db.construire(base_existante, tmp_path / "vide", verifier=False)
+
+    con = duckdb.connect(str(base_existante), read_only=True)
+    try:
+        assert con.execute("SELECT valeur FROM temoin").fetchone()[0] == 42
+    finally:
+        con.close()
+
+
+def test_construire_lit_le_dossier_qu_on_lui_donne(tmp_path):
+    """La condition du dossier d'attente : construire ailleurs que dans `data/raw/`.
+
+    L'interface recopie les sources courantes dans un dossier temporaire, y écrit les
+    fichiers reçus, et ne promeut le tout qu'une fois la construction réussie. Sans ce
+    paramètre, elle devrait écraser `data/raw/` avant de savoir si ça marche.
+    """
+    if not (build_db.RAW_DIR / "features_cost.csv").exists():
+        pytest.skip("sources absentes")
+
+    attente = tmp_path / "attente"
+    attente.mkdir()
+    for nom in list(build_db.SOURCES.values()) + [build_db.MASTER_SOURCE]:
+        source = build_db.RAW_DIR / nom
+        if source.exists():
+            (attente / nom).write_bytes(source.read_bytes())
+
+    sortie = build_db.construire(tmp_path / "essai.duckdb", attente)
+
+    con = duckdb.connect(str(sortie), read_only=True)
+    try:
+        tables = {r[0] for r in con.execute(
+            "SELECT table_name FROM duckdb_tables()").fetchall()}
+    finally:
+        con.close()
+    assert tables == {"media", "kpi_compteurs", "contexte"}
+
+
+def test_construire_ne_laisse_aucun_fichier_temporaire(base_existante, tmp_path):
+    """Un `.tmp` résiduel ferait échouer la construction suivante sans raison lisible."""
+    with pytest.raises(FileNotFoundError):
+        build_db.construire(base_existante, tmp_path / "vide", verifier=False)
+
+    assert not base_existante.with_suffix(".duckdb.tmp").exists()
+

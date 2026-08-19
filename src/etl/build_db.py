@@ -65,13 +65,13 @@ def configure_logging(quiet: bool = False) -> None:
     )
 
 
-def read_source(filename: str) -> pd.DataFrame:
+def read_source(filename: str, raw_dir: pathlib.Path | None = None) -> pd.DataFrame:
     """Lit un fichier source et journalise sa volumétrie.
 
     Raises:
         FileNotFoundError: avec un message indiquant où déposer le fichier.
     """
-    path = RAW_DIR / filename
+    path = (raw_dir or RAW_DIR) / filename
     if not path.exists():
         raise FileNotFoundError(
             f"Fichier source absent : {path}\n"
@@ -82,16 +82,23 @@ def read_source(filename: str) -> pd.DataFrame:
     return df
 
 
-def build_tables() -> dict[str, pd.DataFrame]:
-    """Applique les transformations et renvoie les trois tables prêtes à écrire."""
-    media, n_padding = transforms.build_media(read_source(SOURCES["media"]))
+def build_tables(raw_dir: pathlib.Path | None = None) -> dict[str, pd.DataFrame]:
+    """Applique les transformations et renvoie les trois tables prêtes à écrire.
+
+    Args:
+        raw_dir: dossier des sources. Paramétrable depuis E9 : l'interface construit
+            depuis un dossier d'attente, et ne promeut les fichiers reçus qu'une fois la
+            construction réussie. Par défaut `RAW_DIR`, ce qui laisse la ligne de commande
+            inchangée.
+    """
+    media, n_padding = transforms.build_media(read_source(SOURCES["media"], raw_dir))
     logger.info("media     remplissage exclu           %6d lignes", n_padding)
     logger.info("media     table construite            %6d lignes", len(media))
 
-    kpi = transforms.build_kpi(read_source(SOURCES["kpi_compteurs"]))
+    kpi = transforms.build_kpi(read_source(SOURCES["kpi_compteurs"], raw_dir))
     logger.info("kpi       table construite            %6d lignes", len(kpi))
 
-    contexte = transforms.build_contexte(read_source(SOURCES["contexte"]))
+    contexte = transforms.build_contexte(read_source(SOURCES["contexte"], raw_dir))
     logger.info("contexte  dépivoté                    %6d lignes", len(contexte))
 
     return {"media": media, "kpi_compteurs": kpi, "contexte": contexte}
@@ -122,7 +129,7 @@ def write_database(tables: dict[str, pd.DataFrame], out: pathlib.Path) -> pathli
     return tmp
 
 
-def validate(path: pathlib.Path) -> None:
+def validate(path: pathlib.Path, raw_dir: pathlib.Path | None = None) -> None:
     """Ouvre la base en lecture seule et vérifie le contrat de données.
 
     La source maîtresse est relue ici, et non dans ``build_tables`` : elle sert à
@@ -134,7 +141,7 @@ def validate(path: pathlib.Path) -> None:
         checks.log_volumetry(con)
         checks.log_warnings(con)
 
-        master_path = RAW_DIR / MASTER_SOURCE
+        master_path = (raw_dir or RAW_DIR) / MASTER_SOURCE
         if master_path.exists():
             checks.log_source_coverage(con, pd.read_csv(master_path))
         else:
@@ -143,6 +150,45 @@ def validate(path: pathlib.Path) -> None:
             )
     finally:
         con.close()
+
+
+def construire(
+    out: pathlib.Path,
+    raw_dir: pathlib.Path | None = None,
+    *,
+    verifier: bool = True,
+) -> pathlib.Path:
+    """La pipeline, sans ligne de commande : construit, vérifie, remplace.
+
+    Extraite de `main()` pour que l'interface l'appelle directement. `main()` n'est plus
+    qu'une enveloppe qui traduit des arguments et des exceptions en codes de sortie —
+    c'est la même séparation qu'entre `ask()` et l'API.
+
+    **Lève au lieu de rendre un code.** Un appelant qui n'est pas un terminal a besoin de
+    savoir *pourquoi* ça a échoué pour le dire à son utilisateur, et un entier ne le dit
+    pas. Les trois exceptions qui traversent — `DataQualityError`, `FileNotFoundError`,
+    `ContextColumnError` — sont exactement les trois causes que `main()` distinguait déjà.
+
+    Returns:
+        Le chemin de la base écrite.
+    """
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        tables = build_tables(raw_dir)
+        tmp = write_database(tables, out)
+
+        if verifier:
+            validate(tmp, raw_dir)
+        else:
+            logger.warning("contrat de données non vérifié")
+
+        # Le remplacement n'intervient qu'une fois la base validée.
+        os.replace(tmp, out)
+        logger.info("écrit     %-28s %6.1f Mo", out.name, out.stat().st_size / 1e6)
+        return out
+    finally:
+        # Ne jamais laisser traîner un fichier temporaire.
+        out.with_suffix(out.suffix + ".tmp").unlink(missing_ok=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -169,22 +215,10 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(args.quiet)
 
     out = args.out or ROOT / os.getenv("DB_PATH", "data/mmm.duckdb")
-    out.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        tables = build_tables()
-        tmp = write_database(tables, out)
-
-        if not args.skip_checks:
-            validate(tmp)
-        else:
-            logger.warning("contrat de données non vérifié (--skip-checks)")
-
-        # Le remplacement n'intervient qu'une fois la base validée.
-        os.replace(tmp, out)
-        logger.info("écrit     %-28s %6.1f Mo", out.name, out.stat().st_size / 1e6)
+        construire(out, verifier=not args.skip_checks)
         return 0
-
     except checks.DataQualityError as exc:
         logger.error("contrat de données non respecté\n%s", exc)
         logger.error("la base précédente n'a pas été remplacée")
@@ -192,9 +226,6 @@ def main(argv: list[str] | None = None) -> int:
     except (FileNotFoundError, transforms.ContextColumnError) as exc:
         logger.error("%s", exc)
         return 1
-    finally:
-        # Ne jamais laisser traîner un fichier temporaire.
-        out.with_suffix(out.suffix + ".tmp").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
