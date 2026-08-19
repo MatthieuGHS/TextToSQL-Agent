@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Message as TypeMessage } from '../types'
 import { BlocRequete } from './BlocRequete'
+import { Graphique } from './Graphique'
 import { Markdown } from './Markdown'
 import { Progression } from './Progression'
 
@@ -69,6 +70,10 @@ export function Message({ message }: { message: TypeMessage }) {
         <Markdown texte={message.texte} />
         <BoutonCopier texte={message.texte} />
       </div>
+
+      {message.reponse?.graphique && (
+        <Graphique graphique={message.reponse.graphique} />
+      )}
 
       {requetes.length > 0 && (
         <div className="flex flex-col gap-1.5">

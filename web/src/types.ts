@@ -16,6 +16,27 @@ export interface Requete {
   erreur: string | null
 }
 
+export interface Serie {
+  colonne: string
+  /** Les `null` sont des trous, jamais des zéros : la courbe doit s'y interrompre. */
+  valeurs: (number | null)[]
+  axe_secondaire: boolean
+}
+
+/**
+ * La spécification décidée par `src/charts`, côté serveur.
+ *
+ * L'interface ne choisit ni le type, ni les axes, ni ce qui se trace — elle rend. Toute
+ * règle de lisibilité ajoutée ici serait au mauvais endroit : elle échapperait aux tests
+ * en fonctions pures et se dédoublerait avec celles du serveur.
+ */
+export interface Graphique {
+  type: 'courbe' | 'barres'
+  x: string
+  etiquettes: (string | number)[]
+  series: Serie[]
+}
+
 export interface Usage {
   entree: number
   sortie: number
@@ -26,6 +47,8 @@ export interface Usage {
 export interface Reponse {
   texte: string
   requetes: Requete[]
+  /** `null` quand le résultat ne se trace pas — le cas fréquent, et un résultat en soi. */
+  graphique: Graphique | null
   arret: string
   /** Calculé côté serveur. Ne jamais le redéduire de `arret` ici : ça divergerait. */
   arret_normal: boolean
