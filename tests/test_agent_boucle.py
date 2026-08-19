@@ -662,3 +662,48 @@ def test_aucune_requete_ne_donne_aucun_graphique(con):
 
     assert reponse.graphique is None
 
+
+# --- 6. Réinitialisation après rechargement des données -------------------------------
+
+
+def test_reinitialiser_oublie_l_agent_partage(monkeypatch, con):
+    """Le défaut silencieux que cette fonction existe pour empêcher.
+
+    Le prompt est généré depuis le schéma et assemblé une fois. Après une reconstruction
+    de la base, un agent conservé décrirait des canaux disparus et ignorerait les
+    nouveaux — sans rien lever, et avec assurance.
+
+    Le contrat testé est « l'agent partagé est oublié », et non « il est reconstruit au
+    prochain appel ». Construire l'agent partagé est un marqueur interdit dans un fichier
+    de test par `test_agent_structure.py` : il partirait consommer des tokens à chaque
+    exécution de la suite. La reconstruction elle-même est la conséquence d'une seule
+    ligne — `if _defaut is None`.
+    """
+    monkeypatch.setattr(boucle, "_defaut", agent_avec(ModeleScripte([]), con))
+
+    boucle.reinitialiser()
+
+    assert boucle._defaut is None
+
+
+def test_reinitialiser_referme_la_connexion_de_l_agent_partage(monkeypatch, base):
+    """Sinon chaque rechargement des données fuit un descripteur de fichier."""
+    partage = connexion.ouvrir(base)
+    monkeypatch.setattr(
+        boucle, "_defaut",
+        Agent(modele=ModeleScripte([]), systeme=None, empreinte_prompt="x", con=partage),
+    )
+
+    boucle.reinitialiser()
+
+    with pytest.raises(Exception):
+        partage.execute("SELECT 1")
+
+
+def test_reinitialiser_sur_un_agent_absent_ne_leve_pas(monkeypatch):
+    """Appelée au démarrage, ou deux fois de suite : ce n'est pas une erreur."""
+    monkeypatch.setattr(boucle, "_defaut", None)
+
+    boucle.reinitialiser()
+    boucle.reinitialiser()
+

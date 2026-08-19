@@ -100,6 +100,25 @@ class ReponseSortante(BaseModel):
     modele: str
 
 
+class FichierSource(BaseModel):
+    """L'état d'un des fichiers attendus par la pipeline."""
+
+    nom: str
+    present: bool
+    octets: int | None
+    modifie_le: str | None
+    # La pipeline ne lit pas `features.csv` pour construire : elle s'en sert pour vérifier
+    # que les trois vues la couvrent. Le distinguer évite de le présenter comme un intrant.
+    requis: bool
+
+
+class EtatDonnees(BaseModel):
+    fichiers: list[FichierSource]
+    base_presente: bool
+    base_modifiee_le: str | None
+    tables: list[str]
+
+
 class Sante(BaseModel):
     """Ce qu'on regarde avant une démonstration, pas pendant."""
 

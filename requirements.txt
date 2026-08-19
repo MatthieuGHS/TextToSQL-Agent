@@ -15,6 +15,7 @@ openpyxl                     # lecture de la grille d'évaluation .xlsx
 # === Interface ===
 fastapi                      # E9 — API HTTP, coquille mince autour de `ask()`
 uvicorn[standard]            # serveur ASGI
+python-multipart             # téléversement des fichiers sources (formulaire multipart)
 #
 # `streamlit` et `plotly` étaient prévus ici. L'interface est finalement React + Vite
 # (voir `web/`), et le rendu des graphiques d'E7 se fera côté navigateur à partir d'une

@@ -20,15 +20,18 @@ appelants diffuse.
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
 import pathlib
 import queue
+import shutil
+import tempfile
 import threading
 from dataclasses import replace
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -36,6 +39,7 @@ from src.agent import boucle
 from src.agent.reponse import Echange
 from src.app import schemas, serialisation
 from src.db import connexion
+from src.etl import build_db, checks, transforms
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +173,207 @@ def question_en_flux(entree: schemas.QuestionEntrante) -> StreamingResponse:
             yield json.dumps(evenement, ensure_ascii=False) + "\n"
 
     return StreamingResponse(evenements(), media_type="application/x-ndjson")
+
+
+# --- Données sources et reconstruction -----------------------------------------------
+#
+# La pipeline est **une reconstruction complète** depuis `data/raw/`, pas un ajout
+# incrémental : téléverser un fichier remplace sa version et rejoue tout. C'est le
+# comportement de `build_db` depuis E1, et le changer serait un autre sujet que celui-ci.
+
+# Seuls ces noms sont acceptés. La pipeline les code en dur : accepter un autre nom serait
+# silencieusement inutile — le fichier serait écrit puis ignoré, et l'utilisateur croirait
+# avoir chargé ses données. Le verrou a un second effet, plus important : aucun nom de
+# fichier ne vient de l'utilisateur, donc aucune traversée de chemin n'est possible.
+FICHIERS_ATTENDUS = {
+    **{nom: True for nom in build_db.SOURCES.values()},
+    build_db.MASTER_SOURCE: False,
+}
+
+# Un CSV de sources pèse quelques dizaines de mégaoctets. Le plafond n'est pas là pour
+# protéger le disque mais pour que l'erreur arrive vite : un fichier de 2 Go téléversé
+# puis refusé par la pipeline aurait fait attendre pour rien.
+TAILLE_MAX = 200 * 1024 * 1024
+
+# Une reconstruction à la fois. Deux simultanées se disputeraient le même fichier
+# temporaire, et la seconde publierait une base bâtie sur les sources de la première.
+_verrou_reconstruction = threading.Lock()
+
+
+def _etat_fichier(nom: str, requis: bool) -> schemas.FichierSource:
+    chemin = build_db.RAW_DIR / nom
+    existe = chemin.is_file()
+    return schemas.FichierSource(
+        nom=nom,
+        present=existe,
+        octets=chemin.stat().st_size if existe else None,
+        modifie_le=(
+            datetime.datetime.fromtimestamp(chemin.stat().st_mtime).isoformat(
+                timespec="seconds"
+            )
+            if existe
+            else None
+        ),
+        requis=requis,
+    )
+
+
+@application.get("/api/donnees", response_model=schemas.EtatDonnees)
+def donnees() -> schemas.EtatDonnees:
+    """Ce que la page de chargement affiche : quels fichiers sont là, et depuis quand."""
+    base = connexion.chemin_base()
+    tables: list[str] = []
+    if base.exists():
+        con = connexion.ouvrir()
+        try:
+            tables = sorted(
+                r[0] for r in con.execute(
+                    "SELECT table_name FROM duckdb_tables()"
+                ).fetchall()
+            )
+        finally:
+            con.close()
+
+    return schemas.EtatDonnees(
+        fichiers=[_etat_fichier(n, r) for n, r in FICHIERS_ATTENDUS.items()],
+        base_presente=base.exists(),
+        base_modifiee_le=(
+            datetime.datetime.fromtimestamp(base.stat().st_mtime).isoformat(
+                timespec="seconds"
+            )
+            if base.exists()
+            else None
+        ),
+        tables=tables,
+    )
+
+
+class _JournalVersFile(logging.Handler):
+    """Relaie le journal de l'ETL vers le flux de la réponse.
+
+    L'ETL journalise déjà ce qu'il faut montrer — volumétrie par table, invariants,
+    avertissements du contrat de données. Le rediffuser tel quel vaut mieux que de
+    réinventer une notion d'avancement à côté : ce que l'exploitant lit dans un terminal
+    est exactement ce que l'utilisateur doit voir.
+    """
+
+    def __init__(self, file: queue.Queue):
+        super().__init__()
+        self.file = file
+
+    def emit(self, enregistrement: logging.LogRecord) -> None:
+        self.file.put({
+            "type": "journal",
+            "niveau": enregistrement.levelname.lower(),
+            "message": self.format(enregistrement),
+        })
+
+
+@application.post("/api/donnees/recharger")
+async def recharger(fichiers: list[UploadFile] = File(default=[])) -> StreamingResponse:
+    """Téléverse les fichiers reçus, reconstruit la base, et diffuse le journal.
+
+    Le dossier d'attente est le cœur du geste : on y recopie les sources actuelles, on y
+    écrit les fichiers reçus, et **on ne promeut le tout qu'une fois la construction
+    réussie**. Un fichier mal formé laisse donc `data/raw/` et la base exactement dans
+    l'état où ils étaient — et l'utilisateur peut renvoyer le bon sans rien réparer.
+
+    Sans fichier, c'est une simple reconstruction depuis les sources en place. C'est
+    utile : le contrat de données peut se mettre à échouer sans qu'aucune source ait
+    bougé, si le code de vérification, lui, a changé.
+    """
+    recus: dict[str, bytes] = {}
+    for fichier in fichiers:
+        nom = pathlib.Path(fichier.filename or "").name
+        if nom not in FICHIERS_ATTENDUS:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"« {nom} » n'est pas un fichier de cette pipeline. Attendus : "
+                    f"{', '.join(sorted(FICHIERS_ATTENDUS))}."
+                ),
+            )
+        contenu = await fichier.read()
+        if len(contenu) > TAILLE_MAX:
+            raise HTTPException(
+                status_code=413,
+                detail=f"{nom} dépasse {TAILLE_MAX // (1024 * 1024)} Mo.",
+            )
+        recus[nom] = contenu
+
+    file: queue.Queue = queue.Queue()
+
+    def travail() -> None:
+        if not _verrou_reconstruction.acquire(blocking=False):
+            file.put({"type": "erreur", "message":
+                      "Une reconstruction est déjà en cours."})
+            file.put(None)
+            return
+
+        journal = _JournalVersFile(file)
+        journal.setFormatter(logging.Formatter("%(message)s"))
+        etl = logging.getLogger("etl")
+        niveau = etl.level
+        etl.addHandler(journal)
+        etl.setLevel(logging.INFO)
+
+        attente = pathlib.Path(tempfile.mkdtemp(prefix="sources-"))
+        try:
+            for nom in FICHIERS_ATTENDUS:
+                courant = build_db.RAW_DIR / nom
+                if courant.is_file():
+                    (attente / nom).write_bytes(courant.read_bytes())
+            for nom, contenu in recus.items():
+                (attente / nom).write_bytes(contenu)
+
+            build_db.construire(connexion.chemin_base(), attente)
+
+            # Promotion : la base est écrite et validée, les sources qui l'ont produite
+            # deviennent les sources de référence. Dans cet ordre, jamais l'inverse.
+            build_db.RAW_DIR.mkdir(parents=True, exist_ok=True)
+            for nom in recus:
+                (build_db.RAW_DIR / nom).write_bytes((attente / nom).read_bytes())
+
+            # Le prompt est généré depuis le schéma : sans cet oubli volontaire, l'agent
+            # continuerait de décrire l'ancienne base. C'est le défaut silencieux le plus
+            # grave de cette page.
+            boucle.reinitialiser()
+            file.put({"type": "termine", "fichiers": sorted(recus)})
+        except Exception as exc:
+            logger.exception("reconstruction en échec")
+            file.put({"type": "erreur", "message": _cause_lisible(exc)})
+        finally:
+            etl.removeHandler(journal)
+            etl.setLevel(niveau)
+            shutil.rmtree(attente, ignore_errors=True)
+            _verrou_reconstruction.release()
+            file.put(None)
+
+    threading.Thread(target=travail, daemon=True).start()
+
+    def evenements():
+        while (evenement := file.get()) is not None:
+            yield json.dumps(evenement, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(evenements(), media_type="application/x-ndjson")
+
+
+def _cause_lisible(exc: Exception) -> str:
+    """Ce qu'on rend à l'utilisateur quand la pipeline refuse.
+
+    Contrairement à une panne de l'agent, les échecs d'ETL **sont** l'information utile :
+    une violation du contrat de données dit précisément quelle règle et sur quelle table,
+    et c'est ce qu'il faut corriger dans le fichier source. Les taire renverrait
+    l'utilisateur à un « ça n'a pas marché » sans recours.
+
+    Seules les trois exceptions du contrat sont relayées ; toute autre est une panne
+    interne, et redevient muette.
+    """
+    if isinstance(exc, (checks.DataQualityError, transforms.ContextColumnError)):
+        return str(exc)
+    if isinstance(exc, FileNotFoundError):
+        return f"Fichier source manquant : {exc}"
+    return TEXTE_ERREUR_INTERNE
 
 
 # Monté en dernier : la racine attrape tout ce qui n'est pas `/api/…`, et l'ordre de

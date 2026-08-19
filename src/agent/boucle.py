@@ -224,6 +224,29 @@ def agent_par_defaut() -> Agent:
     return _defaut
 
 
+def reinitialiser() -> None:
+    """Oublie l'agent partagé. Le prochain appel en reconstruira un.
+
+    Existe pour un seul cas, et il est grave : **la base a été reconstruite.** Le prompt
+    système est généré depuis le schéma et assemblé une fois au démarrage ; après un
+    rechargement des données, l'agent continuerait de décrire des canaux qui n'existent
+    plus et d'ignorer ceux qui viennent d'apparaître. Rien ne lèverait — il répondrait
+    simplement à côté, avec assurance, sur la foi d'un schéma périmé.
+
+    La connexion de l'agent partagé est refermée au passage. Les appels en vol ne sont pas
+    concernés : depuis E9 chacun ouvre la sienne, et la fermeture d'un descripteur n'affecte
+    pas les autres.
+    """
+    global _defaut
+    with _verrou_defaut:
+        ancien, _defaut = _defaut, None
+    if ancien is not None and ancien.con is not None:
+        try:
+            ancien.con.close()
+        except Exception:  # noqa: BLE001 — une connexion déjà fermée n'est pas un échec
+            logger.debug("connexion de l'agent partagé déjà fermée")
+
+
 def identifiant_exact(agent: Agent) -> str:
     """Résout l'identifiant exact du modèle, par un appel volontairement minimal.
 
