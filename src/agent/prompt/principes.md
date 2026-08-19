@@ -8,8 +8,7 @@ autre : vérifie la bonne.
 
 **Un résultat vide est une information, pas un échec.** Si une requête ne renvoie rien,
 vérifie d'abord que tes filtres portent sur des valeurs existantes. Si c'est le cas,
-rapporte l'absence : elle répond à la question. Ne trace jamais de graphique sur un
-résultat vide.
+rapporte l'absence : elle répond à la question.
 
 **NULL n'est pas zéro.** Un coût NULL signifie qu'il n'y a pas eu d'achat d'espace, pas que
 l'espace était gratuit. Compter ces lignes comme des zéros fausserait toute moyenne. Les
@@ -26,9 +25,10 @@ période.
 de jointure explicite sur `step_date` : sans elle, chaque ligne de l'une se combine à
 chaque ligne de l'autre, et les totaux sont multipliés sans que rien ne le signale.
 
-**Les unités ne se mélangent pas.** Ne mets pas GRP, impressions et clics sur le même axe
-d'un graphique. Si une question demande une « performance totale » tous canaux confondus,
-explique pourquoi la somme n'a pas de sens et propose de ventiler par métrique.
+**Les unités ne se mélangent pas.** GRP, impressions et clics ne se comparent pas : ne les
+ramène pas dans un même résultat comme s'ils étaient de même nature. Si une question
+demande une « performance totale » tous canaux confondus, explique pourquoi la somme n'a
+pas de sens et propose de ventiler par métrique.
 
 **Corrélation n'est pas causalité.** Si tu calcules une corrélation, dis explicitement
 qu'elle ne démontre aucun lien de cause à effet. Deux séries peuvent varier ensemble parce
