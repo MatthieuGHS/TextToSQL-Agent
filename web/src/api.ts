@@ -1,4 +1,12 @@
-import type { Etape, Evenement, Message, Reponse, Sante } from './types'
+import type {
+  Etape,
+  EtatDonnees,
+  Evenement,
+  EvenementEtl,
+  Message,
+  Reponse,
+  Sante,
+} from './types'
 
 /**
  * L'historique renvoyé au serveur : l'API est sans état, c'est l'interface qui détient
@@ -70,3 +78,50 @@ export async function demander(
   if (!finale) throw new Error("le flux s'est interrompu avant la réponse")
   return finale
 }
+
+export async function etatDonnees(): Promise<EtatDonnees> {
+  const r = await fetch('/api/donnees')
+  if (!r.ok) throw new Error('service indisponible')
+  return r.json()
+}
+
+/**
+ * Téléverse les fichiers et relance la pipeline, en rapportant le journal au fil de l'eau.
+ *
+ * Sans fichier, c'est une simple reconstruction depuis les sources en place — utile quand
+ * le contrat de données se met à échouer sans qu'aucune source ait bougé.
+ *
+ * Un refus arrive en HTTP (422, 413) *avant* le flux : la liste des fichiers est validée
+ * avant qu'aucun travail ne commence. Une fois le flux ouvert, le statut est déjà parti et
+ * l'échec ne peut plus être qu'un événement.
+ */
+export async function recharger(
+  fichiers: File[],
+  surEvenement: (e: EvenementEtl) => void,
+): Promise<void> {
+  const corps = new FormData()
+  for (const f of fichiers) corps.append('fichiers', f)
+
+  const r = await fetch('/api/donnees/recharger', { method: 'POST', body: corps })
+  if (!r.ok) {
+    const detail = await r.json().catch(() => null)
+    throw new Error(detail?.detail ?? `le service a répondu ${r.status}`)
+  }
+  if (!r.body) throw new Error('réponse vide')
+
+  const lecteur = r.body.getReader()
+  const decodeur = new TextDecoder()
+  let tampon = ''
+
+  for (;;) {
+    const { done, value } = await lecteur.read()
+    if (done) break
+    tampon += decodeur.decode(value, { stream: true })
+    const lignes = tampon.split('\n')
+    tampon = lignes.pop() ?? ''
+    for (const ligne of lignes) {
+      if (ligne.trim()) surEvenement(JSON.parse(ligne) as EvenementEtl)
+    }
+  }
+}
+

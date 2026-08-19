@@ -89,3 +89,27 @@ export interface Message {
   /** Renseigné quand la réponse n'a pas abouti normalement — tronquée, abandonnée. */
   avertissement?: string
 }
+
+// --- Page de chargement des données ---------------------------------------------------
+
+export interface FichierSource {
+  nom: string
+  present: boolean
+  octets: number | null
+  modifie_le: string | null
+  /** `features.csv` ne l'est pas : il sert à vérifier la couverture, pas à construire. */
+  requis: boolean
+}
+
+export interface EtatDonnees {
+  fichiers: FichierSource[]
+  base_presente: boolean
+  base_modifiee_le: string | null
+  tables: string[]
+}
+
+export type EvenementEtl =
+  | { type: 'journal'; niveau: string; message: string }
+  | { type: 'termine'; fichiers: string[] }
+  | { type: 'erreur'; message: string }
+

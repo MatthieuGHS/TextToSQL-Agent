@@ -31,6 +31,7 @@ import tempfile
 import threading
 from dataclasses import replace
 
+import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -50,6 +51,13 @@ RACINE_WEB = connexion.ROOT / "web" / "dist"
 # trace d'exécution finit par exposer un chemin de fichier ou un extrait de requête.
 TEXTE_ERREUR_INTERNE = (
     "Une erreur interne est survenue. La question n'a pas pu être traitée."
+)
+
+# Le même principe, pour l'autre chemin. Un texte distinct parce qu'un message qui parle
+# de « question » sur une page de chargement de fichiers désoriente plus qu'il n'informe.
+TEXTE_ERREUR_PIPELINE = (
+    "Une erreur interne est survenue pendant la reconstruction. Les sources et la base "
+    "précédentes sont intactes."
 )
 
 application = FastAPI(
@@ -362,18 +370,36 @@ def _cause_lisible(exc: Exception) -> str:
     """Ce qu'on rend à l'utilisateur quand la pipeline refuse.
 
     Contrairement à une panne de l'agent, les échecs d'ETL **sont** l'information utile :
-    une violation du contrat de données dit précisément quelle règle et sur quelle table,
-    et c'est ce qu'il faut corriger dans le fichier source. Les taire renverrait
+    une violation du contrat dit quelle règle et sur quelle table, une colonne absente dit
+    laquelle. C'est ce qu'il faut corriger dans le fichier source, et le taire renverrait
     l'utilisateur à un « ça n'a pas marché » sans recours.
 
-    Seules les trois exceptions du contrat sont relayées ; toute autre est une panne
-    interne, et redevient muette.
+    La liste est close et ne contient que des causes **que l'utilisateur peut corriger**.
+    Elle a été établie sur l'échec réel du premier essai — un CSV aux mauvaises colonnes
+    rendait « une erreur interne est survenue », ce qui était à la fois faux et inutile.
+    Tout ce qui n'y figure pas reste muet : une panne interne recopiée dans une réponse
+    exposerait des chemins de fichiers.
     """
     if isinstance(exc, (checks.DataQualityError, transforms.ContextColumnError)):
         return str(exc)
     if isinstance(exc, FileNotFoundError):
         return f"Fichier source manquant : {exc}"
-    return TEXTE_ERREUR_INTERNE
+    if isinstance(exc, KeyError):
+        # `transforms` indexe les colonnes par leur nom : une clé absente *est* une colonne
+        # absente. Nommer laquelle est ce qui distingue un message utile d'un constat.
+        return (
+            f"Colonne absente d'un fichier source : {exc}. Vérifier que le fichier "
+            f"exporté porte bien les colonnes attendues par la pipeline."
+        )
+    if isinstance(exc, UnicodeDecodeError):
+        return (
+            "Fichier illisible : encodage inattendu. Les sources sont attendues en UTF-8."
+        )
+    if isinstance(exc, pd.errors.EmptyDataError):
+        return "Fichier vide."
+    if isinstance(exc, pd.errors.ParserError):
+        return f"Fichier CSV mal formé : {exc}"
+    return TEXTE_ERREUR_PIPELINE
 
 
 # Monté en dernier : la racine attrape tout ce qui n'est pas `/api/…`, et l'ordre de

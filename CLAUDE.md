@@ -79,6 +79,7 @@ src/
     └── api.py            routes ; /api/question et /api/question/flux
 
 web/          interface React + Vite + TypeScript (voir web/README.md)
+              deux pages : conversation, et chargement des données sources
 
 tests/
 ├── test_*.py           unitaires
@@ -190,6 +191,14 @@ repayer — ligne de base reproduite à l'identique.
 
 **E9 (interface) a été avancé avant E7**, pour une démonstration client. React + Vite,
 API FastAPI, étapes diffusées pendant que l'agent travaille, image Docker livrable.
+
+**Le chargement des données depuis l'interface est fait.** Une seconde page téléverse
+les sources et relance la pipeline. Trois propriétés à ne pas casser : le téléversement
+passe par un **dossier d'attente** promu seulement après une construction réussie — un
+fichier mal formé ne dégrade ni `data/raw/` ni la base ; **seuls les quatre noms de la
+pipeline sont acceptés**, ce qui ferme aussi la traversée de chemin ; et
+`boucle.reinitialiser()` **oublie l'agent partagé** après un rechargement, sans quoi son
+prompt continuerait de décrire l'ancien schéma sans rien lever.
 
 **E7 (graphiques) est fait**, en option « le code décide » : `src/charts` lit la forme du
 résultat de la dernière requête réussie et en déduit s'il y a un graphique et lequel. Le

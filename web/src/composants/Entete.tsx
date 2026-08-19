@@ -1,7 +1,19 @@
 import type { Sante } from '../types'
 
+export type Page = 'conversation' | 'donnees'
+
 /** L'état du service, visible en permanence : c'est ce qu'on regarde avant de démarrer. */
-export function Entete({ sante, erreur }: { sante: Sante | null; erreur: string | null }) {
+export function Entete({
+  sante,
+  erreur,
+  page,
+  onPage,
+}: {
+  sante: Sante | null
+  erreur: string | null
+  page: Page
+  onPage: (p: Page) => void
+}) {
   const pret = sante?.base_presente && sante?.cle_chargee
 
   let etat = 'vérification…'
@@ -15,11 +27,33 @@ export function Entete({ sante, erreur }: { sante: Sante | null; erreur: string 
       className="shrink-0 border-b border-slate-800 bg-slate-950/80 backdrop-blur
                  px-6 py-3 flex items-center justify-between gap-4"
     >
-      <div>
-        <h1 className="text-[15px] font-semibold text-slate-100">Agent data — média</h1>
-        <p className="text-xs text-slate-500">
-          Exploration et audit des données avant modélisation
-        </p>
+      <div className="flex items-center gap-6">
+        <div>
+          <h1 className="text-[15px] font-semibold text-slate-100">Agent data — média</h1>
+          <p className="text-xs text-slate-500">
+            Exploration et audit des données avant modélisation
+          </p>
+        </div>
+        {/* Deux pages : un routeur serait du mécanisme pour rien, et l'URL n'a pas à être
+            partageable — l'application est mono-utilisateur et sans état serveur. */}
+        <nav className="flex gap-1">
+          {([
+            ['conversation', 'Conversation'],
+            ['donnees', 'Données'],
+          ] as const).map(([cle, libelle]) => (
+            <button
+              key={cle}
+              onClick={() => onPage(cle)}
+              className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                page === cle
+                  ? 'bg-slate-800 text-slate-100'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {libelle}
+            </button>
+          ))}
+        </nav>
       </div>
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <span

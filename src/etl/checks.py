@@ -23,7 +23,11 @@ from dataclasses import dataclass
 import duckdb
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+# Sous « etl » et non sous `__name__` : ce module et `build_db` forment une seule
+# pipeline, et un appelant qui veut en relayer le journal — l'interface le fait — doit
+# pouvoir s'abonner à un seul arbre. Sous `__name__`, les contrôles du contrat de données
+# tombaient dans une branche séparée et n'étaient relayés nulle part.
+logger = logging.getLogger("etl.checks")
 
 TABLES = ("media", "kpi_compteurs", "contexte")
 

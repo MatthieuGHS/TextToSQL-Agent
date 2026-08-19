@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { demander, sante as lireSante } from './api'
-import { Entete } from './composants/Entete'
+import { Entete, type Page } from './composants/Entete'
+import { PageDonnees } from './composants/PageDonnees'
 import { Message } from './composants/Message'
 import { Progression } from './composants/Progression'
 import { Saisie } from './composants/Saisie'
@@ -40,6 +41,7 @@ export default function App() {
   const [saisie, setSaisie] = useState('')
   const [etapes, setEtapes] = useState<Etape[]>([])
   const [occupe, setOccupe] = useState(false)
+  const [page, setPage] = useState<Page>('conversation')
   const [sante, setSante] = useState<Sante | null>(null)
   const [erreurSante, setErreurSante] = useState<string | null>(null)
   const bas = useRef<HTMLDivElement>(null)
@@ -126,8 +128,16 @@ export default function App() {
 
   return (
     <div className="h-full flex flex-col">
-      <Entete sante={sante} erreur={erreurSante} />
+      <Entete sante={sante} erreur={erreurSante} page={page} onPage={setPage} />
 
+      {page === 'donnees' ? (
+        // Rechargée à chaque bascule : après une reconstruction, l'état des fichiers et
+        // celui de la base ont changé, et un composant conservé les afficherait périmés.
+        <main className="flex-1 overflow-y-auto">
+          <PageDonnees />
+        </main>
+      ) : (
+      <>
       <main ref={zone} className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-8 flex flex-col gap-8">
           {vide && (
@@ -180,6 +190,8 @@ export default function App() {
           </p>
         </div>
       </footer>
+      </>
+      )}
     </div>
   )
 }

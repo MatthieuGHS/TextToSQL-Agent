@@ -133,6 +133,31 @@ def test_la_cause_du_refus_est_rendue_a_l_utilisateur(client, monkeypatch):
     assert "coût négatif" in _evenements(r)[-1]["message"]
 
 
+@pytest.mark.parametrize(
+    "exception, attendu",
+    [
+        (KeyError("type"), "Colonne absente"),
+        (checks.DataQualityError("media : coût négatif"), "coût négatif"),
+        (FileNotFoundError("compteurs.csv"), "Fichier source manquant"),
+    ],
+)
+def test_les_causes_corrigeables_sont_nommees(client, monkeypatch, exception, attendu):
+    """La liste a été établie sur un échec réel, pas par anticipation.
+
+    Au premier essai bout en bout, un CSV aux mauvaises colonnes rendait « une erreur
+    interne est survenue » — faux et inutile, alors que pandas savait exactement quelle
+    colonne manquait. C'est l'échec le plus probable au chargement d'un nouvel extrait.
+    """
+    def echec(*a, **kw):
+        raise exception
+
+    monkeypatch.setattr(api.build_db, "construire", echec)
+
+    r = client.post("/api/donnees/recharger", files=[])
+
+    assert attendu in _evenements(r)[-1]["message"]
+
+
 def test_une_panne_interne_reste_muette(client, monkeypatch):
     """Une trace d'exécution rendue au client exposerait des chemins de fichiers."""
     def panne(*a, **kw):
@@ -144,7 +169,9 @@ def test_une_panne_interne_reste_muette(client, monkeypatch):
     message = _evenements(r)[-1]["message"]
 
     assert "secret" not in message
-    assert message == api.TEXTE_ERREUR_INTERNE
+    # Le texte de la pipeline, pas celui des questions : un message qui parle de
+    # « question » sur une page de chargement de fichiers désoriente plus qu'il n'informe.
+    assert message == api.TEXTE_ERREUR_PIPELINE
 
 
 # --- 3. Le succès promeut, et oublie l'agent ------------------------------------------
