@@ -205,7 +205,7 @@ pipeline sont acceptés**, ce qui ferme aussi la traversée de chemin ; et
 prompt continuerait de décrire l'ancien schéma sans rien lever.
 
 **E7 (graphiques) est fait**, en option « le code décide » : `src/charts` lit la forme du
-résultat de la dernière requête réussie et en déduit s'il y a un graphique et lequel. Le
+résultat de la dernière requête réussie **qui se trace** et en déduit le graphique. Le
 modèle n'a ni outil de dessin ni spécification à produire — son SQL *est* l'expression de
 son intention. Les règles de lisibilité, qui vivaient dans `principes.md` sans que rien ne
 les applique, sont descendues dans le code. Les deux contraintes posées ont tenu : aucune

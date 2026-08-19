@@ -857,7 +857,8 @@ graphiques, parfois plusieurs ») — chacune gardée dans la doctrine « le cod
   référence de toute façon.
 - **Tracer à la demande sur chaque bloc de requête.** Chaque requête réussie porte dans
   la réponse la spécification que son résultat *permettrait* — mêmes règles pures,
-  calcul gratuit, aucun appel. Le tracé automatique reste réservé à la dernière requête,
+  calcul gratuit, aucun appel. Le tracé automatique reste réservé à la dernière requête
+  traçable (voir la correction du 19/08 plus bas),
   celle de la conclusion : tracer d'office les intermédiaires illustrerait le
   raisonnement, pas la réponse (décision E7 maintenue) ; l'interface offre un bouton.
 - **Bascules déclarées, jamais inventées.** La spécification liste ce que l'interface a
@@ -929,6 +930,30 @@ deux grains — reste attrapé par l'unicité des couples.
 Mesuré avant retrait, sur les 214 requêtes distinctes du cache : **une seule décision
 change**, un `entity × channel` en euros qui passe d'un refus à des barres légitimes.
 Aucun graphique existant n'est modifié, et le cas à deux unités garde son second axe.
+
+**Troisième défaut de la même soirée : le graphique disparaissait derrière un scalaire.**
+Le tracé automatique portait sur la dernière requête réussie, point. Or le modèle ajoute
+volontiers un scalaire *après* le résultat qui porte le visuel — un `CORR()` pour chiffrer
+le nuage qu'il vient de produire, un total de contrôle. Ce scalaire n'a rien à dessiner,
+et s'arrêter à lui privait la réponse de son graphique. Vu en direct dans sa pire forme :
+l'agent écrivait « le nuage de points associé est tracé automatiquement » et rien ne
+s'affichait — le texte du produit devenait faux.
+
+La règle devient « la dernière requête **qui se trace** ». Ce n'est pas l'abandon de la
+décision d'E7 mais sa précision : elle confondait *quelle requête porte la conclusion* et
+*quelle requête se dessine*. Se replier ne trace ni la plus grosse ni la première, mais la
+plus récente des conclusions dessinables. Mesuré sur le cache avant d'appliquer :
+**8 exécutions sur 197 gagnent un graphique, aucune n'en perd** ; sept tracent exactement
+ce que la question appelait — dont, trois fois, la question de corrélation qui perdait le
+sien dès que l'agent ajoutait une vérification. Le huitième montre une ventilation là où
+la réponse est un total : informatif, pas faux.
+
+Détail de méthode relevé en passant, et qui vaut pour tout le dépôt : le test censé garder
+cette règle **ne pouvait pas échouer**. Il mettait un `SELECT DISTINCT` en tête, qui ne se
+trace pas — il passait donc aussi bien sous la règle inverse « la première traçable ». Il
+a été rendu discriminant (deux requêtes traçables, la seconde attendue), et les deux
+directions sont désormais vérifiées par contre-épreuve : la règle inversée fait rougir
+l'un, l'absence de repli fait rougir l'autre.
 
 Trois choses à retenir de cette séquence, au-delà du cas. **Une garde ajoutée le matin a
 produit le défaut du soir** — c'est exactement le motif que ce document recense, un
