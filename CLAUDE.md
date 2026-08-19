@@ -226,11 +226,20 @@ sur les 171 exécutions en cache : aucune régression. Attention en rejouant à 
 règles de `src/charts` ne sont dans aucune clé de cache, à dessein — voir le recensement
 des clés dans `docs/decisions.md`.
 
-⚠ **La ligne de base est à refaire.** Le prompt a changé deux fois (E7, puis la
-description des trois formes traçables dans `role.md` le 19/08) : les 171 exécutions en
-cache ne se rejouent plus. Aucune mesure n'est comparable tant que la campagne de
-référence n'a pas été rejouée — compter environ 4,50 $. Séquence : peuplement `--k 1` →
-`--a-blanc` → référence.
+**La ligne de base a été rejouée le 19/08** (rapport `2026-08-19-1710.md`, prompt
+`56d615266615`, réglages `4f7a1f99217d`, séquence peuplement → à blanc → référence) :
+**corpus 47/51, grille 15/18**, un seul tâtonnement SQL sur 69 exécutions. C'est la
+référence des comparaisons d'E8. Ses échecs, tous lus dans les réponses réelles avant
+d'être retenus, dessinent les pistes d'E8 — et aucun n'accuse l'instrument :
+
+- **la somme faite de tête** (0/3 sur Twitch, plus deux questions de grille) : l'agent
+  additionne de tête deux valeurs rendues par une requête au lieu de les faire sommer
+  par SQL. `role.md` l'interdit déjà en clair ; c'est le défaut qu'E6 (supprimé) devait
+  traiter par mécanisme et qu'E8 doit traiter par la description ;
+- **le grain de `kpi_compteurs`** (2/3 instable + un `plafond_iterations` de grille) :
+  la corrélation déjà consignée tient toujours ;
+- une question de grille au libellé tronqué (« Evolution trafic SEA Est-ce que… ») finit
+  en `plafond_iterations` — à regarder avant d'en faire une piste.
 
 Puis E8 (réglage), E10 (observabilité), E11 (livraison). Le jeu de
 contrôle sous scellé ne s'ouvre qu'à la fin d'E8, et il mesure une non-régression sur les
