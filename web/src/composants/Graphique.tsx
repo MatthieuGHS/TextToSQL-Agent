@@ -1,6 +1,7 @@
 import {
   Bar,
   BarChart,
+  Brush,
   CartesianGrid,
   Legend,
   Line,
@@ -27,6 +28,10 @@ import type { Graphique as TypeGraphique } from '../types'
 // catégorie, `MAX_SERIES_PIVOT` côté serveur). En élargir la liste sans élargir le
 // plafond serveur ne servirait à rien — c'est lui qui décide.
 const COULEURS = ['#38bdf8', '#f472b6', '#a78bfa', '#4ade80', '#fb923c', '#facc15']
+
+// En deçà, la réglette de zoom serait du bruit : tout tient déjà à l'écran. Au-delà —
+// une année hebdomadaire et plus — elle permet de resserrer sur une plage de dates.
+const SEUIL_ZOOM = 24
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})/
 
@@ -174,6 +179,16 @@ export function Graphique({ graphique }: { graphique: TypeGraphique }) {
         {graphique.type === 'courbe' ? (
           <LineChart data={donnees} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
             {communs}
+            {donnees.length > SEUIL_ZOOM && (
+              <Brush
+                dataKey="x"
+                height={20}
+                stroke="#334155"
+                fill="transparent"
+                travellerWidth={8}
+                tickFormatter={() => ''}
+              />
+            )}
             {graphique.series.map((s, i) => (
               <Line
                 key={s.colonne}
