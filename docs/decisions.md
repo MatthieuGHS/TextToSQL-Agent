@@ -843,8 +843,33 @@ passage médiane → max ne change **qu'un seul cas**, précisément celui du d�
 (rapport des max ×43, des médianes ×5). Une réglette de zoom (Brush) s'ajoute côté
 interface sur les courbes de plus de 24 points — un confort de lecture, aucune décision.
 
+**Trois extensions du 19/08 au soir, sur demande du client** (« différents types de
+graphiques, parfois plusieurs ») — chacune gardée dans la doctrine « le code décide » :
+
+- **Histogramme natif.** Une colonne numérique seule (≥ 20 valeurs) est la forme d'une
+  question de distribution ; elle était refusée faute d'abscisse. Le découpage en
+  tranches est une décision de lisibilité, donc du code (Freedman-Diaconis, borné à 20
+  tranches) — le modèle peut toujours binner en SQL, ses tranches arrivent alors en
+  barres ordinaires. Volontairement **absent de `role.md`** : le mentionner aurait
+  périmé la ligne de base payée le jour même, pour un déclencheur que le modèle
+  produira rarement sans y être invité. La phrase attendra E8, qui rejouera la
+  référence de toute façon.
+- **Tracer à la demande sur chaque bloc de requête.** Chaque requête réussie porte dans
+  la réponse la spécification que son résultat *permettrait* — mêmes règles pures,
+  calcul gratuit, aucun appel. Le tracé automatique reste réservé à la dernière requête,
+  celle de la conclusion : tracer d'office les intermédiaires illustrerait le
+  raisonnement, pas la réponse (décision E7 maintenue) ; l'interface offre un bouton.
+- **Bascules déclarées, jamais inventées.** La spécification liste ce que l'interface a
+  le *droit* d'offrir : `variantes` (un continuum se lit aussi en barres ; l'inverse
+  est faux, une courbe entre catégories inventerait une continuité) et `empilable`
+  (seulement des séries de pivot sans second axe — même colonne d'origine, donc même
+  unité, seule situation où empiler a un sens). L'interface choisit parmi le déclaré,
+  aucune règle de lisibilité ne naît côté navigateur.
+
 *Écarté :* camembert (les barres couvrent le cas et se lisent mieux) ; barres empilées et
 horizontales (aucun déclencheur de forme aujourd'hui — à rouvrir sur demande du client).
+Les empilées sont finalement arrivées par la petite porte des bascules, où leur
+condition de validité (même unité) est vérifiable — pas comme type par défaut.
 Limite connue, non couverte : un format long à abscisse *ordinale* (année, canal, mesure)
 choisit le canal comme abscisse et refuse — le cas réel passe par `step_date`, on ne
 corrige pas un défaut anticipé.
