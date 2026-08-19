@@ -44,9 +44,13 @@ MAX_CATEGORIES = 30
 MAX_SERIES = 4
 
 # Plafond distinct pour les séries issues d'un pivot : elles partagent la même colonne,
-# donc la même unité et la même échelle — six courbes de coût par canal se lisent, quatre
-# mesures hétérogènes non. La palette de l'interface est calée sur ce maximum.
-MAX_SERIES_PIVOT = 6
+# donc la même unité et la même échelle — des courbes de coût par canal se lisent avec
+# une légende, quatre mesures hétérogènes non. Relevé de 6 à 12 le 19/08/2026 sur défaut
+# constaté : la dernière année compte 10 canaux actifs, et la question la plus attendue
+# — l'évolution par canal — était refusée dans son cas nominal. À 12, un pivot sur une
+# colonne à forte cardinalité (`support`, 81 valeurs) reste refusé. La palette de
+# l'interface est calée sur ce maximum.
+MAX_SERIES_PIVOT = 12
 
 # En deçà, un nuage de points ne montre rien : deux points forment toujours une droite.
 MIN_POINTS_NUAGE = 3

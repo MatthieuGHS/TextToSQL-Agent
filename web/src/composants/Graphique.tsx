@@ -25,10 +25,14 @@ import type { Graphique as TypeGraphique } from '../types'
  * placerait hors de portée de ces tests et la dédoublerait ; s'il en manque une, elle va
  * dans `src/charts/specification.py`.
  */
-// Six couleurs : le maximum de séries qu'une spécification peut porter (pivot par
-// catégorie, `MAX_SERIES_PIVOT` côté serveur). En élargir la liste sans élargir le
-// plafond serveur ne servirait à rien — c'est lui qui décide.
-const COULEURS = ['#38bdf8', '#f472b6', '#a78bfa', '#4ade80', '#fb923c', '#facc15']
+// Douze couleurs : le maximum de séries qu'une spécification peut porter (pivot par
+// catégorie, `MAX_SERIES_PIVOT` côté serveur). Écartées en teinte pour rester
+// distinguables sur fond sombre ; en élargir la liste sans élargir le plafond serveur
+// ne servirait à rien — c'est lui qui décide.
+const COULEURS = [
+  '#38bdf8', '#f472b6', '#a78bfa', '#4ade80', '#fb923c', '#facc15',
+  '#2dd4bf', '#f87171', '#818cf8', '#a3e635', '#e879f9', '#94a3b8',
+]
 
 // En deçà, la réglette de zoom serait du bruit : tout tient déjà à l'écran. Au-delà —
 // une année hebdomadaire et plus — elle permet de resserrer sur une plage de dates.

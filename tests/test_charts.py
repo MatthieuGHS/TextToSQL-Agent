@@ -178,6 +178,24 @@ def test_un_couple_abscisse_categorie_duplique_refuse_le_pivot():
     assert "se répète" in charts.refus(["step_date", "channel", "cost"], lignes)
 
 
+def test_dix_series_de_meme_unite_se_pivotent():
+    """Le cas nominal du jeu de données : dix canaux actifs sur la dernière année.
+
+    Contre-épreuve du plafond relevé le 19/08/2026 — à 6, la question la plus attendue
+    (« évolution par canal ») était refusée sur sa forme normale.
+    """
+    lignes = [
+        (SEMAINES[i], f"canal-{c}", 100.0 + c)
+        for i in range(3)
+        for c in range(10)
+    ]
+
+    g = charts.proposer(["step_date", "channel", "cost"], lignes)
+
+    assert g is not None and g.type == charts.COURBE
+    assert len(g.series) == 10
+
+
 def test_trop_de_categories_pivotees_est_refuse():
     seuil = charts.specification.MAX_SERIES_PIVOT
     lignes = [
