@@ -80,9 +80,9 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--source", default="tout", choices=["corpus", "grille", "tout"])
     a.add_argument("--a-blanc", action="store_true",
                    help="rejoue le cache sans un seul appel API")
-    a.add_argument("--campagne", default=None, metavar="EMPREINTE",
-                   help="à blanc : quelle campagne relire, quand l'effort n'en désigne "
-                        "plus une seule (voir data/eval/modele.json)")
+    a.add_argument("--campagne", default=None, metavar="CIBLE",
+                   help="à blanc : effort, réglages, modèle ou clé complète — dès que "
+                        "le plus court n'en désigne plus une (voir data/eval/modele.json)")
     a.add_argument("--controle", metavar="CONFIRMATION", default=None,
                    help=f"exécute le jeu sous scellé ; exige « {CONFIRMATION_CONTROLE} »")
     a.add_argument("--journal", action="store_true")

@@ -11,6 +11,7 @@ quel modèle la mesure est épinglée.
 
 from __future__ import annotations
 
+import json
 import pathlib
 
 import duckdb
@@ -290,6 +291,92 @@ def test_l_effort_change_l_empreinte():
     }
 
     assert len(empreintes) == 3
+
+
+# --- 4 bis. Le registre des campagnes -------------------------------------------------
+
+
+@pytest.fixture
+def sans_prompt(monkeypatch):
+    """`hors_ligne` recalcule l'empreinte du prompt depuis la base ; pas le sujet ici.
+
+    La base d'essai de ce module ne porte que `media`, quand le prompt décrit les trois
+    tables. Neutraliser cette lecture isole ce qui est mesuré — la résolution d'une
+    campagne — plutôt que de monter un schéma complet pour un champ dont ces tests ne
+    disent rien.
+    """
+    monkeypatch.setattr(agent_reel.prompt, "construire", lambda con: "prompt d'essai")
+
+
+def _campagne(racine, identifiant, reglages, effort="medium"):
+    """Le corps de `construire()`, sonde et agent en moins — le registre seul."""
+    registre = agent_reel._lire_registre(racine)
+    cle = agent_reel._cle(identifiant, reglages)
+    registre["campagnes"][cle] = {
+        "identifiant": identifiant, "effort": effort, "reglages": reglages,
+    }
+    registre["derniere"] = cle
+    racine.mkdir(parents=True, exist_ok=True)
+    (racine / agent_reel.FICHIER_MODELE).write_text(json.dumps(registre))
+
+
+def test_deux_modeles_au_meme_effort_ne_se_recouvrent_pas(tmp_path, con, sans_prompt):
+    """Défaut constaté le 24/08/2026, avant qu'il n'ait produit un chiffre faux.
+
+    La clé du registre était l'empreinte de réglages seule, et celle-ci ne contient pas
+    le modèle — délibérément, le cache le portant déjà de son côté. Deux campagnes au
+    même effort sur deux modèles se recouvraient donc : la seconde effaçait la première,
+    dont les entrées de cache restaient sur le disque **sans être adressables**, et un
+    rejeu à blanc resservait l'autre modèle en silence.
+
+    Ce que la comparaison Sonnet/Opus demandée par le client aurait produit : un rapport
+    parfaitement plausible sur la campagne qu'on croyait relire.
+    """
+    _campagne(tmp_path, "modele-a", "reglages-x")
+    _campagne(tmp_path, "modele-b", "reglages-x")
+
+    campagnes = agent_reel._lire_registre(tmp_path)["campagnes"]
+
+    assert len(campagnes) == 2, "une campagne en a écrasé une autre"
+    assert agent_reel.hors_ligne(tmp_path, con, "modele-a").identifiant == "modele-a"
+    assert agent_reel.hors_ligne(tmp_path, con, "modele-b").identifiant == "modele-b"
+    # Les réglages restent ceux de la campagne : c'est eux qui adressent le cache, et la
+    # clé composite ne doit pas fuiter jusque-là.
+    assert agent_reel.hors_ligne(tmp_path, con, "modele-a").empreinte_reglages \
+        == "reglages-x"
+
+
+def test_une_cible_ambigue_leve_au_lieu_de_choisir(tmp_path, con, sans_prompt):
+    """On lève plutôt que de trancher : le mauvais choix ne lèverait rien, lui.
+
+    Trois formes désignent une campagne — effort, réglages, modèle — et aucune n'est
+    garantie unique. Celle qui ne l'est pas doit s'arrêter en disant quoi passer à la
+    place, jamais rendre la première venue de l'ordre d'insertion.
+    """
+    _campagne(tmp_path, "modele-a", "reglages-x")
+    _campagne(tmp_path, "modele-b", "reglages-x")
+
+    with pytest.raises(KeyError, match="exactement une"):
+        agent_reel.hors_ligne(tmp_path, con, "reglages-x")
+    with pytest.raises(KeyError, match="exactement une"):
+        agent_reel.hors_ligne(tmp_path, con, "medium")
+    with pytest.raises(KeyError, match="exactement une"):
+        agent_reel.hors_ligne(tmp_path, con, "campagne-inconnue")
+
+
+def test_une_cible_non_ambigue_designe_toujours_sa_campagne(tmp_path, con, sans_prompt):
+    """Contre-épreuve de la précédente : la levée ne doit pas être devenue systématique.
+
+    Sans elle, remplacer la résolution par un `raise` inconditionnel passerait le test
+    d'ambiguïté — et rendrait le mode à blanc inutilisable.
+    """
+    _campagne(tmp_path, "modele-a", "reglages-x", effort="medium")
+    _campagne(tmp_path, "modele-b", "reglages-y", effort="high")
+
+    for cible in ("modele-a", "reglages-x", "medium"):
+        assert agent_reel.hors_ligne(tmp_path, con, cible).identifiant == "modele-a"
+    # Sans cible, la dernière campagne écrite.
+    assert agent_reel.hors_ligne(tmp_path, con).identifiant == "modele-b"
 
 
 # --- 5. Le champ « graphique », enfin renseigné ---------------------------------------

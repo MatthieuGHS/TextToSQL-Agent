@@ -147,7 +147,7 @@ class AgentHorsLigne:
         )
 
 
-# Registre des campagnes réelles, **une entrée par jeu de réglages**.
+# Registre des campagnes réelles, **une entrée par couple (modèle, réglages)**.
 #
 # L'empreinte du prompt se recalcule hors ligne depuis la base ; l'identifiant exact du
 # modèle et l'effort de raisonnement, non — le premier ne descend que d'une réponse, le
@@ -157,7 +157,21 @@ class AgentHorsLigne:
 # Un registre et non une trace unique : le balayage d'effort enchaîne plusieurs campagnes,
 # et écraser la précédente rendrait la ligne de base irrejouable à blanc alors que ses
 # réponses sont toujours en cache. Ce qu'on veut comparer, on doit pouvoir le relire.
+#
+# **Le modèle est dans la clé depuis le 24/08/2026**, et il y manquait. L'empreinte de
+# réglages ne le contient pas — délibérément, puisque le cache le porte déjà de son côté —
+# mais elle servait seule de clé ici. Deux campagnes au même effort sur deux modèles se
+# recouvraient donc : la seconde effaçait la première, dont les entrées de cache restaient
+# sur le disque sans être adressables, et un rejeu à blanc resservait l'autre modèle en
+# silence. Cinquième instance de la famille recensée dans `docs/decisions.md`, et la
+# première trouvée avant d'avoir produit un chiffre faux — ce qui l'arme, c'est la
+# comparaison Sonnet/Opus que le client vient de demander.
 FICHIER_MODELE = "modele.json"
+
+
+def _cle(identifiant: str, reglages: str) -> str:
+    """Ce qui distingue une campagne d'une autre : son modèle **et** ses réglages."""
+    return f"{identifiant}·{reglages}"
 
 
 def construire(racine: pathlib.Path, effort: str = boucle.EFFORT) -> AgentReel:
@@ -173,8 +187,11 @@ def construire(racine: pathlib.Path, effort: str = boucle.EFFORT) -> AgentReel:
 
     racine.mkdir(parents=True, exist_ok=True)
     registre = _lire_registre(racine)
-    registre["campagnes"][empreinte] = {"identifiant": identifiant, "effort": effort}
-    registre["derniere"] = empreinte
+    cle = _cle(identifiant, empreinte)
+    registre["campagnes"][cle] = {
+        "identifiant": identifiant, "effort": effort, "reglages": empreinte,
+    }
+    registre["derniere"] = cle
     (racine / FICHIER_MODELE).write_text(
         json.dumps(registre, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -200,12 +217,19 @@ def hors_ligne(
     est le comportement voulu plutôt qu'une comparaison entre deux prompts différents.
 
     Args:
-        cible: quelle campagne rejouer — un **effort** ou une **empreinte de réglages**.
-            Par défaut la dernière. Deux formes pour un seul argument parce qu'elles
-            répondent au même besoin à deux moments : l'effort suffit tant qu'il désigne
-            une campagne unique, l'empreinte est le recours quand il n'en désigne plus
+        cible: quelle campagne rejouer — un **effort**, une **empreinte de réglages**, un
+            **identifiant de modèle**, ou la clé complète. Par défaut la dernière. Une
+            seule forme d'argument pour toutes, parce qu'elles répondent au même besoin à
+            des moments différents : la plus courte suffit tant qu'elle désigne une
+            campagne unique, la plus longue est le recours quand elle n'en désigne plus
             une seule. Un second argument n'aurait fait qu'ajouter la question « lequel
             gagne s'ils se contredisent ? ».
+
+    Raises:
+        KeyError: si `cible` ne désigne **pas exactement une** campagne. On lève plutôt
+            que de choisir : rejouer à blanc la mauvaise campagne ne produit aucune
+            erreur, seulement un rapport plausible — c'est le mode de défaillance que
+            tout ce module existe pour empêcher.
     """
     fichier = racine / FICHIER_MODELE
     if not fichier.exists():
@@ -217,38 +241,28 @@ def hors_ligne(
     campagnes = registre["campagnes"]
 
     if cible is None:
-        empreinte = registre["derniere"]
-    elif cible in campagnes:
-        empreinte = cible
+        cle = registre["derniere"]
     else:
-        # Toutes les campagnes de cet effort, pas la première trouvée. L'effort ne
-        # suffira plus à en désigner une dès E8, qui fera varier `MAX_ITERATIONS` à
-        # effort constant : deux entrées `medium`, et un `next()` en rendrait une au
-        # hasard de l'ordre d'insertion. Rejouer à blanc la mauvaise campagne ne lève
-        # rien et produit un rapport plausible — même famille que les deux défauts de
-        # cache déjà corrigés. On lève plutôt que de choisir.
-        candidates = [e for e, c in campagnes.items() if c["effort"] == cible]
-        if not candidates:
-            connus = sorted({c["effort"] for c in campagnes.values()})
+        candidates = [
+            c for c, v in campagnes.items()
+            if cible in (c, v["reglages"], v["effort"], v["identifiant"])
+        ]
+        if len(candidates) != 1:
             raise KeyError(
-                f"aucune campagne à l'effort {cible!r} ; efforts disponibles : {connus}"
+                f"{len(candidates)} campagne(s) désignée(s) par {cible!r} — il en faut "
+                f"exactement une. Campagnes connues : {sorted(campagnes)}. Reprendre "
+                f"l'une de ces clés telle quelle pour trancher."
             )
-        if len(candidates) > 1:
-            raise KeyError(
-                f"{len(candidates)} campagnes à l'effort {cible!r} : "
-                f"{sorted(candidates)}. L'effort ne les distingue pas — relancer en "
-                f"passant l'empreinte de réglages voulue à la place."
-            )
-        empreinte = candidates[0]
+        cle = candidates[0]
 
-    campagne = campagnes[empreinte]
+    campagne = campagnes[cle]
     return AgentHorsLigne(
         identifiant=campagne["identifiant"],
         empreinte_prompt=prompt.empreinte(prompt.construire(con)),
         # Relue et non recalculée : les réglages de la campagne ne sont plus en mémoire,
         # et les recalculer depuis les constantes actuelles ferait pointer vers un cache
         # qui n'existe pas dès que l'une d'elles a bougé. Le registre est la seule source.
-        empreinte_reglages=empreinte,
+        empreinte_reglages=campagne["reglages"],
         effort=campagne.get("effort", ""),
     )
 

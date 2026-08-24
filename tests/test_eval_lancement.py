@@ -10,6 +10,8 @@ mesure :
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from src.db import connexion
@@ -23,6 +25,26 @@ def base_presente():
         connexion.ouvrir().close()
     except FileNotFoundError:
         pytest.skip("base absente : lancer `python -m src.etl.build_db`")
+
+
+def ecrire_registre(racine, *campagnes) -> None:
+    """Écrit un registre de campagnes, à partir de triplets (modèle, réglages, effort).
+
+    Le format vit ici plutôt que recopié dans chaque test : il a changé le 24/08/2026 —
+    la clé est passée de l'empreinte de réglages seule au couple (modèle, réglages) —
+    et cinq exemplaires écrits à la main avaient tous à être repris. Un sixième aurait
+    suivi.
+    """
+    racine.mkdir(parents=True, exist_ok=True)
+    entrees = {
+        agent_reel._cle(identifiant, reglages): {
+            "identifiant": identifiant, "effort": effort, "reglages": reglages,
+        }
+        for identifiant, reglages, effort in campagnes
+    }
+    (racine / agent_reel.FICHIER_MODELE).write_text(
+        json.dumps({"campagnes": entrees, "derniere": list(entrees)[-1]})
+    )
 
 
 # --- 1. Une campagne réelle ne part jamais d'ici --------------------------------------
@@ -58,11 +80,7 @@ def test_la_phrase_exacte_leve_le_refus(base_presente, tmp_path, monkeypatch):
     from tests.eval import __main__ as lancement
 
     monkeypatch.setattr(lancement, "RACINE_EVAL", tmp_path)
-    (tmp_path).mkdir(parents=True, exist_ok=True)
-    (tmp_path / agent_reel.FICHIER_MODELE).write_text(
-        '{"campagnes": {"reg00000": {"identifiant": "modele-x", '
-        '"effort": "medium"}}, "derniere": "reg00000"}'
-    )
+    ecrire_registre(tmp_path, ("modele-x", "reg00000", "medium"))
 
     code = main(["--controle", CONFIRMATION_CONTROLE, "--a-blanc", "--source", "corpus"])
 
@@ -82,10 +100,7 @@ def test_le_mode_a_blanc_n_appelle_jamais_le_modele(base_presente, tmp_path, mon
     from tests.eval import __main__ as lancement
 
     monkeypatch.setattr(lancement, "RACINE_EVAL", tmp_path)
-    (tmp_path / agent_reel.FICHIER_MODELE).write_text(
-        '{"campagnes": {"reg00000": {"identifiant": "modele-x", '
-        '"effort": "medium"}}, "derniere": "reg00000"}'
-    )
+    ecrire_registre(tmp_path, ("modele-x", "reg00000", "medium"))
 
     agent = agent_reel.hors_ligne(tmp_path, connexion.ouvrir())
 
@@ -100,9 +115,8 @@ def test_un_balayage_laisse_chaque_campagne_rejouable(base_presente, tmp_path):
     effaçait les précédentes : la ligne de base devenait irrejouable à blanc alors que ses
     réponses étaient toujours en cache — et c'est précisément elle qu'on veut comparer.
     """
-    (tmp_path / agent_reel.FICHIER_MODELE).write_text(
-        '{"campagnes": {"reg-medium": {"identifiant": "m", "effort": "medium"}, '
-        '"reg-high": {"identifiant": "m", "effort": "high"}}, "derniere": "reg-high"}'
+    ecrire_registre(
+        tmp_path, ("m", "reg-medium", "medium"), ("m", "reg-high", "high")
     )
     con = connexion.ouvrir()
     try:
@@ -111,7 +125,7 @@ def test_un_balayage_laisse_chaque_campagne_rejouable(base_presente, tmp_path):
             agent_reel.hors_ligne(tmp_path, con, "medium").empreinte_reglages
             == "reg-medium"
         )
-        with pytest.raises(KeyError, match="aucune campagne à l'effort 'low'"):
+        with pytest.raises(KeyError, match="0 campagne"):
             agent_reel.hors_ligne(tmp_path, con, "low")
     finally:
         con.close()
@@ -128,14 +142,12 @@ def test_un_effort_ambigu_leve_au_lieu_de_choisir(base_presente, tmp_path):
     La porte de sortie est vérifiée dans le même geste : lever sans recours ne ferait
     que déplacer le problème.
     """
-    (tmp_path / agent_reel.FICHIER_MODELE).write_text(
-        '{"campagnes": {"reg-4-tours": {"identifiant": "m", "effort": "medium"}, '
-        '"reg-8-tours": {"identifiant": "m", "effort": "medium"}}, '
-        '"derniere": "reg-8-tours"}'
+    ecrire_registre(
+        tmp_path, ("m", "reg-4-tours", "medium"), ("m", "reg-8-tours", "medium")
     )
     con = connexion.ouvrir()
     try:
-        with pytest.raises(KeyError, match="2 campagnes à l'effort 'medium'"):
+        with pytest.raises(KeyError, match="2 campagne"):
             agent_reel.hors_ligne(tmp_path, con, "medium")
 
         agent = agent_reel.hors_ligne(tmp_path, con, "reg-4-tours")
@@ -160,10 +172,8 @@ def test_l_option_campagne_atteint_le_runner(base_presente, tmp_path, monkeypatc
     from tests.eval import runner
     from tests.eval import __main__ as lancement
 
-    (tmp_path / agent_reel.FICHIER_MODELE).write_text(
-        '{"campagnes": {"reg-4-tours": {"identifiant": "m", "effort": "medium"}, '
-        '"reg-8-tours": {"identifiant": "m", "effort": "medium"}}, '
-        '"derniere": "reg-8-tours"}'
+    ecrire_registre(
+        tmp_path, ("m", "reg-4-tours", "medium"), ("m", "reg-8-tours", "medium")
     )
     monkeypatch.setattr(lancement, "RACINE_EVAL", tmp_path)
 
@@ -198,10 +208,7 @@ def test_l_empreinte_hors_ligne_est_celle_du_prompt_courant(base_presente, tmp_p
     """
     from src.agent import prompt
 
-    (tmp_path / agent_reel.FICHIER_MODELE).write_text(
-        '{"campagnes": {"reg00000": {"identifiant": "modele-x", '
-        '"effort": "high"}}, "derniere": "reg00000"}'
-    )
+    ecrire_registre(tmp_path, ("modele-x", "reg00000", "high"))
     con = connexion.ouvrir()
     try:
         agent = agent_reel.hors_ligne(tmp_path, con)
