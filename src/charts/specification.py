@@ -77,6 +77,11 @@ BARRES = "barres"
 NUAGE = "nuage"
 HISTOGRAMME = "histogramme"
 
+# Nommé plutôt que recopié : deux fonctions le rendent, et le repli d'abscisse le
+# reconnaît. Trois occurrences d'une même chaîne finissent par diverger d'un caractère,
+# et le repli cesserait alors de se déclencher sans que rien ne le signale.
+ABSCISSE_REPETEE = "l'abscisse se répète : le résultat n'est pas une série par ligne"
+
 _TEMPORELS = (datetime.date, datetime.datetime)
 
 
@@ -228,6 +233,47 @@ def _analyser(
             return _nuage(colonnes, lignes)
         return "aucune colonne de catégorie, de date ou d'ordinal à porter en abscisse"
 
+    issue = _avec_abscisse(colonnes, lignes, numeriques, x)
+    if issue != ABSCISSE_REPETEE:
+        return issue
+
+    # Repli, sur défaut constaté le 24/08/2026 : l'abscisse retenue se répète, mais une
+    # colonne temporelle attend ailleurs dans le résultat. `SELECT channel, mois, clics`
+    # est la forme naturelle d'une comparaison par canal ; elle mettait `channel` en
+    # abscisse au seul motif qu'il arrive en premier, quand `SELECT mois, channel, clics`
+    # — mêmes données, mêmes colonnes — se traçait. La forme décidait par la **position**
+    # et non par la **nature**, ce que ce module dit précisément ne pas faire.
+    #
+    # En repli seulement, et c'est la mesure qui l'impose : préférer une colonne
+    # temporelle *d'emblée* change 12 décisions sur les 214 requêtes du cache, dont
+    # 11 dégradations — un `MIN(step_date) AS debut` devenant l'abscisse de barres par
+    # `support` qui se lisaient très bien. Ici, où le code refusait déjà, une seule
+    # décision change : celle du défaut. Un refus ne peut rien casser en devenant un
+    # tracé.
+    #
+    # Une seule colonne temporelle, sinon rien : à deux, laquelle est l'abscisse et
+    # laquelle est la mesure n'est plus une question de forme mais d'intention, et
+    # l'intention ne se devine pas.
+    temporelles = [
+        i for i in range(len(colonnes)) if i != x and _est_temporelle(lignes, i)
+    ]
+    if len(temporelles) != 1:
+        return issue
+    return _avec_abscisse(colonnes, lignes, numeriques, temporelles[0])
+
+
+def _avec_abscisse(
+    colonnes: Sequence[str],
+    lignes: Sequence[Sequence[Any]],
+    numeriques: Sequence[int],
+    x: int,
+) -> Graphique | str:
+    """La décision une fois l'abscisse choisie. Séparée pour pouvoir être rejouée.
+
+    Le repli d'abscisse a besoin de refaire exactement le même travail sur une autre
+    colonne. L'écrire deux fois ferait diverger les deux copies à la première règle
+    ajoutée — c'est ce qui était déjà arrivé à la paire `refus()` / `proposer()`.
+    """
     mesures = [i for i in numeriques if i != x]
     if not mesures:
         return "aucune colonne numérique à porter en ordonnée"
@@ -248,7 +294,7 @@ def _analyser(
     ]
     if len(categories) == 1 and len(mesures) == 1:
         return _pivot(colonnes, lignes, x, categories[0], mesures[0])
-    return "l'abscisse se répète : le résultat n'est pas une série par ligne"
+    return ABSCISSE_REPETEE
 
 
 def _large(
@@ -326,7 +372,7 @@ def _pivot(
     """
     couples = [(l[x], l[categorie]) for l in lignes]
     if len(set(couples)) != len(couples):
-        return "l'abscisse se répète : le résultat n'est pas une série par ligne"
+        return ABSCISSE_REPETEE
 
     valeurs_categorie: list[Any] = []
     for l in lignes:

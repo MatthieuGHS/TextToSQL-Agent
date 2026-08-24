@@ -875,8 +875,12 @@ horizontales (aucun déclencheur de forme aujourd'hui — à rouvrir sur demande
 Les empilées sont finalement arrivées par la petite porte des bascules, où leur
 condition de validité (même unité) est vérifiable — pas comme type par défaut.
 Limite connue, non couverte : un format long à abscisse *ordinale* (année, canal, mesure)
-choisit le canal comme abscisse et refuse — le cas réel passe par `step_date`, on ne
-corrige pas un défaut anticipé.
+choisit le canal comme abscisse et refuse. Le cas **temporel** de cette même limite, lui,
+a été corrigé le 24/08 — voir plus bas : il était atteint depuis le début, contrairement à
+ce que ce paragraphe affirmait. Celui-ci reste ouvert parce que `_est_ordinale` exige une
+monotonie stricte, qu'un format long n'a pas par construction : le corriger demanderait
+une autre règle, et aucune requête du cache ne la réclame — la même question posée avec
+`step_date` passe désormais.
 
 ### Deux plafonds relevés, l'un et l'autre sur défaut constaté
 

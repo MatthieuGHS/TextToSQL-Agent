@@ -164,6 +164,71 @@ def test_le_pivot_garde_les_trous():
     assert g.series[1].valeurs == (None, 20.0)
 
 
+def test_le_pivot_ne_depend_pas_de_l_ordre_des_colonnes():
+    """Défaut constaté le 24/08/2026, sur la question 14 de la grille client.
+
+    `SELECT channel, mois, clics` est la forme naturelle d'une comparaison par canal, et
+    elle était refusée : `channel` passait en abscisse au seul motif qu'il arrive en
+    premier. Les mêmes données dans l'autre ordre se traçaient. La forme décidait par la
+    **position** et non par la **nature**, ce que ce module dit précisément ne pas faire.
+
+    Les deux ordres sont vérifiés ici parce que l'ordre naturel était le seul testé —
+    huit tests de pivot écrivaient tous l'abscisse en premier, et le jeu d'essai portait
+    donc la même hypothèse que le code.
+    """
+    naturel = [
+        (SEMAINES[0], "sea", 100.0), (SEMAINES[0], "seo", 10.0),
+        (SEMAINES[1], "sea", 200.0), (SEMAINES[1], "seo", 20.0),
+    ]
+    inverse = [(canal, semaine, clics) for semaine, canal, clics in naturel]
+
+    a = charts.proposer(["step_date", "channel", "clics"], naturel)
+    b = charts.proposer(["channel", "step_date", "clics"], inverse)
+
+    assert b is not None, "l'ordre des colonnes ne doit pas décider du tracé"
+    assert (b.type, b.x) == (a.type, a.x) == (charts.COURBE, "step_date")
+    assert [s.colonne for s in b.series] == [s.colonne for s in a.series] == ["sea", "seo"]
+    assert b.series[0].valeurs == a.series[0].valeurs == (100.0, 200.0)
+
+
+def test_le_repli_ne_prend_pas_une_borne_de_periode_pour_une_abscisse():
+    """Contre-épreuve du repli, et la raison pour laquelle il n'agit qu'en repli.
+
+    Préférer une colonne temporelle *d'emblée* changeait 12 décisions sur les 214
+    requêtes du cache, dont 11 dégradations de cette forme exacte : un `MIN(step_date)`
+    de contrôle devenait l'abscisse de barres par support qui se lisaient très bien.
+
+    Ici l'abscisse retenue ne se répète pas, donc le repli ne s'arme jamais — c'est ce
+    qui garantit qu'il ne peut rien casser de ce qui marchait.
+    """
+    lignes = [
+        ("Radio A", 1500.0, SEMAINES[0], SEMAINES[3]),
+        ("Radio B", 900.0, SEMAINES[1], SEMAINES[2]),
+        ("Radio C", 300.0, SEMAINES[0], SEMAINES[1]),
+    ]
+
+    g = charts.proposer(["support", "depense", "debut", "fin"], lignes)
+
+    assert g is not None and g.type == charts.BARRES
+    assert g.x == "support"
+
+
+def test_le_repli_s_abstient_devant_deux_colonnes_temporelles():
+    """À deux, laquelle est l'abscisse n'est plus une question de forme mais d'intention.
+
+    Le refus initial est alors conservé : deviner ici tracerait un graphique lisible et
+    faux, c'est-à-dire le pire cas.
+    """
+    lignes = [
+        ("sea", SEMAINES[0], SEMAINES[1], 100.0),
+        ("sea", SEMAINES[1], SEMAINES[2], 200.0),
+        ("seo", SEMAINES[0], SEMAINES[1], 10.0),
+        ("seo", SEMAINES[1], SEMAINES[2], 20.0),
+    ]
+
+    assert "se répète" in charts.refus(["channel", "debut", "fin", "clics"], lignes)
+
+
 def test_un_couple_abscisse_categorie_duplique_refuse_le_pivot():
     """Contre-épreuve : la dimension cachée reste attrapée à travers le pivot.
 
