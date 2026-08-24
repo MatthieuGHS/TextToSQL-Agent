@@ -270,14 +270,17 @@ péremption.
 Trois dépendances dures, le reste est libre : **A3 avant toute campagne sur un second
 modèle**, **A1 avant la campagne de référence d'E8**, **C avant E11**.
 
-- **Lot A — socle, gratuit, ne périme aucune mesure.** Quatre défauts constatés le 24/08,
-  tous reproduits avant d'être retenus (détail dans `docs/decisions.md`) : le pivot
-  refusé sur l'ordre des colonnes (**A1**), deux tests qui ne prouvaient pas ce qu'ils
-  annonçaient (**A2**), le registre des campagnes qui ne distingue pas les modèles
-  (**A3**). Plus la demande 2, les **tables utilisées** par chaque requête (**A4**) —
-  gratuite et déterministe, l'extraction existant déjà dans le harnais ; la liste des
-  tables se lit sur la connexion et jamais en dur, sans quoi elle se périme au premier
-  rechargement de données.
+- **Lot A — FAIT le 24/08. Socle, gratuit, aucune mesure périmée.** Quatre défauts
+  constatés, tous reproduits avant d'être retenus (détail dans `docs/decisions.md`) : le
+  pivot refusé sur l'ordre des colonnes (**A1** — la question 14 de la grille rend
+  désormais les deux courbes que le client attend), deux tests qui ne prouvaient pas ce
+  qu'ils annonçaient (**A2**), le registre des campagnes qui ne distingue pas les modèles
+  (**A3** — préalable à toute comparaison Sonnet/Opus). Plus la demande 2, les **tables
+  utilisées** par chaque requête (**A4**), lues par le parseur du moteur et non par une
+  recherche de noms dans le texte ; la liste des tables réelles se lit sur la connexion et
+  jamais en dur, sans quoi elle se périme au premier rechargement de données.
+  Vérifié après coup : la ligne de base se rejoue à blanc à l'identique, **corpus 47/51,
+  grille 15/18**, 69 exécutions toutes depuis le cache, zéro appel.
 - **Lot B — E8, le seul lot facturé.** **B0** : la comparaison 4 vs 5 itérations, première
   mesure à produire, qui redonne un sens au 47/51 aujourd'hui attaché à une configuration
   qui n'est plus la nôtre. **B1** : la campagne 1, désormais **cinq** modifications
