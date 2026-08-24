@@ -20,6 +20,7 @@ import datetime
 import decimal
 import json
 import pathlib
+import threading
 
 import duckdb
 import pytest
@@ -238,6 +239,34 @@ def test_l_absence_de_graphique_est_explicite_et_non_une_omission(client, monkey
 # --- 3. Le flux -----------------------------------------------------------------------
 
 
+def poster_borne(client, chemin: str, *, delai: float = 5.0, **kw) -> list[dict]:
+    """Poste sur une route de flux **sans pouvoir pendre**, et rend ses événements.
+
+    Un flux dont le fil producteur meurt sans poser son sentinelle n'échoue pas : il
+    attend pour toujours. Un test écrit naïvement n'y rougit donc jamais — il bloque, et
+    emporte la suite entière en dépassement, sans message. C'est arrivé aux deux routes de
+    flux, et c'est ce que ce détour garantit : **on borne l'attente et on assert sur la
+    borne**, plutôt que d'attendre qu'une pendaison n'ait pas lieu.
+
+    Partagé par les deux fichiers de test de la frontière parce que la règle est subtile
+    et que la recopier la ferait diverger — le second exemplaire perdrait la borne le jour
+    où quelqu'un le simplifie.
+    """
+    resultat: dict = {}
+
+    def requete() -> None:
+        resultat["r"] = client.post(chemin, **kw)
+
+    fil = threading.Thread(target=requete, daemon=True)
+    fil.start()
+    fil.join(timeout=delai)
+
+    assert not fil.is_alive(), (
+        f"{chemin} n'a pas rendu la main en {delai:.0f} s : sentinelle jamais posé"
+    )
+    return _evenements(resultat["r"])
+
+
 def _evenements(reponse) -> list[dict]:
     return [json.loads(l) for l in reponse.text.splitlines() if l.strip()]
 
@@ -258,6 +287,27 @@ def test_le_flux_rapporte_les_etapes_avant_la_reponse(client):
     ]
 
 
+def _sans_duree(charge: dict) -> dict:
+    """La réponse, moins les durées d'exécution.
+
+    `duree_ms` est une mesure d'horloge : deux exécutions de la même requête ne rendent
+    pas la même valeur, et la comparer revenait à faire clignoter le test — mesuré à
+    **6 divergences sur 40 paires d'appels**, toutes sur ce seul champ. Un test qui rougit
+    sans défaut est pire qu'inutile : il apprend à relancer plutôt qu'à chercher.
+
+    Retiré plutôt que toléré à ±n millisecondes : une tolérance serait un seuil de plus à
+    justifier, pour garder un champ dont l'égalité ne prouve rien. Tout le reste — texte,
+    requêtes, lignes, graphique, arrêt, usage — reste comparé au caractère près.
+    """
+    return {
+        **charge,
+        "requetes": [
+            {c: v for c, v in requete.items() if c != "duree_ms"}
+            for requete in charge["requetes"]
+        ],
+    }
+
+
 def test_le_flux_rend_la_meme_reponse_que_la_voie_directe(client):
     """Les deux points d'entrée appellent le même noyau ; aucun ne doit dériver."""
     direct = client.post("/api/question", json={"question": "Quelles dépenses ?"}).json()
@@ -265,7 +315,10 @@ def test_le_flux_rend_la_meme_reponse_que_la_voie_directe(client):
         client.post("/api/question/flux", json={"question": "Quelles dépenses ?"})
     )[-1]["reponse"]
 
-    assert flux == direct
+    assert _sans_duree(flux) == _sans_duree(direct)
+    # La durée n'est pas comparée, mais elle doit être là : la retirer du contrat de la
+    # frontière serait un autre changement, et ce test ne doit pas le masquer.
+    assert all("duree_ms" in r for r in flux["requetes"])
 
 
 def test_une_panne_en_cours_de_flux_devient_un_evenement(client, monkeypatch):
@@ -298,26 +351,15 @@ def test_un_echec_d_assemblage_termine_le_flux_au_lieu_de_le_laisser_pendre(
     dans un fil borné : sans le correctif, ce test échoue par dépassement au lieu de
     bloquer toute la suite.
     """
-    import threading
-
     def leve():
         raise FileNotFoundError("Base absente : la construire d'abord")
 
     monkeypatch.setattr(api.boucle, "agent_par_defaut", leve)
 
-    resultat = {}
+    evenements = poster_borne(
+        client, "/api/question/flux", json={"question": "Quelles dépenses ?"}
+    )
 
-    def requete():
-        resultat["r"] = client.post(
-            "/api/question/flux", json={"question": "Quelles dépenses ?"}
-        )
-
-    fil = threading.Thread(target=requete, daemon=True)
-    fil.start()
-    fil.join(timeout=5.0)
-
-    assert not fil.is_alive(), "le flux n'a pas rendu la main : sentinelle jamais posé"
-    evenements = _evenements(resultat["r"])
     assert evenements[-1]["type"] == "erreur"
     # La même cause rend un 503 explicite sur la voie directe : le flux doit dire
     # la même chose, pas un message générique.

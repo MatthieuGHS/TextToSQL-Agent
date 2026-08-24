@@ -22,6 +22,10 @@ from fastapi.testclient import TestClient
 
 from src.app import api
 from src.etl import build_db, checks, rechargement
+# La borne d'attente d'un flux vit dans le fichier de test de l'autre route de flux, et
+# elle est partagée plutôt que recopiée : c'est une règle subtile, et un second exemplaire
+# perdrait sa borne le jour où quelqu'un le simplifie.
+from tests.test_app_api import poster_borne
 
 
 @pytest.fixture
@@ -231,13 +235,19 @@ def test_une_panne_avant_la_construction_rend_le_verrou(client, monkeypatch):
     emportait le fil sans sentinelle ni libération. Ici, la même faute aurait un effet
     pire — plus aucune reconstruction possible, chaque tentative répondant « déjà en
     cours » pour toujours.
+
+    **Les deux appels sont bornés**, et c'est ce qui rend ce test capable de rougir.
+    Écrit sans borne — sa forme d'origine — il ne signalait rien du tout sans le
+    correctif : il pendait, et se faisait tuer avec la suite entière au bout de 90 s,
+    sans message. Un test qui ne peut que pendre ne prouve pas plus qu'un test qui ne
+    peut pas échouer.
     """
     monkeypatch.setattr(
         api, "_JournalVersFile",
         lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("panne d'installation")),
     )
 
-    premier = _evenements(client.post("/api/donnees/recharger", files=[]))
+    premier = poster_borne(client, "/api/donnees/recharger", files=[])
     assert premier[-1]["type"] == "erreur"
     assert premier[-1]["message"] == api.TEXTE_ERREUR_PIPELINE
 
@@ -246,7 +256,7 @@ def test_une_panne_avant_la_construction_rend_le_verrou(client, monkeypatch):
     monkeypatch.undo()
     monkeypatch.setattr(api.build_db, "construire", lambda out, raw_dir=None, **kw: out)
     monkeypatch.setattr(api.boucle, "reinitialiser", lambda: None)
-    second = _evenements(client.post("/api/donnees/recharger", files=[]))
+    second = poster_borne(client, "/api/donnees/recharger", files=[])
 
     assert second[-1]["type"] == "termine"
 
