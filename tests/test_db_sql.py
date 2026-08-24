@@ -226,6 +226,76 @@ def test_la_connexion_reste_utilisable_apres_interruption(con):
     assert sql.run_sql("SELECT COUNT(*) FROM media", con).lignes[0][0] == 3
 
 
+# --- 3 bis. Les tables lues, pour l'utilisateur ---------------------------------------
+#
+# Demandées par le client pour voir d'un coup d'œil d'où vient un chiffre. Deux périmètres
+# cohabitent dans ce jeu de données — `media` est l'annonceur seul, `contexte` le marché
+# entier — et une somme entre les deux est fausse mais crédible. Savoir quelle table a
+# répondu est donc une information de premier ordre, pas une décoration.
+#
+# Ces tests sont écrits contre le piège que la solution facile aurait laissé passer : une
+# recherche de noms dans le texte de la requête.
+
+
+def test_les_tables_lues_remontent_avec_le_resultat(con):
+    resultat = sql.run_sql("SELECT SUM(cost) FROM media", con)
+
+    assert resultat.tables == ["media"]
+
+
+def test_une_jointure_rend_ses_deux_tables_triees(con):
+    resultat = sql.run_sql(
+        "SELECT m.cost, k.mes FROM kpi_compteurs k JOIN media m USING (step_date)", con
+    )
+
+    # Triées : cette liste part dans une réponse HTTP, deux exécutions doivent
+    # rendre le même ordre.
+    assert resultat.tables == ["kpi_compteurs", "media"]
+
+
+def test_un_nom_de_table_dans_un_litteral_n_est_pas_une_table_lue(con):
+    """Contre-épreuve, et la raison de passer par le parseur du moteur.
+
+    Une recherche de `\\bmedia\\b` dans le texte compterait ici `media` deux fois : la
+    table lue et la chaîne de caractères. Sur `contexte`, elle inventerait purement une
+    table que la requête ne touche pas — et l'utilisateur lirait « cette réponse vient du
+    marché » sur un chiffre qui vient de l'annonceur seul.
+    """
+    resultat = sql.run_sql(
+        "SELECT channel FROM media WHERE channel ILIKE '%contexte%' "
+        "OR channel = 'kpi_compteurs'",
+        con,
+    )
+
+    assert resultat.tables == ["media"]
+
+
+def test_une_cte_homonyme_d_une_table_n_est_pas_comptee(con):
+    """DuckDB analyse une CTE comme une référence de table : le nom ne se résout
+    qu'ensuite. Sans le retrait explicite des CTE, `WITH kpi_compteurs AS (…)` ferait
+    croire que la table l'a été alors qu'elle n'a jamais été ouverte."""
+    resultat = sql.run_sql(
+        "WITH kpi_compteurs AS (SELECT 1 AS x) SELECT x FROM kpi_compteurs", con
+    )
+
+    assert resultat.tables == []
+
+
+def test_une_table_absente_de_la_base_n_est_jamais_annoncee(con):
+    """`duckdb_tables()` fait autorité : l'arbre peut nommer autre chose qu'une table."""
+    assert sql.tables_citees("SELECT 1", con) == []
+    assert sql.tables_citees("SELECT * FROM range(3)", con) == []
+
+
+def test_une_requete_inanalysable_ne_fait_pas_tomber_la_reponse(con):
+    """Le champ est un affichage, calculé après une requête qui a déjà réussi.
+
+    Lever ici transformerait une réponse produite en panne. Vide plutôt que faux, et
+    l'interface n'affiche alors rien.
+    """
+    assert sql.tables_citees("ceci n'est pas du SQL", con) == []
+
+
 # --- 4. Ce que le modèle lit ----------------------------------------------------------
 
 

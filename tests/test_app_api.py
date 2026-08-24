@@ -203,6 +203,18 @@ def test_la_specification_de_graphique_traverse_la_frontiere(client):
     ]
 
 
+def test_chaque_requete_porte_les_tables_qu_elle_a_lues(client):
+    """Demandé par le client, et utile pour une raison précise à ce jeu de données.
+
+    Deux périmètres y cohabitent — `media` est l'annonceur seul, `contexte` le marché
+    entier — avec des ordres de grandeur voisins. Voir quelle table a répondu est ce qui
+    distingue un chiffre juste d'un chiffre seulement crédible.
+    """
+    charge = client.post("/api/question", json={"question": "Quelles dépenses ?"}).json()
+
+    assert charge["requetes"][0]["tables"] == ["media"]
+
+
 def test_chaque_requete_reussie_porte_sa_specification_de_graphique(client):
     """Le « tracer à la demande » des blocs de requête : mêmes règles, calcul pur.
 

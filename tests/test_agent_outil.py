@@ -79,6 +79,20 @@ def test_une_requete_valide_renvoie_ses_lignes(con):
     assert executee.a_reussi
     assert executee.colonnes == ["channel", "cost"]
     assert executee.lignes == [("tv", 1000.0)]
+    assert executee.tables == ["media"]
+
+
+def test_une_requete_en_echec_n_annonce_aucune_table(con):
+    """Une erreur de syntaxe n'a lu aucune table ; en nommer une serait l'inventer.
+
+    Le tâtonnement est affiché à l'utilisateur comme les autres requêtes : lui montrer
+    « tables : media » sur une requête qui n'a jamais atteint la base lui apprendrait
+    quelque chose de faux sur ce qui vient de se passer.
+    """
+    executee = outil.executer("SELECT inconnue FROM media", con)
+
+    assert not executee.a_reussi
+    assert executee.tables == []
 
 
 @pytest.mark.parametrize(

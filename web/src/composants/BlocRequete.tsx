@@ -45,6 +45,24 @@ export function BlocRequete({ requete }: { requete: Requete }) {
         <code className="flex-1 truncate text-xs font-mono text-slate-400">
           {requete.sql.replace(/\s+/g, ' ')}
         </code>
+        {/* Dans l'en-tête, donc lisibles **sans déplier** : le client veut voir d'un coup
+            d'œil quelles tables une requête a lues, et deux périmètres cohabitent dans ce
+            jeu de données — `media` est l'annonceur seul, `contexte` le marché entier.
+            Savoir laquelle a répondu est ce qui distingue un chiffre juste d'un chiffre
+            crédible. */}
+        {requete.tables.length > 0 && (
+          <span className="hidden sm:flex gap-1 shrink-0">
+            {requete.tables.map((t) => (
+              <span
+                key={t}
+                className="rounded bg-slate-800/80 px-1.5 py-0.5 text-[11px]
+                           font-mono text-slate-400"
+              >
+                {t}
+              </span>
+            ))}
+          </span>
+        )}
         {!enEchec && (
           <span className="text-xs text-slate-600 tabular-nums whitespace-nowrap">
             {requete.lignes.length} l · {requete.duree_ms} ms

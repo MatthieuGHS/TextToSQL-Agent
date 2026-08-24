@@ -74,6 +74,7 @@ def requete(executee) -> schemas.RequeteSortante:
         tronque=executee.tronque,
         duree_ms=executee.duree_ms,
         erreur=executee.erreur,
+        tables=list(executee.tables),
         graphique=graphique(tracable),
     )
 

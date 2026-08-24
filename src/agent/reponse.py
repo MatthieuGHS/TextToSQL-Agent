@@ -90,6 +90,10 @@ class RequeteExecutee:
     tronque: bool = False
     duree_ms: int = 0
     erreur: str | None = None
+    # Les tables réellement lues, décidées par le parseur du moteur (`db.sql`). Vide sur
+    # une requête en échec : une erreur de syntaxe n'a lu aucune table, et en annoncer
+    # une serait une information inventée.
+    tables: list[str] = field(default_factory=list)
 
     @property
     def a_reussi(self) -> bool:

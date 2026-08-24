@@ -21,10 +21,11 @@ erreur récupérable en échec.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import duckdb
 
@@ -75,6 +76,9 @@ class ResultatSql:
     lignes: list[tuple]
     tronque: bool
     duree_ms: int
+    # Les tables réellement lues. Vide plutôt que faux quand l'analyse échoue : voir
+    # `tables_citees`.
+    tables: list[str] = field(default_factory=list)
 
     def __len__(self) -> int:
         return len(self.lignes)
@@ -187,6 +191,54 @@ def _set_tables(con: duckdb.DuckDBPyConnection) -> set[str]:
     return {r[0] for r in con.execute("SELECT table_name FROM duckdb_tables()").fetchall()}
 
 
+def _noms_de_l_arbre(noeud, tables: list[str], ctes: list[str]) -> None:
+    """Descend l'arbre sérialisé en collectant les tables lues et les CTE déclarées."""
+    if isinstance(noeud, dict):
+        if noeud.get("type") == "BASE_TABLE":
+            tables.append(noeud.get("table_name"))
+        for cle, valeur in noeud.items():
+            if cle == "cte_map":
+                ctes.extend(e["key"] for e in (valeur.get("map") or []))
+            _noms_de_l_arbre(valeur, tables, ctes)
+    elif isinstance(noeud, list):
+        for valeur in noeud:
+            _noms_de_l_arbre(valeur, tables, ctes)
+
+
+def tables_citees(query: str, con: duckdb.DuckDBPyConnection) -> list[str]:
+    """Les tables de la base que cette requête lit réellement.
+
+    **Par le parseur du moteur, pas par une expression régulière** — la règle qui vaut
+    déjà pour la validation vaut ici. Une recherche de noms dans le texte se laisse
+    berner par un littéral (`WHERE support ILIKE '%media%'`) ou par un alias, et rendrait
+    à l'utilisateur une liste plausible et fausse. `json_serialize_sql` rend l'arbre, où
+    une table lue et une chaîne de caractères ne se confondent pas.
+
+    Deux filtres sur ce que l'arbre rapporte. Les **CTE sont retirées** : DuckDB les
+    analyse comme des références de table, la résolution du nom n'ayant lieu qu'ensuite —
+    un `WITH media AS (…)` compterait donc `media` sans que la table soit lue.
+    L'intersection avec les **tables réelles** écarte le reste, y compris une vue ou un
+    nom de fonction que l'arbre exposerait autrement.
+
+    Vide plutôt que faux en cas d'échec, et jamais d'exception : c'est un champ
+    d'affichage, calculé après une requête qui a déjà réussi. La faire tomber pour ça
+    serait hors de proportion, et l'interface n'affiche simplement rien.
+    """
+    try:
+        brut = con.execute("SELECT json_serialize_sql(?)", [query]).fetchone()[0]
+        lues: list[str] = []
+        ctes: list[str] = []
+        _noms_de_l_arbre(json.loads(brut), lues, ctes)
+    except Exception:  # noqa: BLE001 — un affichage ne fait pas tomber une réponse
+        logger.debug("tables non extraites de : %s", " ".join(query.split())[:120])
+        return []
+
+    reelles = _set_tables(con)
+    # Trié : cette liste part dans une réponse HTTP, et deux exécutions de la même
+    # requête doivent rendre le même ordre.
+    return sorted((set(lues) - set(ctes)) & reelles)
+
+
 def _executer_borne(
     con: duckdb.DuckDBPyConnection, query: str, delai: float, origine: str
 ) -> tuple[list[str], list[tuple]]:
@@ -281,6 +333,10 @@ def run_sql(
         debut = time.monotonic()
         colonnes, lignes = _executer_borne(con, enveloppe, delai, query)
         duree_ms = int((time.monotonic() - debut) * 1000)
+        # Après l'exécution, et sur la requête du modèle plutôt que sur l'enveloppe :
+        # celle-ci ajoute un `SELECT * FROM (…)` qui n'est de personne. Hors du chronomètre
+        # aussi — c'est notre analyse, pas le coût de sa requête.
+        tables = tables_citees(query, con)
     except SqlTropLong as exc:
         fermable = getattr(exc, "connexion_liberee", True)
         raise
@@ -295,7 +351,7 @@ def run_sql(
         " ".join(query.split())[:120],
     )
 
-    return ResultatSql(colonnes, lignes[:limite], tronque, duree_ms)
+    return ResultatSql(colonnes, lignes[:limite], tronque, duree_ms, tables)
 
 
 def en_texte(

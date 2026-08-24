@@ -77,6 +77,7 @@ def executer(query: str, con=None) -> RequeteExecutee:
         lignes=list(resultat.lignes),
         tronque=resultat.tronque,
         duree_ms=resultat.duree_ms,
+        tables=list(resultat.tables),
     )
 
 

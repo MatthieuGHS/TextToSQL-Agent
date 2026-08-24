@@ -1162,6 +1162,45 @@ leurs symptômes**, celle-ci en lisant la clé avant d'écrire le code qui allai
 dessus. C'est moins cher, et c'est reproductible — la question à poser devant tout nouveau
 réglage reste la même, et le tableau des clés est l'endroit où elle se pose.
 
+### Les tables lues se demandent au parseur, pas au texte
+
+Demande 2 du client : voir d'un coup d'œil quelles tables une requête a lues. Elle a l'air
+cosmétique et elle ne l'est pas — deux périmètres cohabitent dans ce jeu de données, avec
+des ordres de grandeur voisins, et savoir si un chiffre vient de `media` (l'annonceur seul)
+ou de `contexte` (le marché) est ce qui distingue un chiffre juste d'un chiffre crédible.
+C'est la garde d'homonymie, rendue lisible par l'utilisateur au lieu d'être seulement
+vérifiée par le harnais.
+
+L'extraction existait déjà — `_tables_citees`, dans les assertions — sous forme d'une
+recherche de noms dans le texte de la requête. Elle n'a **pas** été remontée telle quelle :
+la règle qui vaut pour la validation vaut ici, *valider avec le parseur du moteur, pas avec
+une expression régulière*. Une recherche textuelle compte un nom de table écrit dans un
+littéral (`WHERE channel ILIKE '%contexte%'`) et rendrait à l'utilisateur une liste
+plausible et fausse — la pire forme, encore une fois, parce qu'elle ne lève rien.
+`json_serialize_sql` rend l'arbre, où une table lue et une chaîne de caractères ne se
+confondent pas.
+
+Deux filtres sur ce que l'arbre rapporte, et le premier n'est pas évident : **les CTE sont
+retirées**. DuckDB les analyse comme des références de table, la résolution du nom n'ayant
+lieu qu'ensuite — un `WITH media AS (…)` compterait donc `media` sans que la table soit
+ouverte. L'intersection avec les tables réelles, lues sur la connexion et jamais codées en
+dur, écarte le reste et survit à un rechargement de données qui changerait le schéma.
+
+Le champ est vide plutôt que faux quand l'analyse échoue, et il ne lève jamais : il est
+calculé après une requête qui a déjà réussi, et la faire tomber pour un affichage serait
+hors de proportion. Vide aussi sur une requête en échec — une erreur de syntaxe n'a lu
+aucune table, et le tâtonnement étant affiché comme les autres, lui attribuer une table
+apprendrait à l'utilisateur quelque chose de faux sur ce qui vient de se passer.
+
+**Ce qui n'a pas été fait, et pourquoi.** Le harnais garde sa propre extraction par
+regex. La tentation était de l'y brancher — un mécanisme de moins, quelques lignes de
+budget rendues. Mesuré avant de décider, sur les 214 requêtes distinctes du cache : les
+deux méthodes **s'accordent sur la totalité**, 0 désaccord, 1 ou 2 tables par requête,
+aucune requête sans table. Il n'y a donc aucun défaut constaté côté harnais, et le
+modifier serait exactement ce que ce document interdit — toucher l'instrument sur une
+intuition. La duplication est consignée ici plutôt que résolue ; elle se résoudra le jour
+où l'une des deux se trompera.
+
 ### L'alias n'est pas l'identifiant
 
 Le nom de modèle écrit dans le code est un **alias** : il désigne aujourd'hui une génération

@@ -56,6 +56,9 @@ class RequeteSortante(BaseModel):
     tronque: bool
     duree_ms: int
     erreur: str | None
+    # Les tables lues, décidées par le parseur du moteur — jamais par une recherche de
+    # noms dans le texte, qu'un littéral tromperait. Vide sur une requête en échec.
+    tables: list[str]
     # Défini plus bas dans le module ; résolu à la première validation.
     graphique: GraphiqueSortant | None
 

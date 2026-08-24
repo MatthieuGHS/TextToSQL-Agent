@@ -14,6 +14,14 @@ export interface Requete {
   duree_ms: number
   /** Non nulle sur un tâtonnement : la boucle se reprend, on l'affiche sans le cacher. */
   erreur: string | null
+  /**
+   * Les tables lues, décidées par le parseur du moteur côté serveur.
+   *
+   * Vide sur une requête en échec — une erreur de syntaxe n'a lu aucune table. Ne jamais
+   * la redéduire du SQL ici : c'est précisément ce que le serveur évite de faire, un nom
+   * de table pouvant vivre dans un littéral ou dans une CTE.
+   */
+  tables: string[]
   /** Ce que ce résultat permettrait de tracer — affiché à la demande, jamais d'office. */
   graphique: Graphique | null
 }
