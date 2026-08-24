@@ -48,13 +48,14 @@ DOSSIER = pathlib.Path(__file__).resolve().parent / "eval"
 #   la description d'outil changent la réponse du modèle et n'entraient dans aucune clé.
 #   Aucune assertion retirée en compensation : la mesure du même jour a montré que la
 #   seule famille structurellement inerte est celle qu'E7 réactive.
-# 24/08/2026 · 1 064 — le modèle entre dans la clé du **registre** des campagnes, qui ne
-#   contenait que l'empreinte de réglages : deux campagnes au même effort sur deux modèles
-#   se recouvraient. Même famille de défaut que le relèvement précédent, et même issue —
-#   il n'y a rien d'inerte à retirer en compensation, la seule famille qui l'était a été
-#   réactivée par E7. Une ligne, et c'est le prix d'un `_cle()` nommé plutôt que d'une
-#   f-string recopiée à ses deux points d'usage.
-BUDGET_EXECUTABLE = 1064
+# 24/08/2026 · 1 063 inchangé — le modèle est entré dans la clé du **registre** des
+#   campagnes, qui ne contenait que l'empreinte de réglages, et ça n'a rien coûté. Le
+#   relèvement à 1 064 avait d'abord été pris, puis **rendu** : extraire `enregistrer()`,
+#   seul écrivain du registre, a libéré exactement les lignes que la clé complète avait
+#   demandées. Trace gardée parce qu'elle vaut mieux que le chiffre — la correction qui
+#   retire du mécanisme paie souvent celle qui en ajoute, et un plafond qui monte sans
+#   qu'on ait cherché est un plafond qui cède.
+BUDGET_EXECUTABLE = 1063
 
 
 def _lignes_executables(chemin: pathlib.Path) -> int:

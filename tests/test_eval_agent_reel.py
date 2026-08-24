@@ -308,18 +308,6 @@ def sans_prompt(monkeypatch):
     monkeypatch.setattr(agent_reel.prompt, "construire", lambda con: "prompt d'essai")
 
 
-def _campagne(racine, identifiant, reglages, effort="medium"):
-    """Le corps de `construire()`, sonde et agent en moins — le registre seul."""
-    registre = agent_reel._lire_registre(racine)
-    cle = agent_reel._cle(identifiant, reglages)
-    registre["campagnes"][cle] = {
-        "identifiant": identifiant, "effort": effort, "reglages": reglages,
-    }
-    registre["derniere"] = cle
-    racine.mkdir(parents=True, exist_ok=True)
-    (racine / agent_reel.FICHIER_MODELE).write_text(json.dumps(registre))
-
-
 def test_deux_modeles_au_meme_effort_ne_se_recouvrent_pas(tmp_path, con, sans_prompt):
     """Défaut constaté le 24/08/2026, avant qu'il n'ait produit un chiffre faux.
 
@@ -332,8 +320,8 @@ def test_deux_modeles_au_meme_effort_ne_se_recouvrent_pas(tmp_path, con, sans_pr
     Ce que la comparaison Sonnet/Opus demandée par le client aurait produit : un rapport
     parfaitement plausible sur la campagne qu'on croyait relire.
     """
-    _campagne(tmp_path, "modele-a", "reglages-x")
-    _campagne(tmp_path, "modele-b", "reglages-x")
+    agent_reel.enregistrer(tmp_path, "modele-a", "medium", "reglages-x")
+    agent_reel.enregistrer(tmp_path, "modele-b", "medium", "reglages-x")
 
     campagnes = agent_reel._lire_registre(tmp_path)["campagnes"]
 
@@ -353,8 +341,8 @@ def test_une_cible_ambigue_leve_au_lieu_de_choisir(tmp_path, con, sans_prompt):
     garantie unique. Celle qui ne l'est pas doit s'arrêter en disant quoi passer à la
     place, jamais rendre la première venue de l'ordre d'insertion.
     """
-    _campagne(tmp_path, "modele-a", "reglages-x")
-    _campagne(tmp_path, "modele-b", "reglages-x")
+    agent_reel.enregistrer(tmp_path, "modele-a", "medium", "reglages-x")
+    agent_reel.enregistrer(tmp_path, "modele-b", "medium", "reglages-x")
 
     with pytest.raises(KeyError, match="exactement une"):
         agent_reel.hors_ligne(tmp_path, con, "reglages-x")
@@ -370,8 +358,8 @@ def test_une_cible_non_ambigue_designe_toujours_sa_campagne(tmp_path, con, sans_
     Sans elle, remplacer la résolution par un `raise` inconditionnel passerait le test
     d'ambiguïté — et rendrait le mode à blanc inutilisable.
     """
-    _campagne(tmp_path, "modele-a", "reglages-x", effort="medium")
-    _campagne(tmp_path, "modele-b", "reglages-y", effort="high")
+    agent_reel.enregistrer(tmp_path, "modele-a", "medium", "reglages-x")
+    agent_reel.enregistrer(tmp_path, "modele-b", "high", "reglages-y")
 
     for cible in ("modele-a", "reglages-x", "medium"):
         assert agent_reel.hors_ligne(tmp_path, con, cible).identifiant == "modele-a"

@@ -169,9 +169,31 @@ class AgentHorsLigne:
 FICHIER_MODELE = "modele.json"
 
 
-def _cle(identifiant: str, reglages: str) -> str:
-    """Ce qui distingue une campagne d'une autre : son modèle **et** ses réglages."""
-    return f"{identifiant}·{reglages}"
+def enregistrer(racine: pathlib.Path, identifiant: str, effort: str, reglages: str) -> None:
+    """Inscrit une campagne au registre. **Le seul écrivain**, et c'est le but.
+
+    Extrait de `construire()` le 24/08/2026 pour une raison précise : `construire()`
+    assemble un agent réel, donc la garde `test_aucun_test_ne_declenche_un_appel_api`
+    interdit — à raison — de l'appeler depuis un test. Le chemin d'écriture n'était donc
+    couvert que par des copies de son corps, écrites dans deux fichiers de test. Trois
+    écritures pour un format, c'est-à-dire trois occasions de diverger sur la clé qu'on
+    venait justement de compléter.
+
+    Ici, la fonction s'appelle sans agent et sans un seul appel. Les tests écrivent leurs
+    registres avec, et une divergence de format devient impossible plutôt
+    qu'improbable.
+    """
+    racine.mkdir(parents=True, exist_ok=True)
+    registre = _lire_registre(racine)
+    # Le modèle **et** les réglages : ni l'un ni l'autre ne distingue seul deux campagnes.
+    cle = f"{identifiant}·{reglages}"
+    registre["campagnes"][cle] = {
+        "identifiant": identifiant, "effort": effort, "reglages": reglages,
+    }
+    registre["derniere"] = cle
+    (racine / FICHIER_MODELE).write_text(
+        json.dumps(registre, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def construire(racine: pathlib.Path, effort: str = boucle.EFFORT) -> AgentReel:
@@ -183,19 +205,7 @@ def construire(racine: pathlib.Path, effort: str = boucle.EFFORT) -> AgentReel:
     """
     agent = boucle.construire(effort=effort)
     identifiant = boucle.identifiant_exact(agent)
-    empreinte = empreinte_reglages(agent, effort)
-
-    racine.mkdir(parents=True, exist_ok=True)
-    registre = _lire_registre(racine)
-    cle = _cle(identifiant, empreinte)
-    registre["campagnes"][cle] = {
-        "identifiant": identifiant, "effort": effort, "reglages": empreinte,
-    }
-    registre["derniere"] = cle
-    (racine / FICHIER_MODELE).write_text(
-        json.dumps(registre, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-
+    enregistrer(racine, identifiant, effort, empreinte_reglages(agent, effort))
     return AgentReel(agent=agent, identifiant=identifiant, effort=effort)
 
 

@@ -10,8 +10,6 @@ mesure :
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from src.db import connexion
@@ -35,16 +33,8 @@ def ecrire_registre(racine, *campagnes) -> None:
     et cinq exemplaires écrits à la main avaient tous à être repris. Un sixième aurait
     suivi.
     """
-    racine.mkdir(parents=True, exist_ok=True)
-    entrees = {
-        agent_reel._cle(identifiant, reglages): {
-            "identifiant": identifiant, "effort": effort, "reglages": reglages,
-        }
-        for identifiant, reglages, effort in campagnes
-    }
-    (racine / agent_reel.FICHIER_MODELE).write_text(
-        json.dumps({"campagnes": entrees, "derniere": list(entrees)[-1]})
-    )
+    for identifiant, reglages, effort in campagnes:
+        agent_reel.enregistrer(racine, identifiant, effort, reglages)
 
 
 # --- 1. Une campagne réelle ne part jamais d'ici --------------------------------------
