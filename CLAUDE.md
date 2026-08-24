@@ -248,9 +248,18 @@ le serveur. Aucun de ces changements ne touche le prompt : la ligne de base tien
 
 **Suite arrêtée (après la démo client du 20/08) — E8, puis E10, E11 :**
 
-- **E8, campagne 1, deux hypothèses groupées en une seule péremption du cache** :
-  la somme faite de tête (propriété générale dans `principes.md` — tout agrégat se
-  calcule par requête) et la phrase histogramme de `role.md`, en attente exprès.
+- **E8, campagne 1, quatre modifications de prompt groupées en une seule péremption du
+  cache.** Une seule est mesurée par le harnais — la **somme faite de tête** (propriété
+  générale dans `principes.md` : tout agrégat se calcule par requête, y compris le total
+  de lignes déjà affichées). Les trois autres ne sont sous aucune assertion, donc les
+  grouper ne confond aucune mesure : la phrase **histogramme** de `role.md`, en attente
+  exprès depuis le 19/08 ; et deux manques de description du monde, relevés en usage réel
+  le jour de la démo — le modèle **ignore que les lignes de chaque requête sont déjà
+  affichées** sous sa réponse (il recopie donc un résultat de 53 lignes quand on lui
+  demande « donne-moi les paires »), et il **ignore laquelle de ses requêtes est tracée**
+  (il annonce « voir le graphique mensuel » quand c'est sa requête de synthèse, la
+  dernière traçable, qui porte le tracé). Les deux se corrigent par une phrase de
+  `role.md` décrivant l'environnement, jamais par une consigne attachée à une question.
   ⚠ **Le plafond d'itérations 4 → 5 est déjà pris** (défaut constaté deux fois, le
   19/08) : réglages courants `f03a91e8d24d`, quand la ligne de base est mesurée sous
   `4f7a1f99217d`. Elle reste rejouable à blanc sous la sienne — vérifié — mais **le
@@ -266,7 +275,27 @@ le serveur. Aucun de ces changements ne touche le prompt : la ligne de base tien
   web), vérification visuelle complète de l'interface (jamais faite), doc de reprise
   pour l'équipe client, recette sur la grille.
 - **Post-livraison, portfolio** : procédure de purge déjà écrite dans
-  `docs/prive/confidentialite-recensement.md`.
+  `docs/prive/confidentialite-recensement.md`. La vidéo de démonstration montre des
+  données réelles — elle est à refilmer sur le jeu inventé, au même titre que la purge
+  du dépôt.
 
 Le jeu de contrôle sous scellé ne s'ouvre qu'à la fin d'E8, et il mesure une
 non-régression sur les refus — pas une généralisation.
+
+## Démonstration client du 20 août 2026
+
+Filmée sur six questions (`QDemo.txt`, hors Git), du panorama des canaux au refus
+pédagogique, avec chargement de données. **L'interface a été vue en conditions réelles
+pour la première fois** — et c'est ce qui a produit les quatre correctifs du 19/08 au
+soir, dont aucun n'était sorti des tests ni du rejeu à blanc.
+
+Ce que la démonstration a validé : trois formes de graphique, double axe, zoom,
+bascules, conversation multi-tours, refus expliqués, et une réponse qui distingue
+`mes` (raccordements neufs) de `cdf` (changements de fournisseur) pour expliquer
+pourquoi le premier n'est pas le bon indicateur publicitaire.
+
+Ce qu'elle a révélé, et qui part en campagne 1 d'E8 : les deux manques de description
+du monde décrits plus haut. Rien d'autre n'a été relevé.
+
+⚠ **Le retour du client n'est pas encore connu au moment où ceci est écrit.** Il prime
+sur cette feuille de route : le recueillir avant d'engager E8.

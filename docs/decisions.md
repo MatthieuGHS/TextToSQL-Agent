@@ -973,6 +973,37 @@ modification de `src/charts` ressert la décision de tracé de l'ancien code. Un
 assertion la consomme (`PasDeGraphiqueSurResultatVide`). Ligne ajoutée au recensement
 des clés ci-dessous.
 
+### Le prompt décrit les données, pas l'écran — et ça se voit en usage
+
+Deux défauts relevés le 20/08/2026 en usage réel, la veille de la démonstration puis
+pendant. Ils ont la même racine, et elle n'était pas dans les données : **le prompt
+décrit ce que l'agent peut interroger, mais rien de ce que l'utilisateur voit.**
+
+Le modèle **ignore que les lignes de chaque requête sont déjà affichées** sous sa
+réponse. Quand on lui demande « donne-moi les paires hebdomadaires », il recopie donc
+les 53 lignes dans son texte — obéissance parfaite, résultat illisible, et une
+duplication de ce que l'interface montre déjà. Aggravant : la seule phrase de `role.md`
+sur l'affichage dit que les tableaux Markdown *sont rendus*, ce qui l'encourage plutôt.
+
+Le modèle **ignore aussi laquelle de ses requêtes est tracée**. Sur une question
+d'évolution par canal, il produit d'abord le détail mensuel puis une requête de synthèse
+annuelle ; le tracé porte sur la dernière traçable — la synthèse — pendant que son texte
+renvoie au « graphique mensuel tracé ». Le graphique affiché est juste, le texte aussi
+pris isolément, mais ils ne parlent pas du même objet.
+
+Ce sont des faits sur l'environnement, donc ils appartiennent au prompt écrit, au même
+titre que la phrase d'E7 annonçant que le tracé est automatique. Ils partent en campagne 1
+d'E8 avec la somme faite de tête et l'histogramme : **une seule des quatre est sous
+assertion**, donc les grouper ne confond aucune mesure — c'est ce qui rend le groupage
+légitime ici, alors qu'il ne l'était pas pour le grain de `kpi_compteurs`.
+
+Ce qu'il ne faut pas en conclure, et qui vaut au-delà du cas : ces deux défauts sont
+sortis d'une **manipulation à la main**, pas d'un test ni d'un rejeu à blanc. Le corpus
+mesure ce que l'agent *calcule* ; il ne voit rien de ce que l'utilisateur *lit*. Aucune
+assertion n'aurait attrapé un texte redondant ou une phrase qui désigne le mauvais
+graphique — et en construire une reviendrait à noter le style d'une réponse, ce que ce
+projet a explicitement écarté.
+
 ### L'alias n'est pas l'identifiant
 
 Le nom de modèle écrit dans le code est un **alias** : il désigne aujourd'hui une génération
