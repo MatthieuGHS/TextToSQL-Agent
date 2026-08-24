@@ -581,9 +581,11 @@ présenter comme une preuve de généralisation.
 
 ### Ce qui indexe quoi — la famille de défaut, et sa clôture
 
-Quatre défauts du dispositif de mesure ont maintenant la même forme, et il vaut mieux
+Cinq défauts du dispositif de mesure ont maintenant la même forme, et il vaut mieux
 nommer la forme que continuer à corriger les cas : **une clé d'indexation qui ne contient
-pas tout ce qui distingue ce qu'elle indexe.** Le symptôme ne varie pas — une entrée
+pas tout ce qui distingue ce qu'elle indexe.** Le cinquième — le registre des campagnes,
+24/08/2026 — est le premier trouvé *avant* d'avoir produit un chiffre faux, en relisant ce
+tableau plutôt qu'en constatant un symptôme. Le symptôme ne varie pas — une entrée
 resservie sous une autre configuration, un rapport parfaitement plausible, aucune erreur,
 aucun avertissement. C'est le pire mode de défaillance possible pour un instrument, parce
 qu'il produit un chiffre au lieu de s'arrêter.
@@ -595,7 +597,7 @@ Recensement de toutes les clés du projet, ce qu'elles contiennent, et ce qui le
 | entrée de cache | modèle · empreinte prompt · empreinte réglages · question · répétition | complète |
 | `empreinte_reglages` | effort · raisonnement · plafond de sortie · plafonds de boucle · **bornes de `run_sql`** · **description d'outil** | complète depuis le 18/08/2026 |
 | `empreinte_prompt` | hachage des `.md` et de la partie générée | ne contient pas la description d'outil — reportée sur les réglages |
-| registre des campagnes | une entrée par empreinte de réglages | complète depuis le 14/08/2026 |
+| registre des campagnes | une entrée par **couple (identifiant de modèle, empreinte de réglages)** | complète depuis le 24/08/2026 — l'empreinte seule ne contenait pas le modèle, et deux campagnes de modèles différents se recouvraient |
 | jeu de contrôle | trois noms de propriétés, écrits | ancré au corpus depuis le 18/08/2026 |
 | `Resultat.graphique` (cache) | décision de tracé figée à l'exécution | **hors de toute clé, à dessein** : les règles de `src/charts` ne changent pas la réponse du modèle ; un rejeu à blanc après modification de ces règles ressert l'ancienne décision (une seule assertion concernée) |
 
@@ -1003,6 +1005,158 @@ mesure ce que l'agent *calcule* ; il ne voit rien de ce que l'utilisateur *lit*.
 assertion n'aurait attrapé un texte redondant ou une phrase qui désigne le mauvais
 graphique — et en construire une reviendrait à noter le style d'une réponse, ce que ce
 projet a explicitement écarté.
+
+### Le retour client du 24/08, et ce qu'il ouvre
+
+Verdict global positif, quatre demandes et deux questions. Ce qui compte ici, c'est ce que
+chacune coûte au **dispositif de mesure**, parce que c'est la seule chose qui ne se voit
+pas en la lisant :
+
+| Demande | Coût | Ce que ça périme |
+|---|---|---|
+| un **thème clair**, avec bascule | interface seule | rien |
+| les **tables utilisées** par requête | extraction déjà écrite | rien |
+| un **paragraphe de raisonnement** avant la requête | un champ d'outil | **le cache d'évaluation** |
+| l'affichage du SQL — **validé**, déjà en place | — | — |
+
+Une seule des trois demandes touche la mesure, et c'est la troisième : un champ ajouté à
+`run_sql` modifie la description d'outil, laquelle est dans `empreinte_reglages` depuis le
+18/08 — le dict `outil.OUTIL_SQL` y entre entier, schéma de paramètres compris. Elle
+rejoint donc les quatre modifications de prompt déjà en attente, dans **une seule
+péremption**, plutôt que d'en provoquer une seconde.
+
+Elle n'a toutefois pas la même nature que les quatre autres, et il faut l'écrire avant de
+la mesurer : la description d'outil est **prescriptive** — elle dit quand appeler, donc
+elle pèse sur le SQL produit. Les quatre premières se groupaient sans risque parce qu'une
+seule était sous assertion ; la cinquième garde cette propriété mais peut déplacer la
+mesure de la seule qui l'est. Si le score de traçabilité bouge, deux causes candidates, et
+la désambiguïsation coûte une campagne de plus. On l'assume plutôt que de la prévenir : la
+prévenir coûterait une campagne à coup sûr, l'assumer n'en coûte une que si le cas se
+produit.
+
+Second effet, à surveiller dans le rapport plutôt qu'à corriger d'avance : le champ fait
+écrire de la prose à chaque appel d'outil, sur un plafond de sortie partagé avec le
+raisonnement. Une hausse de `reponse_tronquee` serait le signal, et le harnais compte déjà
+les motifs d'arrêt.
+
+*Écarté :* produire l'explication après coup à partir du SQL. Un second appel modèle coûte
+et ralentit chaque question ; une heuristique paraphraserait la requête sans rien
+expliquer. Le modèle est le seul à connaître son intention — la lui demander pendant qu'il
+l'a est le seul moment où la réponse vaut quelque chose.
+
+### La question 15 de la grille est tronquée exprès
+
+Point resté ouvert depuis la ligne de base : « Evolution trafic SEA Est-ce que le trafic
+SEO et SEA marque » finit en `plafond_iterations`, et on ne savait pas si le libellé avait
+été abîmé au chargement. Vérifié dans le xlsx le 24/08 : **c'est délibéré, et le client
+écrit le comportement qu'il attend** — ne pas planter, comprendre l'intention principale,
+ou à défaut tracer l'évolution SEO/SEA sur la période récente *en demandant confirmation*.
+
+Trois conséquences, dont deux retirent du travail :
+
+- ce n'est pas un artefact du chargeur de grille, donc il n'y a rien à corriger de ce
+  côté ;
+- l'échec est réel, mais il porte sur une question qui appelait une **demande de
+  clarification** — et relever le plafond d'itérations ne va pas dans ce sens. La piste
+  ouverte par cette question n'est donc pas celle qu'on croyait ;
+- le graphique attendu est exactement celui que le défaut ci-dessous empêchait de tracer.
+
+### Un pivot refusé parce que les colonnes étaient dans l'autre ordre
+
+Défaut constaté le 24/08 en relecture, reproduit sur le cache et bout en bout.
+`_indice_abscisse` retenait la **première** colonne non numérique. `SELECT channel, mois,
+clics` mettait donc `channel` en abscisse ; elle se répète ; et la branche de repli
+excluait les colonnes temporelles des catégories candidates. Refus.
+
+Or `SELECT mois, channel, clics` — les mêmes données, les mêmes colonnes, l'ordre inverse
+— se traçait parfaitement. **La forme du résultat décidait, mais par sa position et non
+par sa nature**, ce qui est précisément ce que ce module dit ne pas faire.
+
+Ce qu'il coûtait : la question 14 de la grille — « Compare l'évolution du trafic SEO marque
+et du trafic SEA marque au fil du temps », pour laquelle le client attend explicitement
+deux courbes et une légende — ne rendait **ni graphique automatique, ni bouton « tracer ce
+résultat »**, les deux suivant la même règle serveur. Aggravant : `role.md` enseigne cette
+forme depuis le 19/08. Le modèle a suivi le prompt et n'a rien obtenu.
+
+Aggravant encore, et c'est la leçon transférable : `docs/decisions.md` portait déjà cette
+limite comme « connue, non couverte », avec la mention « le cas réel passe par
+`step_date`, on ne corrige pas un défaut anticipé ». La mesure a contredit cette phrase —
+les deux cas réels étaient dans le cache depuis le début, `step_date` compris. **Une limite
+qu'on déclare non atteinte doit être mesurée, pas raisonnée** ; le cache rendait cette
+vérification gratuite et personne ne l'avait faite.
+
+**La correction évidente aurait dégradé le système**, pour la troisième fois dans ce
+projet. Mesuré sur les 214 requêtes distinctes du cache, rejouées sur la base :
+
+| variante | décisions changées / 214 |
+|---|---|
+| préférer une colonne temporelle en abscisse, toujours | **12**, dont **11 dégradations** |
+| préférence temporelle **en repli seulement**, quand l'abscisse choisie se répète | **1**, exactement le cas du défaut |
+
+La première variante mettait un `MIN(step_date) AS debut` en abscisse sur onze requêtes qui
+se traçaient très bien en barres par `support`. C'est la variante en repli qui est retenue :
+elle ne s'exprime que là où le code refusait déjà, donc elle ne peut rien casser de ce qui
+marchait.
+
+Détail de méthode, et il explique pourquoi le défaut a survécu à deux relectures : **les
+huit tests de pivot écrivent tous `["step_date", "channel", "cost"]`**, l'abscisse en
+premier. Aucun n'essaie l'ordre inverse. Le jeu d'essai portait la même hypothèse que le
+code — le motif déjà consigné le 19/08 à propos des tests unitaires qui ne peuvent pas
+trouver ce que le code n'imagine pas.
+
+### Deux tests qui ne prouvaient pas ce qu'ils annonçaient
+
+Trouvés le 24/08 en cherchant, comme le prescrit ce document, les assertions qui ne
+*peuvent* pas échouer plutôt que celles qui n'ont jamais échoué.
+
+**Un test comparait une horloge.** `test_le_flux_rend_la_meme_reponse_que_la_voie_directe`
+posait `assert flux == direct` sur la charge complète, `duree_ms` compris — une durée réelle
+d'exécution. Mesuré sur 40 paires d'appels : **6 divergences, toutes sur ce seul champ**. Il
+annonce « aucun des deux points d'entrée ne doit dériver » et garde en fait une mesure de
+temps. Un test qui rougit sans défaut est pire qu'inutile : il apprend à relancer plutôt
+qu'à chercher. Le champ sort de la comparaison ; tout le reste y reste.
+
+**Un test ne pouvait pas rougir, seulement pendre.**
+`test_une_panne_avant_la_construction_rend_le_verrou` garde le `try/finally` extérieur du
+rechargement. Contre-épreuve : sans le correctif, il ne signale rien — il bloque, et se
+fait tuer au bout de 90 s, emportant la suite entière en dépassement sans message. Son
+jumeau sur le flux de question, écrit au même commit, joue sa requête dans un fil borné à
+5 s et dit pourquoi dans sa docstring. Le second n'avait pas eu le même traitement. Règle
+qui en sort, et qui vaut pour tout test de non-blocage : **on ne teste pas une pendaison
+en attendant qu'elle n'ait pas lieu, on la borne et on assert sur la borne.**
+
+### Le registre des campagnes ne distinguait pas les modèles
+
+Cinquième instance de la famille recensée plus haut — *une clé qui ne contient pas tout ce
+qui distingue ce qu'elle indexe* — et elle mérite d'être écrite parce qu'elle a été trouvée
+**avant** d'avoir produit un chiffre faux, ce qui n'était encore jamais arrivé.
+
+`agent_reel.construire()` écrit `registre["campagnes"][empreinte]`. La clé est l'empreinte
+de réglages seule ; le modèle n'y figure qu'en **valeur**, et `empreinte_reglages` ne le
+contient pas. Deux campagnes au même effort sur deux modèles se recouvrent donc, et la
+seconde efface la première.
+
+Reproduit sans appel API, en rejouant le corps de `construire()` sur un registre jetable :
+après une campagne Sonnet puis une campagne Opus, `--a-blanc --campagne f03a91e8d24d`
+rejoue Opus. Les entrées de cache Sonnet sont toujours sur le disque — le modèle est dans
+*leur* clé, cette clé-là est complète — mais elles ne sont **plus adressables**. Symptôme
+habituel de la famille : un rapport plausible, zéro erreur, zéro avertissement.
+
+Latent aujourd'hui, puisque les trois campagnes sont Sonnet. Ce qui l'arme, c'est
+précisément la question que le client vient de poser : *un Sonnet suffit-il sur le simple,
+faut-il un Opus sur le complexe ?* Y répondre par la mesure, c'est-à-dire faire ce que ce
+projet fait toujours, aurait détruit la référence à laquelle on voulait comparer.
+
+Correction : la clé devient le couple, et l'ambiguïté se lève au lieu de se trancher — le
+motif est déjà écrit à côté, pour `--campagne <effort>` qui ne désigne plus une campagne
+unique depuis le 19/08. *Écarté :* mettre le modèle dans `empreinte_reglages`. Ce serait
+juste, mais ça change les trois empreintes existantes et oblige à re-cléer tout le cache,
+pour un résultat que la clé du registre obtient sans rien déplacer.
+
+Ce que cette instance ajoute au recensement : les quatre premières ont été trouvées **par
+leurs symptômes**, celle-ci en lisant la clé avant d'écrire le code qui allait s'appuyer
+dessus. C'est moins cher, et c'est reproductible — la question à poser devant tout nouveau
+réglage reste la même, et le tableau des clés est l'endroit où elle se pose.
 
 ### L'alias n'est pas l'identifiant
 

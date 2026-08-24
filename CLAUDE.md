@@ -182,11 +182,11 @@ géographique ni démographique · les trois tables n'ont pas les mêmes bornes 
   l'agent opère sur les vraies données.
 - Aucune clé API dans le code : tout passe par les variables d'environnement.
 
-## État au 19 août 2026 (relecture et refonte graphiques)
+## État au 24 août 2026 (retour client reçu, lots A à F arrêtés)
 
 Fait : socle · ETL et contrat de données (E1) · accès SQL unique et durci (E2) · prompt
 système généré (E3) · boucle agent (E4) · harnais d'évaluation en conditions réelles (E5)
-· balayage d'effort · deux relectures méthodologiques et leurs corrections.
+· balayage d'effort · **trois** relectures méthodologiques et leurs corrections.
 
 La seconde relecture (18/08) a fermé la famille de défaut « clé d'indexation incomplète »
 plutôt que ses cas : le scellé est ancré au corpus, les bornes de `run_sql` et la
@@ -239,48 +239,82 @@ d'être retenus, dessinent les pistes d'E8 — et aucun n'accuse l'instrument :
 - **le grain de `kpi_compteurs`** (2/3 instable + un `plafond_iterations` de grille) :
   la corrélation déjà consignée tient toujours ;
 - une question de grille au libellé tronqué (« Evolution trafic SEA Est-ce que… ») finit
-  en `plafond_iterations` — à regarder avant d'en faire une piste.
+  en `plafond_iterations`. **Vérifié le 24/08 : la troncature est délibérée**, le xlsx la
+  décrit comme un test de robustesse au langage interrompu et écrit le comportement
+  attendu — comprendre l'intention, ou tracer SEO/SEA en demandant confirmation. L'échec
+  est donc réel, mais il appelle une clarification et non un plafond plus haut.
 
 **Graphiques étendus le 19/08 au soir** (détail dans `docs/decisions.md`) : second axe
 décidé à l'étendue et non à la médiane, réglette de zoom, histogramme natif, « tracer à
 la demande » sur chaque bloc de requête, bascules courbe/barres/empilées déclarées par
 le serveur. Aucun de ces changements ne touche le prompt : la ligne de base tient.
 
-**Suite arrêtée (après la démo client du 20/08) — E8, puis E10, E11 :**
+## Feuille de route arrêtée le 24 août 2026, après le retour client
 
-- **E8, campagne 1, quatre modifications de prompt groupées en une seule péremption du
-  cache.** Une seule est mesurée par le harnais — la **somme faite de tête** (propriété
-  générale dans `principes.md` : tout agrégat se calcule par requête, y compris le total
-  de lignes déjà affichées). Les trois autres ne sont sous aucune assertion, donc les
-  grouper ne confond aucune mesure : la phrase **histogramme** de `role.md`, en attente
-  exprès depuis le 19/08 ; et deux manques de description du monde, relevés en usage réel
-  le jour de la démo — le modèle **ignore que les lignes de chaque requête sont déjà
-  affichées** sous sa réponse (il recopie donc un résultat de 53 lignes quand on lui
-  demande « donne-moi les paires »), et il **ignore laquelle de ses requêtes est tracée**
-  (il annonce « voir le graphique mensuel » quand c'est sa requête de synthèse, la
-  dernière traçable, qui porte le tracé). Les deux se corrigent par une phrase de
-  `role.md` décrivant l'environnement, jamais par une consigne attachée à une question.
-  ⚠ **Le plafond d'itérations 4 → 5 est déjà pris** (défaut constaté deux fois, le
-  19/08) : réglages courants `f03a91e8d24d`, quand la ligne de base est mesurée sous
-  `4f7a1f99217d`. Elle reste rejouable à blanc sous la sienne — vérifié — mais **le
-  47/51 ne décrit plus la configuration courante** ; la comparaison 4 vs 5 est la
-  première mesure à produire. Reste ouverte pour le grain de `kpi_compteurs` : la
-  phrase de `metier.md`, si le plafond n'a pas suffi. Avant : vérifier dans le xlsx si
-  « Evolution trafic SEA… » est réellement tronquée côté client. Puis décision d'effort
-  `low`/`medium` sur les campagnes du balayage, ouverture du scellé (non-régression sur
-  les refus, rien de plus), notation manuelle finale.
-- **E10** : consolidation d'observabilité (coût par question en production, taux de
-  cache, arrêts anormaux) — mince, l'essentiel existe.
-- **E11** : image Docker reconstruite et vérifiée (pas rebâtie depuis les changements
-  web), vérification visuelle complète de l'interface (jamais faite), doc de reprise
-  pour l'équipe client, recette sur la grille.
-- **Post-livraison, portfolio** : procédure de purge déjà écrite dans
+Le retour est **positif**. Quatre demandes — thème clair avec bascule, tables utilisées
+par requête, paragraphe de raisonnement avant la requête, et validation de l'affichage du
+SQL déjà en place — plus deux questions, sur le score au benchmark et sur le choix du
+modèle. Le plan détaillé, avec les coûts et le raisonnement de chaque arbitrage, est dans
+`docs/prive/plan-lots-A-a-F.md` ; ce qui suit en est la carte.
+
+**Une seule des demandes touche le dispositif de mesure** : le paragraphe de raisonnement
+passe par un champ ajouté à l'outil `run_sql`, donc par la description d'outil, qui est
+dans `empreinte_reglages`. Il rejoint la campagne 1 d'E8 plutôt que d'ouvrir une seconde
+péremption.
+
+```
+0 ──► A1 A2 A4 ──► A3 ──► B0 ──► B1 ──►(B2 si besoin)──► D ──► E ──► F
+                     └──► C1…C6 ─────────────────────────────┘
+```
+
+Trois dépendances dures, le reste est libre : **A3 avant toute campagne sur un second
+modèle**, **A1 avant la campagne de référence d'E8**, **C avant E11**.
+
+- **Lot A — socle, gratuit, ne périme aucune mesure.** Quatre défauts constatés le 24/08,
+  tous reproduits avant d'être retenus (détail dans `docs/decisions.md`) : le pivot
+  refusé sur l'ordre des colonnes (**A1**), deux tests qui ne prouvaient pas ce qu'ils
+  annonçaient (**A2**), le registre des campagnes qui ne distingue pas les modèles
+  (**A3**). Plus la demande 2, les **tables utilisées** par chaque requête (**A4**) —
+  gratuite et déterministe, l'extraction existant déjà dans le harnais ; la liste des
+  tables se lit sur la connexion et jamais en dur, sans quoi elle se périme au premier
+  rechargement de données.
+- **Lot B — E8, le seul lot facturé.** **B0** : la comparaison 4 vs 5 itérations, première
+  mesure à produire, qui redonne un sens au 47/51 aujourd'hui attaché à une configuration
+  qui n'est plus la nôtre. **B1** : la campagne 1, désormais **cinq** modifications
+  groupées en une seule péremption — la somme faite de tête (`principes.md`, la seule sous
+  assertion), l'histogramme (`role.md`, en attente depuis le 19/08), les lignes déjà
+  affichées, **la correction de la phrase devenue fausse** sur la requête tracée
+  (`role.md` dit encore « ta dernière requête », le code trace « la dernière qui se
+  trace » depuis le 19/08), et le champ `raisonnement` de la demande 3. **B2** n'est payée
+  que si B1 rend une mesure ambiguë. Reste ouverte pour le grain de `kpi_compteurs` : la
+  phrase de `metier.md`, si le plafond n'a pas suffi. Puis décision d'effort `low`/`medium`
+  sur les campagnes du balayage, ouverture du scellé, notation manuelle finale.
+- **Lot C — le thème clair par défaut, avec bascule.** Des **jetons sémantiques** dans
+  `index.css`, définis deux fois, plutôt que 147 paires `dark:` — un seul endroit décide,
+  les composants rendent, comme `src/charts` le fait déjà. Trois pièges vérifiés dans le
+  code : `Graphique` est mémoïsé et resterait figé dans l'ancienne palette (d'où un
+  contexte, qui traverse `memo`), Recharts veut des couleurs littérales et non des
+  classes, et sans script d'amorçage dans `index.html` le rechargement flashe en blanc.
+  Deux palettes à re-dériver, pas une : les 12 séries de `Graphique.tsx` **et** les
+  9 jetons Prism de `SqlColore.tsx`.
+- **Lot D — E10** : consolidation d'observabilité (coût par question en production, taux
+  de cache, arrêts anormaux) — mince, l'essentiel existe.
+- **Lot E — E11** : image Docker reconstruite et vérifiée (pas rebâtie depuis les
+  changements web), vérification visuelle complète de l'interface (jamais faite, et
+  désormais sur les deux thèmes), doc de reprise pour l'équipe client, recette sur la
+  grille.
+- **Lot F — post-livraison, portfolio** : procédure de purge déjà écrite dans
   `docs/prive/confidentialite-recensement.md`. La vidéo de démonstration montre des
   données réelles — elle est à refilmer sur le jeu inventé, au même titre que la purge
   du dépôt.
 
 Le jeu de contrôle sous scellé ne s'ouvre qu'à la fin d'E8, et il mesure une
 non-régression sur les refus — pas une généralisation.
+
+**Hors plan tant qu'il n'a pas tranché : le choix du modèle.** `boucle.MODELE` est une
+constante de module ; l'effort est paramétrable, le modèle non. Aucune comparaison
+Sonnet/Opus n'existe — les trois campagnes sont sur Sonnet. La rendre possible coûte
+~5 lignes en miroir de `--effort`, **et A3 en est le préalable**.
 
 ## Démonstration client du 20 août 2026
 
@@ -297,5 +331,5 @@ pourquoi le premier n'est pas le bon indicateur publicitaire.
 Ce qu'elle a révélé, et qui part en campagne 1 d'E8 : les deux manques de description
 du monde décrits plus haut. Rien d'autre n'a été relevé.
 
-⚠ **Le retour du client n'est pas encore connu au moment où ceci est écrit.** Il prime
-sur cette feuille de route : le recueillir avant d'engager E8.
+**Le retour est arrivé le 24/08 et il est positif** ; il est consigné dans la feuille de
+route ci-dessus et détaillé dans `docs/prive/plan-lots-A-a-F.md`.
