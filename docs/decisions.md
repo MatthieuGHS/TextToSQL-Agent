@@ -1162,6 +1162,57 @@ leurs symptômes**, celle-ci en lisant la clé avant d'écrire le code qui allai
 dessus. C'est moins cher, et c'est reproductible — la question à poser devant tout nouveau
 réglage reste la même, et le tableau des clés est l'endroit où elle se pose.
 
+### 4 contre 5 itérations, mesuré — et ce que la mesure à k=1 avait fait croire
+
+Campagne B0 du 24/08/2026, payée pour une seule raison : `MAX_ITERATIONS` est dans
+`empreinte_reglages`, la ligne de base avait été mesurée sous 4 tours, et le système
+démontré tourne sous 5. Sans ce chiffre, le score d'E8 aurait été **inattribuable** — on
+n'aurait pas su démêler l'effet des modifications de prompt de celui du plafond.
+
+À k comparable (corpus 3, grille 1), trois propriétés sur dix-huit bougent :
+
+| | 4 tours (`4f7a1f99217d`) | 5 tours (`f03a91e8d24d`) |
+|---|---|---|
+| corpus · grille | 47/51 · 15/18 | **48/51** · 15/18 |
+| `grain distinct` | 2/3 instable | **3/3 acquis** |
+| `grille/Robustesse` | 2/3 | **3/3** |
+| `grille/Crash Test` | 3/3 | **2/3** |
+| `plafond_iterations` | 2 / 69 | **1 / 69** |
+| entrée · sortie par question | 18 299 · 686 | 18 073 · 562 |
+
+**Le gain est celui qu'on visait, et il tombe exactement sur le cas documenté.** La
+section « le grain de `kpi_compteurs` » consignait 2/3 instable avec une corrélation
+parfaite entre requête non agrégée et `plafond_iterations` ; c'est cette instabilité qui
+disparaît. La question 15 de la grille — le libellé tronqué — passe elle aussi.
+
+**Le coût ne bouge pas.** C'est contre-intuitif pour un tour de plus, et ça mérite d'être
+écrit : un tour supplémentaire n'est dépensé que par les exécutions qui en ont besoin, or
+elles sont rares. La légère baisse est du bruit.
+
+**Le piège de lecture, et c'est la leçon transférable.** Le peuplement à k=1 donnait
+*+16 % en entrée et +28 % en sortie*, un signal franc et entièrement faux. Cause : à k=1,
+les 18 questions de grille pèsent la moitié de l'échantillon contre un quart à k=3, et ce
+sont les plus chères. **La moyenne par question n'est pas comparable entre deux k
+différents** quand l'échantillon mélange deux corpus de coûts différents. Le peuplement
+sert à dé-risquer le harnais, pas à préconclure — s'y fier aurait fait rejeter un
+réglage qui ne coûte rien.
+
+**La perte n'est pas attribuable au plafond, et c'est vérifiable plutôt qu'argumentable :
+le plafond est invisible du modèle.** Il n'apparaît ni dans les trois `.md` du prompt, ni
+dans la description d'outil — vérifié en cherchant dans le texte exact que le modèle
+reçoit. Il ne peut donc pas le rendre plus explorateur. Sur le tirage où la question 17
+échoue, l'agent lance cinq requêtes exploratoires sur `social` 2025 sans jamais conclure ;
+sous 4 tours il aurait buté au quatrième, donc échoué aussi. Sous 4 tours, les tirages
+observés concluaient en **deux** requêtes avec une bonne réponse — celle qui explique que
+`support`, `format` et `objectif` sont NULL sur ce canal. C'est une variance de largeur
+d'exploration, pas un effet du réglage.
+
+**Décision : on garde 5**, et `corpus 48/51 · grille 15/18` devient la référence des
+comparaisons d'E8. Ce qui n'a pas bougé est aussi une information : les trois échecs de
+`traçabilité des chiffres` et le 0/3 de « valeur présente dans une autre colonne » sont
+identiques au tour près — la somme faite de tête ne se corrige pas par le plafond, ce qui
+confirme qu'elle relève bien de la description, c'est-à-dire de la campagne 1 d'E8.
+
 ### Les tables lues se demandent au parseur, pas au texte
 
 Demande 2 du client : voir d'un coup d'œil quelles tables une requête a lues. Elle a l'air

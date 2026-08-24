@@ -281,9 +281,16 @@ modèle**, **A1 avant la campagne de référence d'E8**, **C avant E11**.
   jamais en dur, sans quoi elle se périme au premier rechargement de données.
   Vérifié après coup : la ligne de base se rejoue à blanc à l'identique, **corpus 47/51,
   grille 15/18**, 69 exécutions toutes depuis le cache, zéro appel.
-- **Lot B — E8, le seul lot facturé.** **B0** : la comparaison 4 vs 5 itérations, première
-  mesure à produire, qui redonne un sens au 47/51 aujourd'hui attaché à une configuration
-  qui n'est plus la nôtre. **B1** : la campagne 1, désormais **cinq** modifications
+- **Lot B — E8, le seul lot facturé. B0 est FAIT le 24/08** (~4 $, rapport
+  `2026-08-24-2140.md`) : à k comparable, **5 tours donnent corpus 48/51 · grille 15/18**
+  contre 47/51 · 15/18 à 4 tours, pour un coût par question inchangé. Trois propriétés
+  bougent — `grain distinct` passe de 2/3 instable à **3/3**, ce qui est exactement le
+  défaut documenté pour lequel le plafond avait été relevé, et `Robustesse` de 2/3 à 3/3.
+  La seule perte, `Crash Test` 3/3 → 2/3, n'est pas attribuable : **le plafond est
+  invisible du modèle** (vérifié dans le texte exact qu'il reçoit), il ne peut donc pas le
+  rendre plus explorateur. On garde 5, et `48/51 · 15/18` est la nouvelle référence.
+  ⚠ Le peuplement à k=1 annonçait +16 % de coût : artefact du mélange corpus/grille à k
+  différent, détaillé dans `docs/decisions.md`. **B1** : la campagne 1, désormais **cinq** modifications
   groupées en une seule péremption — la somme faite de tête (`principes.md`, la seule sous
   assertion), l'histogramme (`role.md`, en attente depuis le 19/08), les lignes déjà
   affichées, **la correction de la phrase devenue fausse** sur la requête tracée
