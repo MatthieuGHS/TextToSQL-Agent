@@ -403,7 +403,10 @@ def _executer_appel(appel: dict, con: Any) -> RequeteExecutee:
             erreur=f"Outil inconnu : {appel.get('name')!r}. Le seul outil disponible "
             f"est {outil.NOM}.",
         )
-    return outil.executer(appel.get("args", {}).get("query", ""), con)
+    args = appel.get("args", {})
+    return outil.executer(
+        args.get("query", ""), con, raisonnement=args.get("raisonnement", "") or ""
+    )
 
 
 def _usage_de(message: AIMessage) -> Usage:

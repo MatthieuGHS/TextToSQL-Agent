@@ -94,6 +94,10 @@ class RequeteExecutee:
     # une requête en échec : une erreur de syntaxe n'a lu aucune table, et en annoncer
     # une serait une information inventée.
     tables: list[str] = field(default_factory=list)
+    # Ce que le modèle cherchait avec cette requête, écrit par lui **avant** de l'exécuter.
+    # Purement destiné à qui relit l'exécution : la boucle n'en lit rien, et aucune
+    # décision n'en dépend — sans quoi le modèle piloterait le code par de la prose.
+    raisonnement: str = ""
 
     @property
     def a_reussi(self) -> bool:

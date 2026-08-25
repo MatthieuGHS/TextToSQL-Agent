@@ -72,6 +72,16 @@ export function BlocRequete({ requete }: { requete: Requete }) {
 
       {ouvert && (
         <div className="border-t border-slate-800">
+          {/* Au-dessus du SQL, et non en dessous : il a été écrit avant lui, et c'est
+              ce qui explique la requête qu'on s'apprête à lire. */}
+          {requete.raisonnement && (
+            <p
+              className="px-3 py-2 text-xs italic leading-relaxed text-slate-400
+                         border-b border-slate-800/60"
+            >
+              {requete.raisonnement}
+            </p>
+          )}
           <SqlColore sql={requete.sql} />
           {enEchec ? (
             <p

@@ -35,7 +35,11 @@ def con(base):
 # modification soit **consciente**. Le schéma s'assemble avant le prompt système dans la
 # requête, donc il en fait partie ; une reformulation invalide tout le cache sans lever
 # d'erreur ni d'avertissement — on ne s'en aperçoit que sur la facture.
-EMPREINTE_ATTENDUE = "f984c0baef8c"
+# 25/08/2026 · c551f95fbcd5 — champ `raisonnement` ajouté au schéma, requis, énoncé avant
+#   `query`. Demande 3 du client (un paragraphe expliquant la requête, pour le débogage).
+#   Périme le cache d'évaluation, ce pour quoi elle est groupée avec les quatre
+#   modifications de prompt de la campagne 1 d'E8 plutôt que payée seule.
+EMPREINTE_ATTENDUE = "c551f95fbcd5"
 
 
 def test_le_schema_de_l_outil_est_stable():

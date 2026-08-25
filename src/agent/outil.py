@@ -44,18 +44,31 @@ OUTIL_SQL: dict = {
     ),
     "input_schema": {
         "type": "object",
+        # `raisonnement` avant `query`, et c'est le seul ordre qui a un sens : le modèle
+        # remplit les champs dans l'ordre du schéma, donc il énonce son intention avant
+        # d'écrire le SQL plutôt que de justifier après coup une requête déjà posée.
         "properties": {
+            "raisonnement": {
+                "type": "string",
+                "description": (
+                    "En une phrase ou deux : ce que tu cherches avec cette requête et "
+                    "pourquoi sous cette forme — le périmètre retenu, la table choisie "
+                    "quand plusieurs portent la même colonne, ce qu'un tour précédent "
+                    "t'a appris. Il est lu par qui relit l'exécution, jamais par toi : "
+                    "n'y mets aucun chiffre que la requête n'a pas encore rendu."
+                ),
+            },
             "query": {
                 "type": "string",
                 "description": "La requête SELECT à exécuter, sans point-virgule final.",
-            }
+            },
         },
-        "required": ["query"],
+        "required": ["raisonnement", "query"],
     },
 }
 
 
-def executer(query: str, con=None) -> RequeteExecutee:
+def executer(query: str, con=None, raisonnement: str = "") -> RequeteExecutee:
     """Exécute une requête et renvoie son issue — sans jamais lever.
 
     Les trois exceptions de `sql.py` deviennent un champ `erreur`. Ce n'est pas de
@@ -69,7 +82,8 @@ def executer(query: str, con=None) -> RequeteExecutee:
         # Jamais le résultat, jamais la question de l'utilisateur : le journal doit
         # rester exploitable sans devenir une donnée à protéger comme la base.
         logger.info("sql refusé ou en échec · %s", " ".join(query.split())[:120])
-        return RequeteExecutee(sql=query, erreur=str(exc))
+        return RequeteExecutee(sql=query, erreur=str(exc),
+                               raisonnement=raisonnement)
 
     return RequeteExecutee(
         sql=query,
@@ -78,6 +92,7 @@ def executer(query: str, con=None) -> RequeteExecutee:
         tronque=resultat.tronque,
         duree_ms=resultat.duree_ms,
         tables=list(resultat.tables),
+        raisonnement=raisonnement,
     )
 
 

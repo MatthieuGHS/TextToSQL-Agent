@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { BlocRequete } from '../src/composants/BlocRequete'
 import type { Requete } from '../src/types'
@@ -21,6 +21,7 @@ const REQUETE: Requete = {
   duree_ms: 3,
   erreur: null,
   tables: ['media'],
+  raisonnement: 'Je somme le coût sur le périmètre annonceur.',
   graphique: null,
 }
 
@@ -49,6 +50,26 @@ describe('bloc de requête', () => {
 
     expect(screen.getByText('kpi_compteurs')).toBeInTheDocument()
     expect(screen.getByText('media')).toBeInTheDocument()
+  })
+
+  it("affiche le raisonnement une fois le bloc déplié", () => {
+    // Écrit par le modèle avant d'exécuter, donc au-dessus du SQL : il explique la
+    // requête qu'on s'apprête à lire, il ne la justifie pas après coup.
+    render(<BlocRequete requete={REQUETE} />)
+    fireEvent.click(screen.getByText(/^requête$/i))
+
+    expect(
+      screen.getByText('Je somme le coût sur le périmètre annonceur.'),
+    ).toBeInTheDocument()
+  })
+
+  it("n'affiche rien quand le raisonnement est absent", () => {
+    // Les réponses produites avant que le champ n'existe le rendent vide : le bloc ne
+    // doit pas ouvrir un encart vide pour autant.
+    render(<BlocRequete requete={{ ...REQUETE, raisonnement: '' }} />)
+    fireEvent.click(screen.getByText(/^requête$/i))
+
+    expect(screen.queryByText(/Je somme le coût/)).not.toBeInTheDocument()
   })
 
   it("n'affiche aucune table sur une requête en échec", () => {

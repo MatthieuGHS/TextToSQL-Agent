@@ -22,6 +22,13 @@ export interface Requete {
    * de table pouvant vivre dans un littéral ou dans une CTE.
    */
   tables: string[]
+  /**
+   * Ce que le modèle cherchait, écrit par lui **avant** d'exécuter la requête.
+   *
+   * Destiné au débogage : voir l'intention à côté du SQL dit pourquoi une requête est ce
+   * qu'elle est. Vide sur les réponses produites avant que le champ n'existe.
+   */
+  raisonnement: string
   /** Ce que ce résultat permettrait de tracer — affiché à la demande, jamais d'office. */
   graphique: Graphique | null
 }

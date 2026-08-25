@@ -211,7 +211,12 @@ AGENT_NU = boucle.Agent(modele=None, systeme=None, empreinte_prompt="")
 #
 # 11/08/2026 · 4f7a1f99217d — campagne de référence, celle de la ligne de base.
 # 19/08/2026 · f03a91e8d24d — `MAX_ITERATIONS` 4 → 5, sur défaut constaté deux fois.
-EMPREINTE_MEDIUM = "f03a91e8d24d"
+#   Mesuré le 24/08 (campagne B0) : corpus 48/51 contre 47/51, `grain distinct` de 2/3
+#   instable à 3/3, coût par question inchangé. Réglage conservé.
+# 25/08/2026 · 7b0ab29b6987 — champ `raisonnement` sur l'outil, qui entre dans la clé par
+#   `OUTIL_SQL`. Campagne 1 d'E8 : quatre modifications de prompt et celle-ci en une seule
+#   péremption du cache.
+EMPREINTE_MEDIUM = "7b0ab29b6987"
 
 
 def test_l_empreinte_des_reglages_courants_est_epinglee():

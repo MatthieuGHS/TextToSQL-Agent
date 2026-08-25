@@ -66,10 +66,21 @@ def texte(contenu: str, usage: dict | None = None) -> AIMessage:
     )
 
 
-def appel_sql(query: str, identifiant: str = "t1") -> AIMessage:
+def appel_sql(
+    query: str, identifiant: str = "t1", raisonnement: str = ""
+) -> AIMessage:
+    """Le `raisonnement` est optionnel ici, alors que le schéma le rend requis.
+
+    Le schéma décrit ce qu'on **demande** au modèle ; ces tests couvrent ce que la boucle
+    fait de ce qu'elle **reçoit**, y compris d'un appel qui l'omettrait. Le défaut vide
+    est donc le cas à couvrir par défaut, pas une facilité d'écriture.
+    """
+    args = {"query": query}
+    if raisonnement:
+        args["raisonnement"] = raisonnement
     return AIMessage(
         content="",
-        tool_calls=[{"name": outil.NOM, "args": {"query": query}, "id": identifiant}],
+        tool_calls=[{"name": outil.NOM, "args": args, "id": identifiant}],
         response_metadata={"model": "claude-sonnet-5", "stop_reason": "tool_use"},
     )
 
@@ -644,6 +655,88 @@ def test_un_scalaire_final_ne_prive_pas_la_reponse_de_son_graphique(con):
 
     assert reponse.graphique is not None
     assert reponse.graphique.x == "step_date"
+
+
+# --- 6. Le raisonnement des requêtes --------------------------------------------------
+
+
+def test_le_raisonnement_voyage_avec_sa_requete(con):
+    """Demandé par le client pour du débogage : l'intention à côté du SQL.
+
+    Écrit par le modèle **avant** d'exécuter — c'est l'ordre du schéma d'outil — donc il
+    explique la requête qu'on s'apprête à lire plutôt que de la justifier après coup.
+    """
+    modele = ModeleScripte([
+        appel_sql("SELECT SUM(cost) FROM media", raisonnement="Total sur le périmètre."),
+        texte("Le total est de 1 250 €."),
+    ])
+
+    reponse = ask("Quel total ?", agent=agent_avec(modele, con))
+
+    assert reponse.requetes[0].raisonnement == "Total sur le périmètre."
+
+
+def test_le_raisonnement_accompagne_aussi_un_tatonnement(con):
+    """C'est même là qu'il sert le plus : il dit ce que le modèle croyait faire.
+
+    Une requête en échec est affichée comme les autres ; sans son intention, il faut
+    deviner ce qu'elle visait pour comprendre pourquoi elle a raté.
+    """
+    modele = ModeleScripte([
+        appel_sql("SELECT spend FROM media", raisonnement="J'essaie la colonne spend."),
+        texte("La colonne s'appelle cost."),
+    ])
+
+    reponse = ask("Quel total ?", agent=agent_avec(modele, con))
+
+    assert not reponse.requetes[0].a_reussi
+    assert reponse.requetes[0].raisonnement == "J'essaie la colonne spend."
+
+
+def test_aucune_decision_de_la_boucle_ne_depend_du_raisonnement(con):
+    """La propriété qui compte, et la raison pour laquelle ce champ est sans danger.
+
+    C'est du texte écrit par le modèle. S'il pouvait infléchir une décision de la boucle,
+    il ouvrirait un chemin où le modèle pilote le code par de la prose — exactement ce que
+    ce projet verrouille ailleurs. Deux exécutions identiques, l'une avec raisonnement et
+    l'autre sans, doivent donner la même réponse à ce champ près.
+    """
+    def executer(raisonnement: str):
+        modele = ModeleScripte([
+            appel_sql("SELECT step_date, cost FROM media", raisonnement=raisonnement),
+            appel_sql("SELECT SUM(cost) FROM media", "t2", raisonnement=raisonnement),
+            texte("Voici l'évolution."),
+        ])
+        return ask("Évolution ?", agent=agent_avec(modele, con))
+
+    avec = executer("Une intention longuement expliquée, qui ne doit rien changer.")
+    sans = executer("")
+
+    assert avec.arret is sans.arret
+    assert [r.sql for r in avec.requetes] == [r.sql for r in sans.requetes]
+    assert [r.lignes for r in avec.requetes] == [r.lignes for r in sans.requetes]
+    assert avec.texte == sans.texte
+    # Le graphique aussi : c'est la décision la plus facile à faire dériver par mégarde.
+    assert (avec.graphique is None) == (sans.graphique is None)
+    assert avec.graphique.x == sans.graphique.x
+
+
+def test_le_raisonnement_ne_repart_pas_dans_le_contexte_du_modele(con):
+    """Le retour d'outil ne contient que le résultat, jamais l'intention.
+
+    La renvoyer ferait payer deux fois le même texte — une fois écrit, une fois relu — sur
+    la partie volatile du contexte, celle que le cache ne rattrape pas.
+    """
+    modele = ModeleScripte([
+        appel_sql("SELECT channel FROM media", raisonnement="MARQUEUR-INTENTION"),
+        texte("Deux canaux."),
+    ])
+
+    ask("Quels canaux ?", agent=agent_avec(modele, con))
+
+    retours = [m for m in modele.appels[-1] if type(m).__name__ == "ToolMessage"]
+    assert retours, "le retour d'outil doit être dans le contexte"
+    assert all("MARQUEUR-INTENTION" not in str(m.content) for m in retours)
 
 
 def test_aucun_graphique_quand_le_resultat_ne_s_y_prete_pas(con):

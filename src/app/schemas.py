@@ -59,6 +59,9 @@ class RequeteSortante(BaseModel):
     # Les tables lues, décidées par le parseur du moteur — jamais par une recherche de
     # noms dans le texte, qu'un littéral tromperait. Vide sur une requête en échec.
     tables: list[str]
+    # Écrit par le modèle avant d'exécuter, pour qui relit. Demandé par le client pour du
+    # débogage : voir l'intention à côté du SQL dit pourquoi une requête est ce qu'elle est.
+    raisonnement: str
     # Défini plus bas dans le module ; résolu à la première validation.
     graphique: GraphiqueSortant | None
 

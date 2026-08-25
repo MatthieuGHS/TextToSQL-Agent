@@ -64,7 +64,8 @@ def client(base, monkeypatch):
     def agent_bouchon():
         return boucle.Agent(
             modele=ModeleScripte([
-                appel_sql("SELECT step_date, cost FROM media ORDER BY step_date"),
+                appel_sql("SELECT step_date, cost FROM media ORDER BY step_date",
+                          raisonnement="Évolution du coût sur la période."),
                 texte("Les dépenses sont de 1 000,50 € puis 250,25 €."),
             ]),
             systeme=SystemMessage(content="prompt d'essai"),
@@ -201,6 +202,13 @@ def test_la_specification_de_graphique_traverse_la_frontiere(client):
     assert g["series"] == [
         {"colonne": "cost", "valeurs": [1000.5, 250.25], "axe_secondaire": False}
     ]
+
+
+def test_le_raisonnement_traverse_la_frontiere(client):
+    """Demande 3 du client : l'intention à côté du SQL, pour du débogage."""
+    charge = client.post("/api/question", json={"question": "Quelles dépenses ?"}).json()
+
+    assert charge["requetes"][0]["raisonnement"] == "Évolution du coût sur la période."
 
 
 def test_chaque_requete_porte_les_tables_qu_elle_a_lues(client):
