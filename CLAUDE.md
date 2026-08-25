@@ -290,15 +290,19 @@ modèle**, **A1 avant la campagne de référence d'E8**, **C avant E11**.
   invisible du modèle** (vérifié dans le texte exact qu'il reçoit), il ne peut donc pas le
   rendre plus explorateur. On garde 5, et `48/51 · 15/18` est la nouvelle référence.
   ⚠ Le peuplement à k=1 annonçait +16 % de coût : artefact du mélange corpus/grille à k
-  différent, détaillé dans `docs/decisions.md`. **B1** : la campagne 1, désormais **cinq** modifications
-  groupées en une seule péremption — la somme faite de tête (`principes.md`, la seule sous
-  assertion), l'histogramme (`role.md`, en attente depuis le 19/08), les lignes déjà
-  affichées, **la correction de la phrase devenue fausse** sur la requête tracée
-  (`role.md` dit encore « ta dernière requête », le code trace « la dernière qui se
-  trace » depuis le 19/08), et le champ `raisonnement` de la demande 3. **B2** n'est payée
-  que si B1 rend une mesure ambiguë. Reste ouverte pour le grain de `kpi_compteurs` : la
-  phrase de `metier.md`, si le plafond n'a pas suffi. Puis décision d'effort `low`/`medium`
-  sur les campagnes du balayage, ouverture du scellé, notation manuelle finale.
+  différent, détaillé dans `docs/decisions.md`. **B1 est FAIT le 25/08** (~4 $, rapport `2026-08-25-1821.md`, prompt `12a0854db592`,
+  réglages `7b0ab29b6987`) : les cinq modifications groupées donnent **corpus 49/51 ·
+  grille 15/18** contre 48/51 · 15/18. **La somme faite de tête recule d'un tiers** — la
+  propriété `valeur présente dans une autre colonne` passe de 0/3 à 1/3, et le mécanisme
+  est vérifié dans le SQL réel : l'exécution qui passe lance une requête de plus, celle du
+  total, quand les deux autres s'arrêtent à la ventilation et somment de tête. Progrès réel
+  et limite claire : une règle de prompt infléchit, elle ne garantit pas. Le champ
+  `raisonnement` coûte +5 % en entrée et +20 % en sortie, sans aucune réponse tronquée.
+  **B2 ne sera pas payée** : elle départagerait deux causes d'un gain qu'on garde de toute
+  façon. ⚠ Le balayage d'effort n'est plus rejouable — `low` et `high` datent de l'ancien
+  prompt ; une décision d'effort demanderait de repayer les deux campagnes.
+  Restent gratuits : l'ouverture du scellé et la notation manuelle des 18 questions.
+
 - **Lot C — le thème clair par défaut, avec bascule.** Des **jetons sémantiques** dans
   `index.css`, définis deux fois, plutôt que 147 paires `dark:` — un seul endroit décide,
   les composants rendent, comme `src/charts` le fait déjà. Trois pièges vérifiés dans le

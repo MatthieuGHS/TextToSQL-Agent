@@ -1213,6 +1213,59 @@ comparaisons d'E8. Ce qui n'a pas bougé est aussi une information : les trois �
 identiques au tour près — la somme faite de tête ne se corrige pas par le plafond, ce qui
 confirme qu'elle relève bien de la description, c'est-à-dire de la campagne 1 d'E8.
 
+### Campagne 1 d'E8 — la somme faite de tête recule d'un tiers
+
+Cinq modifications groupées en une seule péremption du cache, mesurées le 25/08/2026 à k
+comparable contre la référence de B0.
+
+| | B0 (`f03a91e8d24d`) | B1 (`7b0ab29b6987`) |
+|---|---|---|
+| corpus · grille | 48/51 · 15/18 | **49/51** · 15/18 |
+| `valeur présente dans une autre colonne` | 0/3 échec | **1/3 instable** |
+| `grille/Data Discovery` | 1/2 | **2/2** |
+| `grille/Graphiques – Répartition` | 2/3 | **3/3** |
+| `grille/Corrélations et saisonnalité` | 3/3 | **2/3** |
+| `grille/Robustesse` | 3/3 | **2/3** |
+| entrée · sortie par question | 18 073 · 562 | 18 958 · 672 |
+
+**Le mécanisme visé a bougé, et il est vérifié dans les réponses réelles plutôt que déduit
+du score.** La question Twitch produit trois exécutions dont le SQL se lit directement :
+les deux qui échouent s'arrêtent à la ventilation par support, puis écrivent un total que
+personne n'a calculé — la somme faite de tête, dans sa forme exacte. Celle qui passe lance
+**une requête de plus**, celle du total, ce que la phrase ajoutée à `principes.md` demande
+mot pour mot. Le contrôle de traçabilité voit la différence sans qu'on ait rien ajusté.
+
+Un tiers, donc, et pas davantage : la propriété passe d'un échec franc à une instabilité.
+C'est un progrès réel et une limite claire — la description infléchit le comportement,
+elle ne le garantit pas. C'est exactement ce que la doctrine du projet prédit d'une règle
+portée par du texte, et la raison pour laquelle tout ce qui doit être vrai à chaque fois
+vit dans le code.
+
+**Ce que la campagne a coûté en tokens**, et c'est le prix du champ `raisonnement` :
++5 % en entrée, +20 % en sortie. Le risque anticipé — que la prose mange le plafond de
+sortie et produise des réponses tronquées — **ne s'est pas matérialisé** : aucun
+`reponse_tronquee` sur 69 exécutions.
+
+**B2 ne sera pas payée, et c'est un raisonnement à garder.** Elle devait départager deux
+causes possibles au mouvement de la traçabilité : la phrase de `principes.md` ou le champ
+`raisonnement`, qui fait énoncer une intention avant chaque requête et peut donc en
+susciter davantage. L'ambiguïté est réelle. Mais **aucune décision n'en dépend** : on ne
+retirerait ni l'une — c'est la doctrine du projet écrite noir sur blanc — ni l'autre, qui
+est une demande du client. Payer une campagne pour attribuer un gain qu'on garde de toute
+façon serait dépenser sans arbitrage à la clé.
+
+**Deux pertes, toutes deux à k=1 sur la grille**, donc un tirage chacune : un
+`plafond_iterations` sur la question de corrélation — le grain de `kpi_compteurs`, cinq
+requêtes pour le découvrir — et un échec de traçabilité sur la question tronquée. Ni
+l'une ni l'autre n'est attribuable à une modification ; `Crash Test` avait déjà montré
+en B0 qu'une question de grille peut basculer sans cause.
+
+**Conséquence à connaître avant la suite : le balayage d'effort n'est plus comparable.**
+Les campagnes `low` et `high` ont été jouées sous l'ancien prompt, et `hors_ligne`
+recalcule l'empreinte depuis les `.md` courants — elles ne se rejouent donc plus. Leurs
+chiffres restent lisibles dans leurs rapports, mais une décision d'effort sous le prompt
+actuel demanderait de les repayer toutes les deux.
+
 ### Les tables lues se demandent au parseur, pas au texte
 
 Demande 2 du client : voir d'un coup d'œil quelles tables une requête a lues. Elle a l'air
