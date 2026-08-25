@@ -392,7 +392,22 @@ class PasDeGraphiqueSurResultatVide:
 
 # Nombres écrits à la française : séparateur de milliers espace (y compris insécable ou
 # fine), décimale virgule. On capte aussi la forme anglaise pour ne rien manquer.
-_NOMBRE = re.compile(r"\d[\d   ]*(?:[.,]\d+)?")
+# **Les groupes de milliers font exactement trois chiffres, et le dernier n'est pas
+# suivi d'un chiffre.** Sans ces deux conditions, « T4 2022 » se lisait comme le nombre
+# 42022 — l'espace d'un libellé de trimestre passant pour un séparateur de milliers — et
+# la réponse était déclarée non traçable alors qu'elle datait simplement son propos.
+# Mesuré le 25/08/2026 en rejouant les assertions **que chaque cas déclare** sur les 344
+# exécutions en cache : **1 verdict noté passe au vert, aucun ne passe au rouge**. Une
+# première mesure annonçait 8 ; elle appliquait le contrôle à toutes les exécutions, y
+# compris à des cas qui ne le portent pas, et surestimait donc son effet. Le défaut reste
+# réel — une réponse juste était refusée — mais son emprise sur les scores est d'un
+# verdict, et il n'en change aucun sur les campagnes antérieures.
+#
+# L'ancrage `(?!\d)` n'est pas décoratif : sans lui, la première version de ce correctif
+# lisait « 2019 » comme « 201 » — le groupe de trois s'arrêtant avant le quatrième
+# chiffre — et faisait passer **37 verdicts au rouge**. La mesure l'a rejetée avant
+# qu'elle ne soit appliquée.
+_NOMBRE = re.compile(r"\d{1,3}(?:[   ]\d{3})+(?!\d)(?:[.,]\d+)?|\d+(?:[.,]\d+)?")
 
 # Un nombre isolé de 1 ou 2 chiffres est presque toujours un ordinal, une date ou un
 # effectif de phrase ("les 3 canaux"), pas un chiffre extrait des données.

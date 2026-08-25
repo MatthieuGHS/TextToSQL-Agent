@@ -301,6 +301,55 @@ def test_tracabilite_ignore_les_petits_nombres(con):
     assert a.TracabiliteNumerique().verifier(r, con).ok
 
 
+def test_un_libelle_de_trimestre_n_est_pas_un_nombre(con):
+    """Défaut de l'instrument constaté le 25/08/2026, mesuré sur le cache.
+
+    L'écriture française sépare les milliers par une espace : « T4 2022 » se lisait donc
+    comme le nombre 42022, et une réponse qui ne faisait que dater son propos — ce que le
+    prompt lui demande — était déclarée non traçable. Neuf exécutions du cache écrivent un
+    libellé de trimestre ; une seule en tirait un verdict rouge, les autres cas ne portant
+    pas ce contrôle. Corrigé pour la réponse refusée à tort, pas pour le score.
+
+    Un groupe de milliers fait **exactement trois chiffres**, et le dernier n'est pas
+    suivi d'un chiffre : « 2022 » n'en est pas un.
+    """
+    r = a.Resultat(
+        reponse="Le pic est au T4 2022, puis la série retombe à 1 750 €.",
+        sql=[REF_TOTAL],
+    )
+
+    verdict = a.TracabiliteNumerique().verifier(r, con)
+
+    # L'assertion porte sur la **fusion**, pas sur le verdict : « 2022 » reste un nombre
+    # comme un autre, traçable ou non selon ce que les requêtes ont rendu. Ce qui ne doit
+    # plus exister, c'est le nombre 42022 que personne n'a écrit.
+    assert "4 2022" not in verdict.detail
+    assert "1 750" not in verdict.detail, "le montant du SQL de référence reste traçable"
+
+
+def test_un_vrai_nombre_a_separateurs_reste_capte(con):
+    """Contre-épreuve du resserrement, dans les deux sens qui l'ont menacé.
+
+    Un montant groupé doit rester lu comme un seul nombre, sinon le contrôle cesse
+    d'attraper les inventions ; et une année doit rester lue entière — la première
+    version de ce correctif lisait « 2019 » comme « 201 » et faisait passer 37 verdicts
+    au rouge, ce que la mesure a rejeté avant application.
+    """
+    groupe = a.Resultat(reponse="Le total atteint 9 876 543 €.", sql=[REF_TOTAL])
+    verdict = a.TracabiliteNumerique().verifier(groupe, con)
+
+    assert not verdict.ok
+    assert "9 876 543" in verdict.detail, "le montant doit être lu d'un seul tenant"
+
+    # Une année reste lue entière. La première version de ce correctif la coupait en
+    # « 201 », un nombre que rien n'a jamais produit — d'où les 37 verdicts perdus.
+    annee = a.Resultat(reponse="De 2019 à 2025, tout est stable.", sql=[REF_TOTAL])
+    orphelins = a.TracabiliteNumerique().verifier(annee, con).detail
+
+    assert "2019" in orphelins and "2025" in orphelins
+    assert "201" not in orphelins.replace("2019", "").replace("2025", "")
+
+
 # --- Ce que la première campagne réelle a corrigé -------------------------------------
 #
 # Trois défauts de l'instrument, tous découverts en confrontant les assertions à de
