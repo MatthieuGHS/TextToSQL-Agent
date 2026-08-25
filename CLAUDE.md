@@ -249,6 +249,42 @@ décidé à l'étendue et non à la médiane, réglette de zoom, histogramme nat
 la demande » sur chaque bloc de requête, bascules courbe/barres/empilées déclarées par
 le serveur. Aucun de ces changements ne touche le prompt : la ligne de base tient.
 
+## ⚠ Le constat du 25 août 2026 — la grille client ne bouge pas
+
+| | ligne de base | B0 (5 tours) | B1 (prompt + outil) |
+|---|---|---|---|
+| corpus | 47/51 | 48/51 | 49/51 |
+| **grille** | **15/18** | **15/18** | **15/18** |
+
+Deux campagnes payées, **zéro point gagné sur l'instrument du client**. C'est le fait qui
+prime sur la feuille de route ci-dessous.
+
+**Le levier « mieux décrire le monde » a atteint son plafond, et c'est mesuré.** Tout ce
+qui a été fait depuis E5 passe par le prompt. B1 en montre la limite : la somme faite de
+tête recule de 0/3 à **1/3**, pas davantage. Une règle de prompt infléchit un
+comportement, elle ne le garantit pas — ce que ce document dit depuis le début, et qui
+prescrit la suite : *ce qui doit être vrai à chaque fois ne peut pas dépendre du modèle*.
+**Ce principe n'a jamais été appliqué aux défauts qui restent.**
+
+Les trois échecs de grille (rapport `2026-08-25-1821.md`) :
+
+| Question | Assertion | Ce que c'est vraiment |
+|---|---|---|
+| Q5 · corrélation Search / ventes | `arrêt normal` | `plafond_iterations` — **l'agent ne rend rien**, cinq requêtes de travail jetées |
+| Q17 · Top 3 des enseignements Social | `arrêt normal` | idem |
+| Q15 · « Evolution trafic SEA » (tronquée exprès) | traçabilité | somme faite de tête |
+
+**Deux sur trois ne sont pas des erreurs de raisonnement** : l'agent travaille, puis
+l'utilisateur lit « Je n'ai pas abouti dans le nombre d'étapes imparti ». Tout est jeté.
+
+⚠ **La grille est mesurée à k=1**, un tirage par question. `Crash Test` et `Robustesse`
+ont basculé sans cause entre deux campagnes : à ce niveau de bruit, **la métrique qui
+intéresse le client ne peut pas montrer un gain de un ou deux points**. `--k-grille 3` la
+rendrait lisible, pour ~2 $ de plus par campagne.
+
+**Ce qu'on ne veut plus** : des tours d'évaluation facturés qui mesurent sans améliorer.
+La prochaine étape doit être une amélioration de l'agent, pas une mesure de plus.
+
 ## Feuille de route arrêtée le 24 août 2026, après le retour client
 
 Le retour est **positif**. Quatre demandes — thème clair avec bascule, tables utilisées
