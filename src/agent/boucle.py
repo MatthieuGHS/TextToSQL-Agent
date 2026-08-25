@@ -455,10 +455,18 @@ def _graphique(requetes: list[RequeteExecutee]):
     tracé, son texte devenait faux. Se replier ne trace donc pas « une exploration » : ça
     trace la plus récente des conclusions dessinables.
 
+    **Les résultats tronqués sont sautés, sur défaut constaté le 25/08/2026.** Une
+    question portant sur toute la période rendait des centaines de semaines, dont
+    `run_sql` ne garde que `LIMITE_LIGNES` : la courbe s'arrêtait donc bien avant la fin
+    demandée, sans un mot ni sur le graphique ni dans le texte. Les lignes gardées sont
+    les **premières** rendues et non un échantillon — un tracé partiel n'est pas une vue
+    approchée, c'est une vue fausse, et c'est le mode de défaillance que tout ce projet
+    cherche à éviter : plausible, sans erreur, sans avertissement.
+
     Aucune décision n'est prise ici : `charts.proposer` refuse tout seul ce qui ne se
     trace pas, et son refus est le cas fréquent.
     """
-    for requete in reversed([r for r in requetes if r.a_reussi]):
+    for requete in reversed([r for r in requetes if r.a_reussi and not r.tronque]):
         specification = charts.proposer(requete.colonnes, requete.lignes)
         if specification is not None:
             return specification

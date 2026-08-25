@@ -638,6 +638,70 @@ def test_le_graphique_vient_de_la_derniere_requete_tracable(con):
     assert [s.colonne for s in reponse.graphique.series] == ["cost"]
 
 
+@pytest.fixture(scope="session")
+def base_longue(tmp_path_factory) -> pathlib.Path:
+    """Une base qui dépasse `LIMITE_LIGNES`, seule façon d'atteindre la troncature.
+
+    `run_sql` fige sa limite en valeur par défaut de paramètre : l'abaisser depuis un
+    test ne changerait rien à ce que la boucle appelle. On produit donc une vraie
+    troncature plutôt qu'une troncature simulée — c'est le scénario réel, et c'est le
+    seul qui prouve quelque chose ici.
+    """
+    chemin = tmp_path_factory.mktemp("db_longue") / "longue.duckdb"
+    c = duckdb.connect(str(chemin))
+    c.execute(
+        "CREATE TABLE media AS SELECT DATE '2019-01-07' + INTERVAL (i) WEEK "
+        "AS step_date, 'tv' AS channel, 100.0 + i AS cost FROM range(300) t(i)"
+    )
+    c.close()
+    return chemin
+
+
+@pytest.fixture
+def con_long(base_longue):
+    c = connexion.ouvrir(base_longue)
+    yield c
+    c.close()
+
+
+def test_un_resultat_tronque_ne_se_trace_pas(con_long):
+    """Défaut constaté le 25/08/2026, sur les réponses réelles en cache.
+
+    Une question portant sur toute la période rendait des centaines de semaines, dont
+    `run_sql` ne garde que les 200 premières. Le graphique s'arrêtait donc bien avant la
+    fin demandée — sans un mot ni sur la courbe ni dans le texte. Les lignes gardées sont
+    les premières et non un échantillon : un tracé partiel n'est pas une vue approchée,
+    c'est une vue fausse.
+    """
+    modele = ModeleScripte([
+        appel_sql("SELECT step_date, cost FROM media ORDER BY step_date"),
+        texte("Voici l'évolution sur toute la période."),
+    ])
+
+    reponse = ask("Évolution complète ?", agent=agent_avec(modele, con_long))
+
+    assert reponse.requetes[0].tronque
+    assert reponse.graphique is None
+
+
+def test_le_meme_resultat_non_tronque_se_trace(con_long):
+    """Contre-épreuve : sans la garde, le test précédent passait.
+
+    Même base, même colonnes, même forme — seule la troncature change, et c'est la seule
+    chose que la règle regarde.
+    """
+    modele = ModeleScripte([
+        appel_sql("SELECT step_date, cost FROM media ORDER BY step_date LIMIT 50"),
+        texte("Voici les 50 premières semaines."),
+    ])
+
+    reponse = ask("Cinquante semaines ?", agent=agent_avec(modele, con_long))
+
+    assert not reponse.requetes[0].tronque
+    assert reponse.graphique is not None
+    assert reponse.graphique.x == "step_date"
+
+
 def test_un_scalaire_final_ne_prive_pas_la_reponse_de_son_graphique(con):
     """Défaut constaté le 19/08/2026, en conditions réelles.
 

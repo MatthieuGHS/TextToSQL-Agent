@@ -402,6 +402,27 @@ def _pivot(
         for cat in valeurs_categorie
     }
 
+    # Un pivot existe pour qu'on **suive** chaque série le long de l'abscisse. Quand
+    # aucune n'a plus d'un point, il n'y a rien à suivre : le résultat est un tableau
+    # dessiné en barres, et l'adjacence visuelle invite précisément la comparaison que
+    # l'abscisse sépare. Constaté le 25/08/2026 sur la notation manuelle de la grille —
+    # une réponse expliquait que trois métriques d'exposition ne se comparent pas, sous
+    # un graphique qui les mettait sur un axe unique, de zéro à plusieurs milliards.
+    #
+    # Formulé sur la **forme** et non sur les unités : le module ne sait pas ce qu'est
+    # une unité, et une règle qui reconnaîtrait des noms de métriques passerait ce cas
+    # pour échouer au suivant. Mesuré sur les 330 requêtes distinctes du cache, dont
+    # 116 traçables : une seule décision change, celle du défaut.
+    if max(
+        (sum(1 for v in valeurs if v is not None)
+         for valeurs in valeurs_par_categorie.values()),
+        default=0,
+    ) <= 1:
+        return (
+            "aucune série n'a plus d'un point : le résultat est un tableau, pas une "
+            "évolution le long de son abscisse"
+        )
+
     etendues = {
         cat: max((abs(v) for v in valeurs if v is not None and v != 0), default=0.0)
         for cat, valeurs in valeurs_par_categorie.items()

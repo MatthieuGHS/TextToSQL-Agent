@@ -27,7 +27,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import SystemMessage
 
-from src.agent import boucle
+from src.agent import boucle, reponse
 from src.app import api, serialisation
 from src.db import connexion
 from tests.test_agent_boucle import ModeleScripte, appel_sql, texte
@@ -235,6 +235,28 @@ def test_chaque_requete_reussie_porte_sa_specification_de_graphique(client):
     assert charge["requetes"][0]["graphique"] is not None
     assert charge["requetes"][0]["graphique"]["type"] == "courbe"
     assert "variantes" in charge["requetes"][0]["graphique"]
+
+
+def test_une_requete_tronquee_n_offre_pas_de_tracer_son_resultat():
+    """Le « tracer à la demande » suit la même règle que le graphique principal.
+
+    Sans elle, le défaut du 25/08/2026 serait seulement déplacé d'un bouton : l'interface
+    proposerait de tracer un résultat dont l'en-tête dit « tronqué », et la courbe
+    s'arrêterait au milieu de la période sans le dire. Les deux chemins vers `src/charts`
+    doivent poser la même condition, sinon l'un des deux la perdra.
+    """
+    lignes = [(datetime.date(2019, 1, 7) + datetime.timedelta(weeks=i), float(i))
+              for i in range(40)]
+    commun = {"sql": "SELECT step_date, cost FROM media",
+              "colonnes": ["step_date", "cost"], "lignes": lignes}
+
+    entier = serialisation.requete(reponse.RequeteExecutee(**commun, tronque=False))
+    coupe = serialisation.requete(reponse.RequeteExecutee(**commun, tronque=True))
+
+    # Contre-épreuve portée par la paire : mêmes lignes, mêmes colonnes, seule la
+    # troncature diffère — donc c'est bien elle que la règle regarde.
+    assert entier.graphique is not None
+    assert coupe.graphique is None
 
 
 def test_l_absence_de_graphique_est_explicite_et_non_une_omission(client, monkeypatch):

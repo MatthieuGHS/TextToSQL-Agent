@@ -62,9 +62,13 @@ def requete(executee) -> schemas.RequeteSortante:
     aucun état — pour que l'interface puisse proposer « tracer » sur un bloc de requête
     sans redéployer de logique de lisibilité côté navigateur.
     """
+    # Un résultat tronqué ne se trace pas : les lignes gardées sont les premières
+    # rendues, pas un échantillon, et la courbe s'arrêterait net au milieu de la période
+    # demandée sans que rien ne le dise. Voir `boucle._graphique`, qui pose la même
+    # condition pour le graphique principal.
     tracable = (
         charts.proposer(executee.colonnes, executee.lignes)
-        if executee.a_reussi
+        if executee.a_reussi and not executee.tronque
         else None
     )
     return schemas.RequeteSortante(

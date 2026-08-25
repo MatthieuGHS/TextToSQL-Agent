@@ -319,6 +319,52 @@ def test_un_ecart_de_budget_ne_fait_pas_refuser_un_pivot():
     assert g.empilable
 
 
+def test_un_pivot_dont_chaque_serie_n_a_qu_un_point_est_refuse():
+    """Défaut constaté le 25/08/2026, à la notation manuelle de la grille.
+
+    Le modèle explique que trois métriques d'exposition ne sont pas comparables, puis
+    le graphique automatique les met sur un axe unique : chaque canal ne porte qu'une
+    seule métrique, donc chaque série n'a qu'un point, et l'abscisse *sépare* des
+    unités que l'adjacence des barres invite à comparer.
+
+    La garde est posée sur la forme — aucune série ne dépasse un point — et non sur les
+    unités, que ce module ne connaît pas. Une règle qui reconnaîtrait des noms de
+    métriques passerait ce cas pour échouer au suivant.
+    """
+    lignes = [
+        ("clicks", "sea", 53_000_000.0),
+        ("clicks", "seo", 46_800_000.0),
+        ("grp", "tv", 37_010.0),
+        ("grp", "radio", 17_521.0),
+        ("impressions", "display", 3_636_000_000.0),
+        ("impressions", "social", 1_443_000_000.0),
+    ]
+
+    assert "un tableau" in charts.refus(
+        ["performance_metric", "channel", "exposition"], lignes
+    )
+
+
+def test_une_seconde_valeur_par_serie_suffit_a_faire_tracer_le_pivot():
+    """Contre-épreuve du test précédent : sans la garde, le cas ci-dessus passait.
+
+    Mêmes colonnes, même nombre de séries — seule change la présence d'un second point
+    par série, c'est-à-dire la seule chose que la garde regarde. Ce qui se suit le long
+    d'une abscisse se trace ; ce qui n'a qu'un point par série, non.
+    """
+    lignes = [
+        (mois, canal, valeur * (i + 1))
+        for i, mois in enumerate(SEMAINES[:2])
+        for canal, valeur in (("sea", 53_000_000.0), ("seo", 46_800_000.0))
+    ]
+
+    g = charts.proposer(["step_date", "channel", "clics"], lignes)
+
+    assert g is not None
+    assert len(g.series) == 2
+    assert all(len([v for v in s.valeurs if v is not None]) == 2 for s in g.series)
+
+
 def test_deux_mesures_et_une_categorie_ne_se_pivotent_pas():
     """Contre-épreuve : le pivot exige une mesure unique — deux mesures et une catégorie
     rendraient ambigu ce qu'une série représente."""
