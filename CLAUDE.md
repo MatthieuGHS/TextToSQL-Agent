@@ -276,8 +276,16 @@ Ce que la notation a produit, toutes corrections **gratuites** et faites le 25-2
 - **six corrections de prompt**, dont deux phrases devenues fausses depuis le 19/08.
 
 ⚠ **Le cache est périmé volontairement** — prompt `44ebe23d8f07`, réglages `4014d5aee332`.
-Les 378 exécutions ont été produites par une boucle qui jetait le dernier tour. Une
-campagne de référence reste à payer ; elle n'a pas encore été lancée.
+Les 378 exécutions ont été produites par une boucle qui jetait le dernier tour.
+
+⚠ **La campagne de référence est interrompue, faute de crédit API** (26/08, ~1,20 $
+dépensés). Le peuplement à k=1 est **complet et fait foi** : corpus 16/17 · grille 15/18,
+et **zéro arrêt anormal sur 35** contre deux `plafond_iterations` avant — les deux
+questions où l'agent travaillait sans rien rendre produisent désormais une réponse, et le
+plafond n'est même plus atteint. Les 65 exécutions restantes ont échoué en 400 avant
+traitement, donc sans être facturées. **Procédure de reprise, coût attendu et état exact
+du cache : `docs/prive/reprise-campagne-26-08.md`.** Une seule commande à relancer une
+fois le crédit rechargé ; les 40 exécutions déjà payées se resservent gratuitement.
 
 ### Le constat d'origine — la grille client ne bouge pas
 
