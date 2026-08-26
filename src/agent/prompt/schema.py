@@ -120,7 +120,14 @@ def periode(con: duckdb.DuckDBPyConnection) -> str:
 
 
 def structure(con: duckdb.DuckDBPyConnection) -> str:
-    """Colonnes et types des trois tables, avec leur grain et leur volumétrie."""
+    """Colonnes et types des trois tables, avec leur grain et leur volumétrie.
+
+    **Le grain est chiffré autant qu'énoncé**, sur défaut constaté le 25/08/2026 : le
+    modèle écrivait `COUNT(*) AS n_lignes`, nommait donc sa colonne correctement, puis
+    la racontait comme un nombre de semaines. « Une semaine × un segment média » est
+    exact mais demande une déduction qu'il ne fait pas sous charge ; « jusqu'à N lignes
+    pour une même semaine » rend l'équation `COUNT(*) = semaines` visiblement absurde.
+    """
     grains = {
         "media": "une semaine × un segment média",
         "kpi_compteurs": "une semaine × une énergie",
@@ -128,10 +135,17 @@ def structure(con: duckdb.DuckDBPyConnection) -> str:
     }
     lignes = ["## Schéma", ""]
     for table in TABLES:
-        n = _lignes(con, f"SELECT COUNT(*) FROM {table}")[0][0]
+        n, semaines, maxi = _lignes(
+            con,
+            f"SELECT COUNT(*), COUNT(DISTINCT step_date), "
+            f"MAX(n) FROM (SELECT step_date, COUNT(*) AS n FROM {table} "
+            f"GROUP BY step_date)",
+        )[0]
         lignes += [
             f"### {table} — {n} lignes",
-            f"Grain : {grains[table]}.",
+            f"Grain : {grains[table]}. **{n} lignes pour {semaines} semaines "
+            f"distinctes**, jusqu'à {maxi} lignes pour une même semaine — compter les "
+            f"lignes ne compte donc pas les semaines.",
             "",
             "```",
             *(f"{nom:24s} {typ}" for nom, typ in _colonnes(con, table)),
@@ -194,12 +208,30 @@ def valeurs_possibles(con: duckdb.DuckDBPyConnection) -> str:
 
 
 def metriques_de_performance(con: duckdb.DuckDBPyConnection) -> str:
-    """Le couple canal → métrique, qui est une propriété structurelle des données."""
+    """Le couple canal → métrique, qui est une propriété structurelle des données.
+
+    **Porter une métrique et la renseigner sont deux choses**, distinguées ici depuis le
+    25/08/2026. Un canal peut être déclaré au schéma sur une métrique dont il n'a pas une
+    seule valeur non nulle : vrai au schéma, trompeur en fait. Le modèle le nommait dans
+    un total auquel il ne contribue rien, et aurait répondu « 0 » à qui l'interrogeait
+    dessus — présenté comme une mesure et non comme une absence.
+
+    Entièrement déduit de la base, aucune valeur écrite à la main : la mention disparaît
+    d'elle-même le jour où un rafraîchissement peuple la colonne.
+    """
     couples = _lignes(
         con,
         "SELECT performance_metric, STRING_AGG(DISTINCT channel, ', ' ORDER BY channel) "
         "FROM media GROUP BY 1 ORDER BY 1",
     )
+    creux = [
+        canal
+        for (canal,) in _lignes(
+            con,
+            "SELECT channel FROM media GROUP BY channel "
+            "HAVING COALESCE(MAX(performance), 0) = 0 ORDER BY channel",
+        )
+    ]
     lignes = [
         "## Métriques de performance",
         "",
@@ -212,7 +244,65 @@ def metriques_de_performance(con: duckdb.DuckDBPyConnection) -> str:
         "une couverture d'audience, une impression un affichage, un clic une interaction. "
         "Demander une métrique à un canal qui ne la porte pas n'a pas de réponse.",
     ]
+    if creux:
+        lignes += [
+            "",
+            "**Porter une métrique n'est pas la renseigner.** Ces canaux sont déclarés "
+            "sur leur métrique mais n'en ont aucune valeur non nulle sur toute la "
+            f"période : {', '.join(f'`{c}`' for c in creux)}. Leur total vaut zéro par "
+            "absence de mesure, pas par mesure d'une absence — ne pas les citer parmi "
+            "les contributeurs d'un total, et dire que la donnée manque plutôt que de "
+            "rendre « 0 » comme un résultat.",
+        ]
     return "\n".join(lignes)
+
+
+def activite(con: duckdb.DuckDBPyConnection) -> str:
+    """Comment l'inactivité est encodée, canal par canal — présent n'est pas actif.
+
+    Section née d'un défaut constaté le 25/08/2026 : à « le canal vidéo a-t-il un
+    historique complet ? », trois exécutions ont écrit trois filtres différents
+    (`cost > 0`, `performance IS NOT NULL`, aucun) et rendu trois verdicts
+    contradictoires. Le choix du filtre était un tirage au sort, parce que rien ne disait
+    au modèle ce qu'une semaine sans diffusion **ressemble** dans cette base.
+
+    Or elle y ressemble à une ligne présente valant zéro, et non à une ligne absente :
+    la plupart des canaux ont une ligne pour chaque semaine de la période. Les trois
+    colonnes ci-dessous rendent la différence entre « présent » et « actif » lisible
+    d'un coup d'œil, sans qu'aucun seuil ni aucune interprétation ne soit écrit à la
+    main — tout se recalcule à chaque construction.
+    """
+    lignes = _lignes(
+        con,
+        "SELECT channel, COUNT(DISTINCT step_date), "
+        "COUNT(DISTINCT step_date) FILTER (WHERE cost > 0), "
+        "COUNT(DISTINCT step_date) FILTER (WHERE performance > 0), "
+        "COUNT(*) FILTER (WHERE cost IS NULL) "
+        "FROM media GROUP BY channel ORDER BY channel",
+    )
+    return "\n".join(
+        [
+            "## Présence et activité — « présent » n'est pas « actif »",
+            "",
+            "Une semaine sans diffusion est le plus souvent une **ligne présente valant "
+            "zéro**, pas une ligne absente. Compter les lignes d'un canal ne dit donc "
+            "rien de son activité réelle : il faut filtrer sur la mesure.",
+            "",
+            "| Canal | Semaines présentes | dont `cost > 0` | dont `performance > 0` |",
+            "|---|---|---|---|",
+            *(
+                f"| `{canal}` | {presentes} | "
+                f"{'— (`cost` NULL)' if nuls else avec_cout} | {avec_perf} |"
+                for canal, presentes, avec_cout, avec_perf, nuls in lignes
+            ),
+            "",
+            "Lire ce tableau avant de choisir un filtre : `cost = 0` signifie « aucune "
+            "diffusion enregistrée cette semaine-là », tandis que `cost IS NULL` "
+            "signifie « sans objet » — un canal non acheté n'a pas de dépense à zéro, il "
+            "n'a pas de dépense du tout. Un canal dont les semaines présentes dépassent "
+            "largement les semaines actives est intermittent, pas incomplet.",
+        ]
+    )
 
 
 def perimetres(con: duckdb.DuckDBPyConnection) -> str:
@@ -266,5 +356,6 @@ def generer(con: duckdb.DuckDBPyConnection) -> str:
             perimetres,
             valeurs_possibles,
             metriques_de_performance,
+            activite,
         )
     )
