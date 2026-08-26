@@ -5,6 +5,20 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Agent data — média</title>
+    <script>
+      // Posé avant le premier rendu, et volontairement en clair dans la page plutôt que
+      // dans un module : un module est différé, donc React aurait déjà peint. Sans ce
+      // script, un rechargement en thème sombre affiche une page blanche le temps que
+      // l'application démarre — un défaut qu'aucun test ne voit et que tout le monde voit.
+      //
+      // La règle de lecture doit rester celle de `themeRetenu()` dans `src/theme.tsx`.
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem('theme') === 'sombre' ? 'sombre' : 'clair'
+      } catch (e) {
+        document.documentElement.dataset.theme = 'clair'
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -54,7 +54,7 @@ export function TableauResultat({
 }) {
   if (lignes.length === 0) {
     return (
-      <p className="px-3 py-2 text-sm text-slate-500 italic">
+      <p className="px-3 py-2 text-sm text-texte-faible italic">
         Résultat vide : aucune ligne ne correspond.
       </p>
     )
@@ -72,11 +72,11 @@ export function TableauResultat({
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="border-b border-slate-700">
+            <tr className="border-b border-bordure-appuyee">
               {colonnes.map((c, i) => (
                 <th
                   key={c}
-                  className={`px-3 py-2 font-medium text-slate-400 whitespace-nowrap ${
+                  className={`px-3 py-2 font-medium text-texte-attenue whitespace-nowrap ${
                     numeriques[i] ? 'text-right' : 'text-left'
                   }`}
                 >
@@ -87,15 +87,15 @@ export function TableauResultat({
           </thead>
           <tbody>
             {visibles.map((ligne, i) => (
-              <tr key={i} className="border-b border-slate-800/60 last:border-0">
+              <tr key={i} className="border-b border-bordure-attenuee last:border-0">
                 {ligne.map((v, j) => (
                   <td
                     key={j}
                     className={`px-3 py-1.5 whitespace-nowrap ${
                       typeof v === 'number'
-                        ? 'text-right font-mono tabular-nums text-slate-200'
-                        : 'text-slate-300'
-                    } ${v === null ? 'text-slate-600' : ''}`}
+                        ? 'text-right font-mono tabular-nums text-texte'
+                        : 'text-texte'
+                    } ${v === null ? 'text-texte-faible' : ''}`}
                   >
                     {formater(v)}
                   </td>
@@ -106,7 +106,7 @@ export function TableauResultat({
         </table>
       </div>
       {(cachees > 0 || tronque) && (
-        <p className="px-3 py-2 text-xs text-slate-500 border-t border-slate-800">
+        <p className="px-3 py-2 text-xs text-texte-faible border-t border-bordure">
           {cachees > 0 && `${cachees} ligne${cachees > 1 ? 's' : ''} non affichée${
             cachees > 1 ? 's' : ''
           }`}

@@ -21,15 +21,15 @@ import remarkGfm from 'remark-gfm'
 export function Markdown({ texte }: { texte: string }) {
   return (
     <div
-      className="prose prose-invert prose-slate max-w-none
+      className="prose max-w-none
                  prose-p:leading-relaxed prose-p:my-3
-                 prose-headings:font-semibold prose-headings:text-slate-100
+                 prose-headings:font-semibold prose-headings:text-texte-fort
                  prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
                  prose-h2:mt-5 prose-h2:mb-2 prose-h3:mt-4 prose-h3:mb-1.5
-                 prose-strong:text-slate-100
+                 prose-strong:text-texte-fort
                  prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5
-                 prose-hr:border-slate-800
-                 prose-a:text-sky-400 prose-a:underline-offset-2"
+                 prose-hr:border-bordure
+                 prose-a:text-accent prose-a:underline-offset-2"
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -39,8 +39,8 @@ export function Markdown({ texte }: { texte: string }) {
           // sans avoir à lire la phrase.
           code: ({ children, ...props }) => (
             <code
-              className="rounded bg-slate-800 px-1.5 py-0.5 text-[0.85em]
-                         font-mono text-sky-300 before:content-none after:content-none"
+              className="rounded bg-surface-appuyee px-1.5 py-0.5 text-[0.85em]
+                         font-mono text-accent before:content-none after:content-none"
               {...props}
             >
               {children}
@@ -49,18 +49,18 @@ export function Markdown({ texte }: { texte: string }) {
           // Un tableau large casserait la mise en page de toute la conversation : il
           // défile dans son propre cadre.
           table: ({ children }) => (
-            <div className="my-3 overflow-x-auto rounded-lg border border-slate-800">
+            <div className="my-3 overflow-x-auto rounded-lg border border-bordure">
               <table className="my-0 w-full text-sm">{children}</table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="border-b border-slate-800 px-3 py-2 text-left font-medium
-                           text-slate-400">
+            <th className="border-b border-bordure px-3 py-2 text-left font-medium
+                           text-texte-attenue">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border-b border-slate-800/60 px-3 py-1.5">{children}</td>
+            <td className="border-b border-bordure-attenuee px-3 py-1.5">{children}</td>
           ),
           // Un lien produit par le modèle est un lien qu'on n'a pas écrit : il s'ouvre
           // ailleurs, et sans donner la main sur l'onglet d'origine.

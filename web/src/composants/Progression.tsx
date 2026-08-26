@@ -47,16 +47,16 @@ export function Progression({
           <div
             key={i}
             className={`flex items-center gap-2.5 text-sm ${
-              derniere ? 'text-slate-300' : 'text-slate-600'
+              derniere ? 'text-texte' : 'text-texte-faible'
             }`}
           >
             <span
               className={`size-1.5 rounded-full shrink-0 ${
                 etape.type === 'requete' && etape.erreur
-                  ? 'bg-red-500'
+                  ? 'bg-erreur'
                   : derniere
-                    ? 'bg-sky-400 animate-pulse'
-                    : 'bg-slate-700'
+                    ? 'bg-accent animate-pulse'
+                    : 'bg-bordure-appuyee'
               }`}
             />
             <span className="font-mono text-xs">{libelle(etape)}</span>

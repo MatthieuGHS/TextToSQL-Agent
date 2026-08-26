@@ -20,10 +20,15 @@ describe('coloration du SQL', () => {
   it('distingue les mots-clés, les chaînes et les nombres', () => {
     const { container } = render(<SqlColore sql="SELECT 42 FROM t WHERE a = 'x'" />)
 
+    // Sur les **jetons** et non sur des teintes : depuis que les couleurs vivent dans
+    // `index.css`, `violet` ou `amber` ne figurent plus nulle part, et un test qui les
+    // cherchait mesurait la palette au lieu de mesurer la distinction. Ce qui doit être
+    // vrai, c'est que les trois natures reçoivent trois jetons différents — le thème
+    // clair et le thème sombre les peignent ensuite comme ils veulent.
     const classes = [...container.querySelectorAll('span')].map((s) => s.className)
-    expect(classes.some((c) => c.includes('violet'))).toBe(true)  // mots-clés
-    expect(classes.some((c) => c.includes('emerald'))).toBe(true) // nombres
-    expect(classes.some((c) => c.includes('amber'))).toBe(true)   // chaînes
+    expect(classes.some((c) => c.includes('sql-motcle'))).toBe(true)
+    expect(classes.some((c) => c.includes('sql-nombre'))).toBe(true)
+    expect(classes.some((c) => c.includes('sql-chaine'))).toBe(true)
   })
 
   it("n'injecte aucun HTML brut, même si la requête en contient", () => {

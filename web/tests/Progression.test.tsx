@@ -38,6 +38,6 @@ describe('progression', () => {
     const { container } = render(<Progression etapes={echec} terminee />)
 
     expect(screen.getByText(/Requête refusée/)).toBeInTheDocument()
-    expect(container.querySelector('.bg-red-500')).not.toBeNull()
+    expect(container.querySelector('.bg-erreur')).not.toBeNull()
   })
 })

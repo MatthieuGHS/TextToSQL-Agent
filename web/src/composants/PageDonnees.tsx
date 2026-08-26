@@ -36,28 +36,28 @@ function LigneFichier({
   choisi: File | undefined
 }) {
   return (
-    <tr className="border-b border-slate-800/60 last:border-0">
+    <tr className="border-b border-bordure-attenuee last:border-0">
       <td className="py-2 pr-3">
-        <code className="font-mono text-xs text-slate-300">{fichier.nom}</code>
+        <code className="font-mono text-xs text-texte">{fichier.nom}</code>
         {!fichier.requis && (
-          <span className="ml-2 text-xs text-slate-600">
+          <span className="ml-2 text-xs text-texte-faible">
             facultatif — sert au contrôle de couverture
           </span>
         )}
       </td>
-      <td className="py-2 pr-3 text-xs text-slate-500 tabular-nums whitespace-nowrap">
+      <td className="py-2 pr-3 text-xs text-texte-faible tabular-nums whitespace-nowrap">
         {taille(fichier.octets)}
       </td>
-      <td className="py-2 pr-3 text-xs text-slate-500 tabular-nums whitespace-nowrap">
+      <td className="py-2 pr-3 text-xs text-texte-faible tabular-nums whitespace-nowrap">
         {date(fichier.modifie_le)}
       </td>
       <td className="py-2 text-xs whitespace-nowrap">
         {choisi ? (
-          <span className="text-sky-400">↑ remplacé par le fichier choisi</span>
+          <span className="text-accent">↑ remplacé par le fichier choisi</span>
         ) : fichier.present ? (
-          <span className="text-emerald-500">en place</span>
+          <span className="text-succes">en place</span>
         ) : (
-          <span className={fichier.requis ? 'text-red-400' : 'text-slate-600'}>
+          <span className={fichier.requis ? 'text-erreur' : 'text-texte-faible'}>
             {fichier.requis ? 'manquant' : 'absent'}
           </span>
         )}
@@ -106,11 +106,11 @@ export function PageDonnees() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-8 flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-medium text-slate-200">Données sources</h2>
-        <p className="mt-1 text-sm text-slate-500">
+        <h2 className="text-lg font-medium text-texte">Données sources</h2>
+        <p className="mt-1 text-sm text-texte-faible">
           Charger de nouveaux fichiers relance la pipeline complète : transformation,
           contrôle du contrat de données, reconstruction de la base.{' '}
-          <strong className="text-slate-400">
+          <strong className="text-texte-attenue">
             La base est reconstruite entièrement, pas complétée
           </strong>{' '}
           — un fichier envoyé remplace sa version précédente.
@@ -118,11 +118,11 @@ export function PageDonnees() {
       </div>
 
       {etat && (
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+        <div className="rounded-lg border border-bordure bg-surface p-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-800 text-xs uppercase tracking-wide
-                             text-slate-600">
+              <tr className="border-b border-bordure text-xs uppercase tracking-wide
+                             text-texte-faible">
                 <th className="pb-2 text-left font-medium">Fichier</th>
                 <th className="pb-2 text-left font-medium">Taille</th>
                 <th className="pb-2 text-left font-medium">Modifié</th>
@@ -135,7 +135,7 @@ export function PageDonnees() {
               ))}
             </tbody>
           </table>
-          <p className="mt-3 border-t border-slate-800 pt-3 text-xs text-slate-600">
+          <p className="mt-3 border-t border-bordure pt-3 text-xs text-texte-faible">
             Base : {etat.base_presente
               ? `${etat.tables.length} tables · reconstruite le ${date(etat.base_modifiee_le)}`
               : 'absente — un premier chargement la créera'}
@@ -151,15 +151,17 @@ export function PageDonnees() {
           accept=".csv"
           disabled={occupe}
           onChange={(e) => setChoisis([...(e.target.files ?? [])])}
-          className="text-sm text-slate-400 file:mr-3 file:rounded-lg file:border-0
-                     file:bg-slate-800 file:px-3 file:py-2 file:text-sm file:text-slate-200
-                     hover:file:bg-slate-700 file:cursor-pointer disabled:opacity-50"
+          className="text-sm text-texte-attenue file:mr-3 file:rounded-lg file:border-0
+                     file:bg-surface-appuyee file:px-3 file:py-2 file:text-sm
+                     file:text-texte
+                     hover:file:bg-bordure-appuyee file:cursor-pointer disabled:opacity-50"
         />
         <button
           onClick={lancer}
           disabled={occupe}
-          className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white
-                     hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-600
+          className="rounded-lg bg-accent-fond px-4 py-2 text-sm font-medium text-sur-accent
+                     hover:bg-accent-fond-survol disabled:bg-surface-appuyee
+                     disabled:text-texte-faible
                      transition-colors"
         >
           {occupe
@@ -171,21 +173,24 @@ export function PageDonnees() {
       </div>
 
       {journal.length > 0 && (
-        <div className="rounded-lg border border-slate-800 bg-slate-950/60 overflow-hidden">
+        <div
+          className="rounded-lg border border-bordure bg-surface-appuyee
+                     overflow-hidden"
+        >
           <div className="max-h-96 overflow-y-auto px-4 py-3 font-mono text-xs">
             {journal.map((e, i) => (
               <div
                 key={i}
                 className={
                   e.type === 'erreur'
-                    ? 'whitespace-pre-wrap py-0.5 text-red-400'
+                    ? 'whitespace-pre-wrap py-0.5 text-erreur'
                     : e.type === 'termine'
-                      ? 'py-0.5 text-emerald-400'
+                      ? 'py-0.5 text-succes'
                       : e.niveau === 'warning'
-                        ? 'py-0.5 text-amber-400'
+                        ? 'py-0.5 text-alerte'
                         : e.niveau === 'error'
-                          ? 'py-0.5 text-red-400'
-                          : 'py-0.5 text-slate-500'
+                          ? 'py-0.5 text-erreur'
+                          : 'py-0.5 text-texte-faible'
                 }
               >
                 {e.type === 'termine'
@@ -198,7 +203,7 @@ export function PageDonnees() {
             <div ref={bas} />
           </div>
           {(termine || echoue) && (
-            <p className="border-t border-slate-800 px-4 py-2 text-xs text-slate-500">
+            <p className="border-t border-bordure px-4 py-2 text-xs text-texte-faible">
               {termine
                 ? "L'agent a été réinitialisé : il décrit désormais les nouvelles données."
                 : 'Rien n’a été remplacé — les sources et la base précédentes sont intactes.'}

@@ -15,6 +15,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { Graphique as TypeGraphique } from '../types'
+import { useTheme } from '../theme'
 
 /**
  * Le rendu de la spécification produite par `src/charts`.
@@ -27,12 +28,44 @@ import type { Graphique as TypeGraphique } from '../types'
  */
 // Douze couleurs : le maximum de séries qu'une spécification peut porter (pivot par
 // catégorie, `MAX_SERIES_PIVOT` côté serveur). Écartées en teinte pour rester
-// distinguables sur fond sombre ; en élargir la liste sans élargir le plafond serveur
-// ne servirait à rien — c'est lui qui décide.
-const COULEURS = [
-  '#38bdf8', '#f472b6', '#a78bfa', '#4ade80', '#fb923c', '#facc15',
-  '#2dd4bf', '#f87171', '#818cf8', '#a3e635', '#e879f9', '#94a3b8',
-]
+// distinguables ; en élargir la liste sans élargir le plafond serveur ne servirait à
+// rien — c'est lui qui décide.
+//
+// **Deux palettes, mêmes teintes, luminosités opposées.** Recharts peint dans un `<svg>`
+// et veut des littéraux : une classe Tailwind n'y peindrait rien, donc ces couleurs ne
+// peuvent pas venir de la feuille de style et échappent seules à la bascule par jetons.
+// Les teintes claires du thème sombre virent au délavé sur fond blanc, et l'inverse est
+// vrai aussi — d'où une dérivation par thème plutôt qu'une palette unique de compromis.
+const PALETTES = {
+  sombre: [
+    '#38bdf8', '#f472b6', '#a78bfa', '#4ade80', '#fb923c', '#facc15',
+    '#2dd4bf', '#f87171', '#818cf8', '#a3e635', '#e879f9', '#94a3b8',
+  ],
+  clair: [
+    '#0284c7', '#db2777', '#7c3aed', '#16a34a', '#ea580c', '#ca8a04',
+    '#0d9488', '#dc2626', '#4f46e5', '#65a30d', '#c026d3', '#475569',
+  ],
+} as const
+
+// Le décor du graphique — grille, graduations, infobulle. Mêmes raisons, même forme.
+const DECORS = {
+  sombre: {
+    grille: '#1e293b',
+    texte: '#64748b',
+    infobulleFond: '#0f172a',
+    infobulleBordure: '#334155',
+    infobulleTitre: '#94a3b8',
+    zoom: '#334155',
+  },
+  clair: {
+    grille: '#e2e8f0',
+    texte: '#64748b',
+    infobulleFond: '#ffffff',
+    infobulleBordure: '#cbd5e1',
+    infobulleTitre: '#475569',
+    zoom: '#cbd5e1',
+  },
+} as const
 
 // En deçà, la réglette de zoom serait du bruit : tout tient déjà à l'écran. Au-delà —
 // une année hebdomadaire et plus — elle permet de resserrer sur une plage de dates.
@@ -99,7 +132,13 @@ export const Graphique = memo(function Graphique({
     graphique.empilable && graphique.series.length > 1 && affiche === 'barres'
 
   const double = graphique.series.some((s) => s.axe_secondaire)
-  const axes = { grid: '#1e293b', texte: '#64748b' }
+  // `useContext` traverse `memo` : sans lui, la bascule ne changeant aucune prop, les
+  // courbes resteraient peintes dans l'ancienne palette pendant que le reste de la page
+  // a déjà basculé.
+  const { theme } = useTheme()
+  const COULEURS = PALETTES[theme]
+  const decor = DECORS[theme]
+  const axes = { grid: decor.grille, texte: decor.texte }
 
   const communs = (
     <>
@@ -129,12 +168,12 @@ export const Graphique = memo(function Graphique({
       )}
       <Tooltip
         contentStyle={{
-          background: '#0f172a',
-          border: '1px solid #334155',
+          background: decor.infobulleFond,
+          border: `1px solid ${decor.infobulleBordure}`,
           borderRadius: 8,
           fontSize: 12,
         }}
-        labelStyle={{ color: '#94a3b8' }}
+        labelStyle={{ color: decor.infobulleTitre }}
         formatter={(v) => (v === null ? '—' : complet.format(v as number))}
       />
       <Legend
@@ -151,7 +190,7 @@ export const Graphique = memo(function Graphique({
     // rang de la ligne au lieu de sa valeur.
     const serie = graphique.series[0]
     return (
-      <figure className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+      <figure className="rounded-lg border border-bordure bg-surface p-3">
         <ResponsiveContainer width="100%" height={280}>
           <ScatterChart margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={axes.grid} />
@@ -176,12 +215,12 @@ export const Graphique = memo(function Graphique({
             />
             <Tooltip
               contentStyle={{
-                background: '#0f172a',
-                border: '1px solid #334155',
+                background: decor.infobulleFond,
+                border: `1px solid ${decor.infobulleBordure}`,
                 borderRadius: 8,
                 fontSize: 12,
               }}
-              labelStyle={{ color: '#94a3b8' }}
+              labelStyle={{ color: decor.infobulleTitre }}
               formatter={(v) => complet.format(v as number)}
               cursor={{ strokeDasharray: '3 3' }}
             />
@@ -193,7 +232,7 @@ export const Graphique = memo(function Graphique({
             />
           </ScatterChart>
         </ResponsiveContainer>
-        <figcaption className="mt-1 text-center text-xs text-slate-600">
+        <figcaption className="mt-1 text-center text-xs text-texte-faible">
           {serie.colonne} selon {graphique.x} — chaque point est une ligne du résultat
         </figcaption>
       </figure>
@@ -201,7 +240,7 @@ export const Graphique = memo(function Graphique({
   }
 
   return (
-    <figure className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+    <figure className="rounded-lg border border-bordure bg-surface p-3">
       {(graphique.variantes.length > 0 || peutEmpiler) && (
         <div className="flex justify-end gap-1 pb-1">
           {graphique.variantes.length > 0 &&
@@ -211,8 +250,8 @@ export const Graphique = memo(function Graphique({
                 onClick={() => setAffiche(b as TypeGraphique['type'])}
                 className={`rounded px-2 py-0.5 text-xs transition-colors ${
                   affiche === b
-                    ? 'bg-slate-700 text-slate-200'
-                    : 'text-slate-500 hover:text-slate-300'
+                    ? 'bg-bordure-appuyee text-texte'
+                    : 'text-texte-faible hover:text-texte'
                 }`}
               >
                 {b}
@@ -223,8 +262,8 @@ export const Graphique = memo(function Graphique({
               onClick={() => setEmpile(!empile)}
               className={`rounded px-2 py-0.5 text-xs transition-colors ${
                 empile
-                  ? 'bg-slate-700 text-slate-200'
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'bg-bordure-appuyee text-texte'
+                  : 'text-texte-faible hover:text-texte'
               }`}
             >
               empilées
@@ -240,7 +279,7 @@ export const Graphique = memo(function Graphique({
               <Brush
                 dataKey="x"
                 height={20}
-                stroke="#334155"
+                stroke={decor.zoom}
                 fill="transparent"
                 travellerWidth={8}
                 tickFormatter={() => ''}
@@ -288,7 +327,7 @@ export const Graphique = memo(function Graphique({
           </BarChart>
         )}
       </ResponsiveContainer>
-      <figcaption className="mt-1 text-center text-xs text-slate-600">
+      <figcaption className="mt-1 text-center text-xs text-texte-faible">
         {graphique.type === 'histogramme'
           ? `distribution de ${graphique.x}`
           : `${graphique.series.map((s) => s.colonne).join(' · ')} par ${graphique.x}`}

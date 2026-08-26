@@ -25,28 +25,28 @@ export function BlocRequete({ requete }: { requete: Requete }) {
   return (
     <div
       className={`rounded-lg border overflow-hidden ${
-        enEchec ? 'border-red-900/60 bg-red-950/20' : 'border-slate-800 bg-slate-900/40'
+        enEchec ? 'border-erreur-bordure bg-erreur-fond' : 'border-bordure bg-surface'
       }`}
     >
       <button
         onClick={() => setOuvert(!ouvert)}
         className="w-full flex items-center gap-2 px-3 py-2 text-left
-                   hover:bg-slate-800/40 transition-colors"
+                   hover:bg-surface-appuyee/40 transition-colors"
       >
         <span
           className={`text-xs transition-transform ${ouvert ? 'rotate-90' : ''}
-                      text-slate-500`}
+                      text-texte-faible`}
         >
           ▶
         </span>
         <span
           className={`text-xs font-medium uppercase tracking-wide ${
-            enEchec ? 'text-red-400' : 'text-emerald-400'
+            enEchec ? 'text-erreur' : 'text-succes'
           }`}
         >
           {enEchec ? 'requête en échec' : 'requête'}
         </span>
-        <code className="flex-1 truncate text-xs font-mono text-slate-400">
+        <code className="flex-1 truncate text-xs font-mono text-texte-attenue">
           {requete.sql.replace(/\s+/g, ' ')}
         </code>
         {/* Dans l'en-tête, donc lisibles **sans déplier** : le client veut voir d'un coup
@@ -59,8 +59,8 @@ export function BlocRequete({ requete }: { requete: Requete }) {
             {requete.tables.map((t) => (
               <span
                 key={t}
-                className="rounded bg-slate-800/80 px-1.5 py-0.5 text-[11px]
-                           font-mono text-slate-400"
+                className="rounded bg-surface-appuyee/80 px-1.5 py-0.5 text-[11px]
+                           font-mono text-texte-attenue"
               >
                 {t}
               </span>
@@ -68,20 +68,20 @@ export function BlocRequete({ requete }: { requete: Requete }) {
           </span>
         )}
         {!enEchec && (
-          <span className="text-xs text-slate-600 tabular-nums whitespace-nowrap">
+          <span className="text-xs text-texte-faible tabular-nums whitespace-nowrap">
             {requete.lignes.length} l · {requete.duree_ms} ms
           </span>
         )}
       </button>
 
       {ouvert && (
-        <div className="border-t border-slate-800">
+        <div className="border-t border-bordure">
           {/* Au-dessus du SQL, et non en dessous : il a été écrit avant lui, et c'est
               ce qui explique la requête qu'on s'apprête à lire. */}
           {requete.raisonnement && (
             <p
-              className="px-3 py-2 text-xs italic leading-relaxed text-slate-400
-                         border-b border-slate-800/60"
+              className="px-3 py-2 text-xs italic leading-relaxed text-texte-attenue
+                         border-b border-bordure-attenuee"
             >
               {requete.raisonnement}
             </p>
@@ -89,23 +89,23 @@ export function BlocRequete({ requete }: { requete: Requete }) {
           <SqlColore sql={requete.sql} />
           {enEchec ? (
             <p
-              className="px-3 py-2 text-xs font-mono text-red-300 whitespace-pre-wrap
-                         border-t border-slate-800"
+              className="px-3 py-2 text-xs font-mono text-erreur whitespace-pre-wrap
+                         border-t border-bordure"
             >
               {requete.erreur}
             </p>
           ) : (
-            <div className="border-t border-slate-800">
+            <div className="border-t border-bordure">
               <TableauResultat
                 colonnes={requete.colonnes}
                 lignes={requete.lignes}
                 tronque={requete.tronque}
               />
               {requete.graphique && (
-                <div className="border-t border-slate-800 p-2">
+                <div className="border-t border-bordure p-2">
                   <button
                     onClick={() => setTrace(!trace)}
-                    className="text-xs text-slate-500 hover:text-slate-300
+                    className="text-xs text-texte-faible hover:text-texte
                                transition-colors"
                   >
                     {trace ? '▾ masquer le graphique' : '▸ tracer ce résultat'}

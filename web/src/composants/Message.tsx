@@ -25,9 +25,9 @@ function BoutonCopier({ texte }: { texte: string }) {
         setCopie(true)
         setTimeout(() => setCopie(false), 1500)
       }}
-      className="absolute -top-1 right-0 rounded-md px-2 py-1 text-xs text-slate-500
+      className="absolute -top-1 right-0 rounded-md px-2 py-1 text-xs text-texte-faible
                  opacity-0 transition-opacity group-hover:opacity-100
-                 hover:bg-slate-800 hover:text-slate-300"
+                 hover:bg-surface-appuyee hover:text-texte"
     >
       {copie ? 'copié' : 'copier'}
     </button>
@@ -49,8 +49,8 @@ export const Message = memo(function Message({ message }: { message: TypeMessage
     return (
       <div className="flex justify-end">
         <div
-          className="max-w-[80%] rounded-2xl rounded-br-md bg-sky-600/90 px-4 py-2.5
-                     text-[15px] text-white whitespace-pre-wrap"
+          className="max-w-[80%] rounded-2xl rounded-br-md bg-accent-fond/90 px-4 py-2.5
+                     text-[15px] text-sur-accent whitespace-pre-wrap"
         >
           {message.texte}
         </div>
@@ -64,8 +64,8 @@ export const Message = memo(function Message({ message }: { message: TypeMessage
     <div className="flex flex-col gap-3">
       {message.avertissement && (
         <div
-          className="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2
-                     text-sm text-amber-300"
+          className="rounded-lg border border-alerte-bordure bg-alerte-fond px-3 py-2
+                     text-sm text-alerte"
         >
           {message.avertissement}
         </div>
@@ -86,7 +86,7 @@ export const Message = memo(function Message({ message }: { message: TypeMessage
 
       {requetes.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs uppercase tracking-wide text-slate-600">
+          <p className="text-xs uppercase tracking-wide text-texte-faible">
             {requetes.length} requête{requetes.length > 1 ? 's' : ''} exécutée
             {requetes.length > 1 ? 's' : ''}
           </p>

@@ -14,23 +14,30 @@ import type { ReactNode } from 'react'
  * Le thème est défini ici plutôt qu'importé d'une feuille Prism : quelques classes
  * suffisent, et une feuille externe imposerait ses propres couleurs de fond à un bloc
  * qui doit rester dans la palette de l'interface.
+ *
+ * Les neuf jetons `sql-*` sont **distincts** de ceux d'état, et c'est délibéré : une
+ * chaîne SQL n'est pas un avertissement, un nombre n'est pas un succès. Les faire
+ * partager un jeton les ferait diverger au premier ajustement de la palette d'état,
+ * dans un sens que personne n'aurait voulu. Ils sont dérivés deux fois, comme les
+ * douze couleurs de série — une palette calée sur un fond sombre ne se lit pas sur un
+ * fond clair.
  */
 const COULEURS: Record<string, string> = {
-  keyword: 'text-violet-400 font-medium',
-  function: 'text-sky-300',
-  string: 'text-amber-300',
-  number: 'text-emerald-300',
-  operator: 'text-slate-400',
-  punctuation: 'text-slate-500',
-  comment: 'text-slate-600 italic',
-  boolean: 'text-emerald-300',
-  variable: 'text-slate-200',
+  keyword: 'text-sql-motcle font-medium',
+  function: 'text-sql-fonction',
+  string: 'text-sql-chaine',
+  number: 'text-sql-nombre',
+  operator: 'text-sql-operateur',
+  punctuation: 'text-sql-ponctuation',
+  comment: 'text-sql-commentaire italic',
+  boolean: 'text-sql-nombre',
+  variable: 'text-sql-variable',
 }
 
 function rendre(jeton: string | Prism.Token, cle: number): ReactNode {
   if (typeof jeton === 'string') return jeton
 
-  const classe = COULEURS[jeton.type] ?? 'text-slate-300'
+  const classe = COULEURS[jeton.type] ?? 'text-sql-defaut'
   const contenu = Array.isArray(jeton.content)
     ? jeton.content.map((j, i) => rendre(j, i))
     : rendre(jeton.content as string | Prism.Token, 0)
@@ -48,7 +55,7 @@ export function SqlColore({ sql }: { sql: string }) {
   return (
     <pre
       className="px-3 py-2.5 text-xs font-mono leading-relaxed whitespace-pre
-                 bg-slate-950/60 overflow-x-auto"
+                 bg-surface-appuyee overflow-x-auto"
     >
       <code>{jetons.map((j, i) => rendre(j, i))}</code>
     </pre>

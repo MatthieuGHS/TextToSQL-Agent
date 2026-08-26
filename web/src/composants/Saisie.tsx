@@ -45,8 +45,8 @@ export function Saisie({
 
   return (
     <div
-      className="flex items-end gap-2 rounded-2xl border border-slate-700 bg-slate-900
-                 px-3 py-2 focus-within:border-slate-500 transition-colors"
+      className="flex items-end gap-2 rounded-2xl border border-bordure-appuyee bg-surface
+                 px-3 py-2 focus-within:border-accent transition-colors"
     >
       <textarea
         ref={champ}
@@ -61,15 +61,18 @@ export function Saisie({
           }
         }}
         placeholder="Poser une question sur les données média…"
-        className="flex-1 resize-none bg-transparent text-slate-100 placeholder-slate-600
+        className="flex-1 resize-none bg-transparent text-texte-fort
+                   placeholder-texte-faible
                    outline-none text-[15px] leading-relaxed disabled:opacity-50 py-1"
       />
       <button
         onClick={envoyer}
         disabled={occupe || !valeur.trim()}
         aria-label="Envoyer"
-        className="shrink-0 size-9 rounded-xl bg-sky-600 text-white grid place-items-center
-                   hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-600
+        className="shrink-0 size-9 rounded-xl bg-accent-fond text-sur-accent
+                   grid place-items-center
+                   hover:bg-accent-fond-survol disabled:bg-surface-appuyee
+                   disabled:text-texte-faible
                    transition-colors"
       >
         {occupe ? (

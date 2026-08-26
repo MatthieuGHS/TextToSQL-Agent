@@ -9,3 +9,27 @@ import { afterEach } from 'vitest'
 // premier fichier de test à rendre plusieurs fois le même composant ; le fermer ici évite
 // que le suivant y retombe.
 afterEach(cleanup)
+
+// jsdom ne fournit pas `localStorage` dans cette version : `typeof localStorage` y est
+// `undefined`, là où tout navigateur le définit. Le code de thème s'en accommode — ses
+// accès sont gardés, parce qu'un navigateur en navigation privée peut aussi le refuser —
+// mais sans stub, la persistance du choix de thème ne serait couverte par rien du tout.
+// On rapproche donc l'environnement du navigateur plutôt que d'amputer le test.
+if (typeof globalThis.localStorage === 'undefined') {
+  let contenu: Record<string, string> = {}
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (c: string) => (c in contenu ? contenu[c] : null),
+      setItem: (c: string, v: string) => {
+        contenu[c] = String(v)
+      },
+      removeItem: (c: string) => {
+        delete contenu[c]
+      },
+      clear: () => {
+        contenu = {}
+      },
+    },
+  })
+}

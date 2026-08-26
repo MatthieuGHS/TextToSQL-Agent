@@ -1,9 +1,178 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-@theme {
+/*
+  Les couleurs de l'interface vivent ici, et nulle part ailleurs.
+
+  Un seul endroit décide, les composants rendent — c'est la discipline que `src/charts`
+  applique déjà côté serveur. Concrètement : aucun composant n'écrit `slate-800` ni
+  `sky-500`, il écrit `bordure` ou `accent`. Deux conséquences qui valent le détour :
+  changer une teinte se fait sur une ligne, et surtout le thème clair n'a demandé aucune
+  paire `dark:` — il y en aurait eu 147, une par classe de couleur en dur, chacune à
+  maintenir en miroir de sa jumelle.
+
+  Le thème clair est le **défaut**, sur demande du client. Un choix explicite est retenu
+  dans `localStorage` et posé sur `<html>` par le script d'amorçage de `index.html`,
+  avant le premier rendu : sans lui, un rechargement en thème sombre afficherait une
+  page blanche le temps que React démarre.
+*/
+
+:root {
+  --jeton-fond: #f8fafc;
+  --jeton-surface: #ffffff;
+  --jeton-surface-appuyee: #f1f5f9;
+
+  --jeton-bordure: #e2e8f0;
+  --jeton-bordure-attenuee: #eef2f6;
+  --jeton-bordure-appuyee: #cbd5e1;
+
+  --jeton-texte-fort: #0f172a;
+  --jeton-texte: #1e293b;
+  --jeton-texte-attenue: #475569;
+  --jeton-texte-faible: #64748b;
+
+  /* Deux rôles séparés, parce que leurs exigences de contraste s'opposent : `accent`
+     se lit **sur** le fond de page, `accent-fond` porte du texte clair **par-dessus**
+     lui. Un jeton unique satisfaisait l'un en trahissant l'autre — c'était déjà le cas
+     du thème sombre livré, où le blanc sur le bouton d'envoi tombait à 2,8:1. */
+  --jeton-accent: #0369a1;
+  --jeton-accent-fond: #0369a1;
+  --jeton-accent-fond-survol: #075985;
+  --jeton-sur-accent: #ffffff;
+
+  --jeton-succes: #059669;
+  --jeton-alerte: #b45309;
+  --jeton-erreur: #b91c1c;
+
+  /* Fonds et bordures des encarts d'état. Dérivés à la main plutôt qu'en opacité : sur
+     fond clair, une couleur vive à 20 % vire au gris sale. */
+  --jeton-erreur-fond: #fef2f2;
+  --jeton-erreur-bordure: #fecaca;
+  --jeton-alerte-fond: #fffbeb;
+  --jeton-alerte-bordure: #fde68a;
+
+  /* Coloration SQL. Neuf jetons, dérivés deux fois : Prism ne connaît pas nos jetons,
+     et une feuille Prism importée imposerait son propre fond au bloc. */
+  --jeton-sql-motcle: #7c3aed;
+  --jeton-sql-fonction: #0369a1;
+  --jeton-sql-chaine: #b45309;
+  --jeton-sql-nombre: #047857;
+  --jeton-sql-operateur: #475569;
+  --jeton-sql-ponctuation: #7c8b9e;
+  --jeton-sql-commentaire: #5d6a7d;
+  --jeton-sql-variable: #1e293b;
+  --jeton-sql-defaut: #334155;
+}
+
+:root[data-theme="sombre"] {
+  --jeton-fond: #020617;
+  --jeton-surface: #0f172a;
+  --jeton-surface-appuyee: #1e293b;
+
+  --jeton-bordure: #1e293b;
+  --jeton-bordure-attenuee: #172032;
+  --jeton-bordure-appuyee: #334155;
+
+  --jeton-texte-fort: #f1f5f9;
+  --jeton-texte: #e2e8f0;
+  --jeton-texte-attenue: #94a3b8;
+  --jeton-texte-faible: #77869c;
+
+  --jeton-accent: #38bdf8;
+  --jeton-accent-fond: #0369a1;
+  --jeton-accent-fond-survol: #075985;
+  --jeton-sur-accent: #ffffff;
+
+  --jeton-succes: #34d399;
+  --jeton-alerte: #fcd34d;
+  --jeton-erreur: #f87171;
+
+  --jeton-erreur-fond: #1c0f12;
+  --jeton-erreur-bordure: #7f1d1d;
+  --jeton-alerte-fond: #1c1710;
+  --jeton-alerte-bordure: #78350f;
+
+  --jeton-sql-motcle: #a78bfa;
+  --jeton-sql-fonction: #7dd3fc;
+  --jeton-sql-chaine: #fcd34d;
+  --jeton-sql-nombre: #6ee7b7;
+  --jeton-sql-operateur: #94a3b8;
+  --jeton-sql-ponctuation: #64748b;
+  --jeton-sql-commentaire: #8b98ab;
+  --jeton-sql-variable: #e2e8f0;
+  --jeton-sql-defaut: #cbd5e1;
+}
+
+/*
+  `inline` est ce qui rend la bascule possible : Tailwind pose alors `var(--jeton-…)`
+  dans l'utilitaire lui-même au lieu d'en figer la valeur à la compilation. Les couleurs
+  suivent donc la cascade, et changer l'attribut sur `<html>` suffit à tout repeindre.
+*/
+@theme inline {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-fond: var(--jeton-fond);
+  --color-surface: var(--jeton-surface);
+  --color-surface-appuyee: var(--jeton-surface-appuyee);
+
+  --color-bordure: var(--jeton-bordure);
+  --color-bordure-attenuee: var(--jeton-bordure-attenuee);
+  --color-bordure-appuyee: var(--jeton-bordure-appuyee);
+
+  --color-texte-fort: var(--jeton-texte-fort);
+  --color-texte: var(--jeton-texte);
+  --color-texte-attenue: var(--jeton-texte-attenue);
+  --color-texte-faible: var(--jeton-texte-faible);
+
+  --color-accent: var(--jeton-accent);
+  --color-accent-fond: var(--jeton-accent-fond);
+  --color-accent-fond-survol: var(--jeton-accent-fond-survol);
+  --color-sur-accent: var(--jeton-sur-accent);
+
+  --color-succes: var(--jeton-succes);
+  --color-alerte: var(--jeton-alerte);
+  --color-erreur: var(--jeton-erreur);
+
+  --color-erreur-fond: var(--jeton-erreur-fond);
+  --color-erreur-bordure: var(--jeton-erreur-bordure);
+  --color-alerte-fond: var(--jeton-alerte-fond);
+  --color-alerte-bordure: var(--jeton-alerte-bordure);
+
+  --color-sql-motcle: var(--jeton-sql-motcle);
+  --color-sql-fonction: var(--jeton-sql-fonction);
+  --color-sql-chaine: var(--jeton-sql-chaine);
+  --color-sql-nombre: var(--jeton-sql-nombre);
+  --color-sql-operateur: var(--jeton-sql-operateur);
+  --color-sql-ponctuation: var(--jeton-sql-ponctuation);
+  --color-sql-commentaire: var(--jeton-sql-commentaire);
+  --color-sql-variable: var(--jeton-sql-variable);
+  --color-sql-defaut: var(--jeton-sql-defaut);
+}
+
+/*
+  La typographie des réponses. Le module `typography` apporte sa propre palette, réglée
+  par des variables — et une classe `prose-invert` figée en dur reste sombre sur un fond
+  clair, c'est-à-dire illisible. On branche donc ses variables sur nos jetons plutôt que
+  de choisir une de ses deux palettes : un seul endroit décide, ici comme ailleurs.
+*/
+.prose {
+  --tw-prose-body: var(--jeton-texte);
+  --tw-prose-headings: var(--jeton-texte-fort);
+  --tw-prose-lead: var(--jeton-texte-attenue);
+  --tw-prose-links: var(--jeton-accent);
+  --tw-prose-bold: var(--jeton-texte-fort);
+  --tw-prose-counters: var(--jeton-texte-faible);
+  --tw-prose-bullets: var(--jeton-bordure-appuyee);
+  --tw-prose-hr: var(--jeton-bordure);
+  --tw-prose-quotes: var(--jeton-texte);
+  --tw-prose-quote-borders: var(--jeton-bordure);
+  --tw-prose-captions: var(--jeton-texte-faible);
+  --tw-prose-code: var(--jeton-texte-fort);
+  --tw-prose-pre-code: var(--jeton-texte);
+  --tw-prose-pre-bg: var(--jeton-surface-appuyee);
+  --tw-prose-th-borders: var(--jeton-bordure-appuyee);
+  --tw-prose-td-borders: var(--jeton-bordure);
 }
 
 html, body, #root {
@@ -11,12 +180,12 @@ html, body, #root {
 }
 
 body {
-  @apply bg-slate-950 text-slate-200 antialiased;
+  @apply bg-fond text-texte antialiased;
 }
 
 /* Barres de défilement discrètes : les tableaux de résultats en contiennent beaucoup,
    et les barres par défaut découpent visuellement la page. */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { @apply bg-slate-700 rounded-full; }
-::-webkit-scrollbar-thumb:hover { @apply bg-slate-600; }
+::-webkit-scrollbar-thumb { @apply bg-bordure-appuyee rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-texte-faible; }

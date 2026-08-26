@@ -141,10 +141,10 @@ export default function App() {
           {vide && (
             <div className="flex flex-col gap-4 pt-12">
               <div>
-                <h2 className="text-lg font-medium text-slate-200">
+                <h2 className="text-lg font-medium text-texte">
                   Poser une question sur les données média
                 </h2>
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="text-sm text-texte-faible mt-1">
                   Chaque réponse s'accompagne des requêtes SQL exécutées et de leurs
                   résultats — pour que rien n'ait à être cru sur parole.
                 </p>
@@ -154,9 +154,9 @@ export default function App() {
                   <button
                     key={e}
                     onClick={() => envoyer(e)}
-                    className="text-left rounded-xl border border-slate-800 bg-slate-900/40
-                               px-4 py-3 text-sm text-slate-300 hover:border-slate-600
-                               hover:bg-slate-900 transition-colors"
+                    className="text-left rounded-xl border border-bordure bg-surface
+                               px-4 py-3 text-sm text-texte hover:border-bordure-appuyee
+                               hover:bg-surface transition-colors"
                   >
                     {e}
                   </button>
@@ -174,12 +174,12 @@ export default function App() {
         </div>
       </main>
 
-      <footer className="shrink-0 border-t border-slate-800 bg-slate-950">
+      <footer className="shrink-0 border-t border-bordure bg-fond">
         <div className="mx-auto max-w-3xl px-6 py-4">
           {/* Le texte en cours de frappe vit dans `Saisie` : sans ça, chaque
               caractère re-rendait toute la conversation, graphiques compris. */}
           <Saisie onEnvoyer={envoyer} occupe={occupe} />
-          <p className="mt-2 text-center text-xs text-slate-600">
+          <p className="mt-2 text-center text-xs text-texte-faible">
             L'agent ne lit que la base fournie, en lecture seule. Il ne fait pas de
             modélisation d'attribution.
           </p>
