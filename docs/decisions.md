@@ -1616,6 +1616,127 @@ la mesure et l'effet réel restera invisible.
 
 ---
 
+### La décision ouverte est tranchée — le calcul de tête est fermé dans le code
+
+Décidé et fait le 26/08/2026, après quatre sessions passées à re-dériver la même
+conclusion sans agir. La doctrine anti-mécanisme porte sur **l'instrument de mesure**,
+qui a produit les défauts les plus coûteux du projet ; elle ne dit rien contre corriger
+l'agent dans le code, et le premier principe du projet l'exige même.
+
+`run_sql` totalise une colonne **quand son expression est elle-même un agrégat additif**,
+lu dans l'arbre du moteur — jamais dans le nom de la colonne, pour la raison qui vaut déjà
+pour les tables lues. `en_texte` rend cette somme au modèle, qui n'a plus à la calculer.
+
+Ce que la forme de la règle ferme, et qui n'est pas évident : **le refus est le défaut**.
+`SUM(x)` et `ROUND(SUM(x))` se totalisent ; `AVG`, `MIN`, `COUNT` non ; `SUM(x)/SUM(y)`
+non plus, bien qu'il contienne deux sommes — c'est un ratio, et une somme de ratios n'est
+pas une quantité. Une fonction de fenêtre non plus : elle porte déjà son propre total.
+Toute forme non reconnue n'est simplement pas totalisée. Une somme manquante coûte un tour
+au modèle ; une somme fausse lui ferait écrire un chiffre faux **avec l'autorité d'un
+résultat de requête**, ce qui est strictement pire que le défaut corrigé.
+
+Deux gardes de même nature. **Un résultat tronqué n'est jamais totalisé** : la somme d'un
+extrait n'est pas la somme du tout, et c'est le seul cas où ce mécanisme pourrait créer le
+défaut qu'il corrige. Et le libellé dit **« Somme des N lignes du résultat »**, jamais
+« total » : sur un `ORDER BY … LIMIT 5`, la somme des cinq lignes rendues n'est pas le
+total de la base, et un libellé qui le laisserait croire fabriquerait exactement le chiffre
+plausible et faux qu'on cherche à supprimer.
+
+⚠ **Cinquième instance de la famille « clé d'indexation incomplète », et la première
+annoncée d'avance.** Le retour d'outil change à chaque requête sans qu'aucun prompt ni
+aucune constante de réglage ne bouge. `VERSION_BOUCLE` passe de 2 à 3, l'empreinte de
+réglages de `4014d5aee332` à `11b906927aa5`. **L'effet n'est pas mesuré** : il demande une
+campagne, et les exécutions en cache ont été produites sans le correctif.
+
+### Recalibrer l'assertion de traçabilité — 4 artefacts sur 8, pas 8
+
+Mesuré le 26/08/2026 sur les 105 exécutions de la campagne de référence, en rejouant
+l'assertion plutôt qu'en reprenant le chiffre annoncé la veille. **La proposition écrite
+ici la veille surestimait son effet du double**, et c'est en soi le résultat le plus utile
+de la vérification : une proposition « chiffrée et testée » qui n'a pas été rejouée est
+une intuition.
+
+La règle « l'écriture déclare sa propre précision » ne valait que pour les décimales. Elle
+vaut maintenant des deux côtés de la virgule, par une seule notion — le **rang du dernier
+chiffre significatif écrit**, positif pour des décimales, négatif pour des zéros de fin.
+La fonction perd un cas particulier au lieu d'en gagner un.
+
+Sa portée est calculable, et c'est ce qui la rend défendable : l'arrondi au rang écrit vaut
+`0,5 / d` en relatif, où `d` est la partie significative. Il ne dépasse la tolérance
+générale de 2 % que pour `d < 25`. Autrement dit **plus on écrit de chiffres, plus on
+affirme** — un nombre à un chiffre significatif est vague, un nombre écrit à l'unité ne
+l'est pas et reste jugé à l'unité. Les totaux faux passent donc toujours.
+
+Les 4 artefacts restants ne sont **pas** un problème de tolérance : un nom d'unité, une
+constante de pourcentage, un millésime, une borne dont aucune valeur calculée n'approche le
+rang revendiqué. Chacun demanderait son propre régime, et cette fonction en a déjà trois.
+La variante d'un cran plus lâche les ferait tous passer — et accepterait aussi « 100 » pour
+n'importe quelle valeur entre 0 et 200. Écarté.
+
+**Chiffre à garder, trouvé en cherchant une compensation au budget** : sur les 483
+exécutions du cache, `TracabiliteNumerique` porte **100 % des verdicts rouges** (20 sur
+20) ; les neuf autres familles n'en produisent aucun. Aucune n'est retirable pour autant —
+le critère reste « ne *peut pas* échouer », et les douze familles sont instanciées. Ce que
+ce chiffre dit est ailleurs : **toute la surface d'échec mesurée du projet tient dans un
+seul contrôle**, donc tout mouvement de score en dépend, et sa justesse prime sur son
+nombre de lignes.
+
+### Deux graphiques qui affirmaient plus que le résultat ne dit
+
+Constatés le 26/08/2026 en reconstituant, question par question, le graphique réellement
+affiché sur la campagne de référence. Les deux règles sont portées par les données seules :
+ni le nom des colonnes, ni la requête, ni l'intention n'entrent dedans.
+
+**Une ligne affirme une continuité.** Entre deux points, une courbe dessine un chemin que
+personne n'a mesuré. C'est juste sur une grille régulière, faux sur des dates choisies par
+leur valeur — cinq semaines de pic séparées de quelques semaines à plus d'un an. La
+correction **dégrade la marque au lieu de refuser** : des barres n'affirment rien entre
+deux abscisses, donc rien ne peut être perdu. Mesuré sur les 466 requêtes du cache :
+13 décisions passent de la courbe aux barres, et le nombre de graphiques tracés ne bouge
+pas.
+
+Le seuil ne relève pas du jugement, il se lit sur les données : la distribution du rapport
+entre le plus grand et le plus petit écart est **franchement bimodale** — 68 courbes entre
+1,0 et 1,1, une à 2,1, puis 13 au-dessus de 15. N'importe quelle valeur entre 3 et 14 rend
+le même verdict sur les 466.
+
+**Une série qui écrase ses propres valeurs n'en montre plus qu'une partie.** Le pendant
+intra-série de la garde d'échelle, qui ne regardait que les écarts *entre* colonnes. Le cas
+manquant était le piège principal du jeu de données : une ventilation par nom de métrique
+rend une seule colonne de mesure, donc une seule série, mais chaque ligne y porte une unité
+différente. Aucune règle sur les unités n'est nécessaire — la série se dénonce par son
+étalement. À mille pour un, la plus petite barre occupe moins d'un pixel dans un graphique
+large de mille : elle se lit « zéro », ce qu'elle n'est pas.
+
+La mesure est franche là aussi : sur les 100 séries de barres à abscisse non temporelle,
+14 dépassent 111 000× et ce sont **toutes** des ventilations par nom de métrique ; la
+suivante est à 696× et c'est une répartition de budget parfaitement lisible.
+
+⚠ **Un dégât collatéral, trouvé en mesurant et pas en relisant.** Conditionner cette garde
+à la *marque* choisie plutôt qu'à la *nature* de l'abscisse refusait quatre graphiques
+légitimes : des séries hebdomadaires que la règle d'espacement venait de faire passer en
+barres restaient des séries temporelles, où un écart énorme raconte une histoire vraie.
+Deux règles posées le même jour, dont la seconde annulait la première sur un cas que ni
+l'une ni l'autre ne visait — c'est le motif exact que ce document traque, et seule la
+ré-exécution du cache l'a montré.
+
+### La note du client n'est pas celle du harnais, et c'est mesuré deux fois
+
+Le harnais note les questions du client avec **deux assertions** — `SqlExecutable` et
+`TracabiliteNumerique`. Le client, lui, note trois colonnes à la main. Ce ne sont pas deux
+approximations du même nombre : la notation du 25/08 les avait vus diverger sur 5 questions
+de 18 **dans les deux sens**, et celle du 26/08 confirme que l'écart ne se réduit pas.
+
+⚠ **Piège de lecture, à corriger partout où il traîne** : « 48/54 » a désigné les deux à
+quelques heures d'intervalle — 18 questions × 3 colonnes d'un côté, 18 questions ×
+3 tirages de l'autre. Les deux nombres n'ont rien de commun. Quand un score de grille est
+cité, il doit dire lequel des deux il est.
+
+**Conséquence de méthode, et c'est la leçon de la session** : la notation manuelle est
+gratuite, elle porte sur le critère réel, et elle a produit les six derniers correctifs
+utiles du projet. Une campagne payée mesure un proxy dont on sait qu'il diverge.
+**Aucune campagne payée qui ne teste pas un correctif déjà écrit.**
+
 ## Vérifications faites, à ne pas refaire de mémoire
 
 Ces points ont été mesurés sur la version des bibliothèques figée dans

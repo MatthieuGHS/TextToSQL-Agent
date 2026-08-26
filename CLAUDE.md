@@ -296,35 +296,53 @@ portent 6, 7 et 8 requêtes pour un plafond de 5 tours — impossible sans plusi
 par tour ; le comptage sur les 378 exécutions antérieures donnait zéro), et « présent »
 n'est plus confondu avec « actif » dans les réponses réelles.
 
-### ⚠ La décision ouverte, à trancher avant tout nouveau lot
+### La décision ouverte est tranchée — et trois défauts client sont fermés
 
-**Le défaut « l'agent additionne de tête » est détecté depuis plusieurs sessions et n'a
-jamais reçu de correctif déterministe.** Quatre tentatives, toutes par le prompt : E6
-(mécanisme, supprimé), `role.md`, les règles de B1 (0/3 → 1/3), le groupage de requêtes
-(0/3). Chaque fois la même conclusion écrite — *une règle de prompt infléchit, elle ne
-garantit pas* — puis l'arrêt, en invoquant la doctrine anti-mécanisme de
-`docs/decisions.md`. **Or cette doctrine porte sur l'instrument de mesure, pas sur
-l'agent**, et le premier principe de ce fichier exige l'inverse.
+Le 26/08 au soir, après une relecture critique de la méthode : **on tournait en rond
+parce qu'on optimisait le mauvais nombre.** Quatre campagnes payées ont mesuré un proxy
+du harnais — deux assertions — pendant que le critère réel du client, trois colonnes
+notées à la main, restait non rempli et gratuit. Ce qui a été fait, **sans un seul appel
+facturé** :
 
-Deux faits nouveaux du 26/08 encadrent la décision :
+1. **L'assertion de traçabilité est recalibrée.** « L'écriture déclare sa propre
+   précision » vaut désormais des deux côtés de la virgule, par une seule notion de rang
+   significatif. ⚠ Effet mesuré : **4 artefacts sur 8**, pas les 8 annoncés la veille —
+   une proposition « chiffrée et testée » qui n'avait pas été rejouée. Grille 48/54 →
+   49/54, aucun échec réel perdu.
+2. **Le calcul de tête est fermé dans le code**, après quatre tentatives par le prompt.
+   `run_sql` totalise les colonnes issues d'un `SUM()`, lu dans l'arbre du moteur, et
+   rend la somme au modèle. Le refus est le défaut : ratios, moyennes, comptages et
+   fonctions de fenêtre ne sont jamais totalisés, un résultat tronqué non plus, et le
+   libellé dit « somme des N lignes » et jamais « total ».
+   ⚠ **`VERSION_BOUCLE` 2 → 3, réglages `4014d5aee332` → `11b906927aa5`.** L'effet
+   demande une campagne : le cache a été produit sans lui.
+3. **Deux graphiques qui affirmaient plus que le résultat ne dit** — une courbe sur des
+   dates choisies par leur valeur, une série mêlant des unités incomparables. Les deux
+   règles sont portées par les données, et leurs seuils se lisent sur une distribution
+   bimodale plutôt que d'être choisis. Mesuré sur les 466 requêtes du cache.
 
-- **le défaut produit un chiffre faux**, pas seulement intraçable — sur une question, le
-  total réel est 212 694 et l'agent annonce 212 693 **deux fois sur trois**, vérifié
-  contre la base ;
-- **il est deux fois plus petit qu'annoncé** — sur les 13 échecs de traçabilité, **8 sont
-  des artefacts de l'assertion** (elle compte le `1000` de « pour 1000 impressions »,
-  le `100` de « NULL à 100 % », l'année `2024`, les bornes rondes d'une fourchette). Le
-  vrai défaut fait **5 exécutions sur 105**, dont 2 fausses. Sur les **6 échecs de
-  grille**, tous de traçabilité, **4 sont des artefacts**.
+**La notation manuelle des 18 questions est faite** (`docs/prive/notation-grille-26-08.md`,
+hors Git), à k=3 pour la première fois :
 
-Deux propositions sont posées, chiffrées et testées, dans `docs/decisions.md` : **A**
-étendre aux entiers à zéros de fin le principe de précision que l'assertion énonce déjà
-pour les décimales (gratuit, retire les 8 artefacts, laisse les 2 vrais échecs attrapés) ;
-**B2** rendre le total déterministe dans `run_sql` quand la colonne vient d'un `SUM()`
-(~20 lignes, une campagne ~3,5 $, et ⚠ le retour d'outil n'entre dans aucune clé — bumper
-`VERSION_BOUCLE`). **A avant la campagne de B2**, sinon les faux échecs masquent l'effet.
+| Colonne | 25/08 | livré le 26/08 | aujourd'hui |
+|---|---|---|---|
+| SQL Check | 18/18 | 18/18 | **18/18** |
+| Chart Check | 14/18 | 14/18 | **16/18** |
+| Pédagogie IA | 16/18 | 18/18 | **18/18** |
+| **Total** | **48/54** | **50/54** | **52/54** |
 
-**Rien n'est décidé.**
+⚠ **Deux « 48/54 » différents traînent dans ce projet** : 18 questions × 3 colonnes de
+jugement, et 18 questions × 3 tirages contre deux assertions. Ils n'ont rien de commun.
+Tout score de grille cité doit dire lequel des deux il est.
+
+Les deux défauts de graphique qui restent (Q1, Q17) sont de la même famille : une requête
+*d'orientation* portée au graphique sous une réponse qui parle d'autre chose. Les fermer
+demanderait de juger une intention. **Consignés, non corrigés** — c'est le geste qui a
+produit les quatre défauts les plus coûteux du projet.
+
+**Règle de méthode qui sort de là, et qui prime sur la feuille de route : aucune campagne
+payée qui ne teste pas un correctif déjà écrit.** La notation manuelle est gratuite, elle
+porte sur le critère réel, et elle a produit les six derniers correctifs utiles.
 
 ### Le constat d'origine — la grille client ne bouge pas
 
@@ -455,13 +473,16 @@ de tous les tests, qui dépliaient avant de vérifier — et affichage du SQL.
 
 Restent, par ordre d'utilité :
 
-1. **Notation manuelle des 18 questions** sur la campagne courante — gratuite, c'est la
-   recette du client. Celle qui existe (`docs/prive/notation-grille-25-08.md`) porte sur
-   l'ancien prompt. Elle a déjà montré que **le harnais et le critère du client divergent
-   sur 5 questions de 18, dans les deux sens**.
-2. **Vérification visuelle de l'interface**, sur les deux thèmes — jamais faite. Aucun
-   outil de rendu n'est disponible en session : elle demande une manipulation à la main.
-   C'est elle qui a produit les meilleurs correctifs du projet, trois fois.
+1. **Une campagne de référence, et une seule** (~3,5 $) — la première depuis longtemps qui
+   teste des correctifs déjà écrits plutôt que de mesurer sans améliorer. Elle porte sur
+   la somme déterministe, dont l'effet ne peut pas se lire dans le cache (péremption
+   voulue, `11b906927aa5`). Séquence habituelle : peuplement `--k 1` → itérations
+   `--a-blanc` → référence. À faire suivre d'une notation manuelle, gratuite.
+2. **Vérification visuelle de l'interface**, sur les deux thèmes — jamais faite, et
+   désormais **plus urgente** : trois règles de graphique ont changé le 26/08, dont deux
+   qui transforment des courbes en barres et une qui refuse 14 graphiques du cache.
+   Aucun outil de rendu n'est disponible en session. C'est la manipulation à la main qui
+   a produit les meilleurs correctifs du projet, trois fois.
 3. **Lot E** : image Docker **jamais reconstruite depuis les changements web**, doc de
    reprise pour l'équipe client.
 4. **Purge de confidentialité** avant toute publication, et vidéo de démonstration à
