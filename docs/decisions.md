@@ -1474,6 +1474,73 @@ sous les yeux. Ce reste-là n'a pas de correctif par le prompt identifié à ce 
 
 ---
 
+### La campagne du 26/08 — ce qui a bougé n'est pas le score
+
+Première campagne avec la grille à **k=3**, donc la première lisible. 105 exécutions,
+~3,5 $ au total (dont une interruption pour crédit épuisé, sans frais).
+
+| | base 19/08 | B0 24/08 | B1 25/08 | 26/08 |
+|---|---|---|---|---|
+| corpus | 47/51 | 48/51 | 49/51 | 48/51 |
+| grille | 15/18 (k=1) | 15/18 (k=1) | 15/18 (k=1) | **48/54 (k=3)** |
+| arrêts anormaux | 2 / 69 | 1 / 69 | 2 / 69 | **0 / 105** |
+| requêtes par exécution | médiane 1 | médiane 1 | médiane 1 | **médiane 2, max 8** |
+
+**Le score est plat, et ce n'est pas ce qu'il faut lire.** 48/54 vaut 16/18 ramené à
+l'échelle habituelle, contre 15/18 trois campagnes de suite — un point, c'est-à-dire
+exactement ce que le bruit produit. Ce qui a bougé est structurel et ne se lit pas dans
+un total.
+
+**Zéro arrêt anormal sur 105 exécutions**, contre deux sur soixante-neuf à chaque
+campagne précédente. Les deux questions de grille où l'agent travaillait puis ne rendait
+rien produisent une réponse. Le tour de rédaction n'y est pour rien : **le plafond n'est
+jamais atteint**. C'est le groupage qui fait tenir le travail dans le budget, et le tour
+de rédaction reste un filet qui n'a pas servi — ce qui est la bonne nouvelle, pas la
+mauvaise.
+
+**Le groupage de requêtes est prouvé mécaniquement.** Trois exécutions portent 6, 7 et
+8 requêtes pour un plafond de 5 tours : impossible sans plusieurs appels dans un même
+tour. Le comptage de référence, fait le 25/08 sur les 378 exécutions des quatre
+campagnes précédentes, donnait **zéro**. La capacité était présente dans la plomberie
+depuis toujours ; seule la phrase « une requête de lecture à la fois » l'empêchait.
+
+**« Présent » et « actif » ne sont plus confondus dans les réponses réelles.** Sur la
+question qui servait d'exemple au défaut de grain, l'agent écrit désormais « N semaines
+actives (M semaines où le support apparaît) », et les deux nombres sont exacts — là où la
+campagne précédente annonçait le nombre de lignes comme un nombre de semaines. La section
+générée a fait son travail.
+
+### La somme faite de tête produit un chiffre faux, pas seulement intraçable
+
+C'est le résultat le plus utile de la campagne, et il ferme un débat.
+
+La propriété « valeur présente dans une autre colonne » passe de 1/3 à **0/3**. Lue comme
+un score, c'est un recul dans le bruit. Lue dans les réponses, c'est autre chose : sur les
+trois exécutions, l'agent additionne deux montants rendus par sa requête, et **deux fois
+sur trois le total annoncé est faux d'une unité**. Vérifié contre la base : la somme SQL
+et le nombre écrit dans la réponse diffèrent.
+
+Jusqu'ici la règle « aucun calcul de tête » se défendait par la traçabilité — un chiffre
+qu'on ne peut pas rattacher à une requête n'est pas vérifiable. On sait maintenant qu'elle
+se défend par l'exactitude : le modèle se trompe en additionnant deux nombres à quatre
+chiffres, et rien dans la réponse ne le signale. C'est le mode de défaillance que ce
+document traque partout — plausible, sans erreur, sans avertissement — sur l'opération la
+plus banale qui soit.
+
+**Ce que ça dit du correctif de B1 et du groupage.** Le groupage lève la *contrainte* : le
+modèle peut demander la ventilation et son total pour le prix d'un tour, et il le fait
+ailleurs. Il ne dicte pas l'*emploi* qu'on en fait — ici il dépense volontiers sa requête
+libre à découvrir les libellés ou à vérifier une couverture d'année, puis additionne de
+tête. Deux campagnes payées ont maintenant montré la même chose : **une règle de prompt
+infléchit un comportement, elle ne le garantit jamais.** Si ce défaut doit être fermé, ce
+sera par la boucle ou par le code, pas par une phrase de plus.
+
+Piste à ne pas confondre avec un plan : le total d'une ventilation est une propriété du
+*résultat*, pas du modèle — il se calcule sans lui appeler. Rien n'a été décidé, et rien
+ne doit l'être avant qu'un défaut le justifie sur un cas réel.
+
+---
+
 ---
 
 ## Vérifications faites, à ne pas refaire de mémoire

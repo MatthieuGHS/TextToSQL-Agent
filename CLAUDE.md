@@ -278,14 +278,31 @@ Ce que la notation a produit, toutes corrections **gratuites** et faites le 25-2
 ⚠ **Le cache est périmé volontairement** — prompt `44ebe23d8f07`, réglages `4014d5aee332`.
 Les 378 exécutions ont été produites par une boucle qui jetait le dernier tour.
 
-⚠ **La campagne de référence est interrompue, faute de crédit API** (26/08, ~1,20 $
-dépensés). Le peuplement à k=1 est **complet et fait foi** : corpus 16/17 · grille 15/18,
-et **zéro arrêt anormal sur 35** contre deux `plafond_iterations` avant — les deux
-questions où l'agent travaillait sans rien rendre produisent désormais une réponse, et le
-plafond n'est même plus atteint. Les 65 exécutions restantes ont échoué en 400 avant
-traitement, donc sans être facturées. **Procédure de reprise, coût attendu et état exact
-du cache : `docs/prive/reprise-campagne-26-08.md`.** Une seule commande à relancer une
-fois le crédit rechargé ; les 40 exécutions déjà payées se resservent gratuitement.
+**La campagne de référence est faite** (26/08, rapport `2026-08-26-2143.md`, 105
+exécutions, ~3,5 $ — dont une interruption pour crédit épuisé, sans frais). Première
+grille à **k=3**, donc la première lisible.
+
+| | base 19/08 | B1 25/08 | 26/08 |
+|---|---|---|---|
+| corpus | 47/51 | 49/51 | 48/51 |
+| grille | 15/18 (k=1) | 15/18 (k=1) | **48/54 (k=3)** |
+| arrêts anormaux | 2 / 69 | 2 / 69 | **0 / 105** |
+| requêtes / exécution | médiane 1 | médiane 1 | **médiane 2, max 8** |
+
+**Le score est plat et ce n'est pas ce qu'il faut lire** — 48/54 vaut 16/18 à l'échelle
+habituelle, soit un point, c'est-à-dire le bruit. Ce qui a bougé est structurel : plus
+aucun arrêt anormal, le groupage de requêtes **prouvé mécaniquement** (trois exécutions
+portent 6, 7 et 8 requêtes pour un plafond de 5 tours — impossible sans plusieurs appels
+par tour ; le comptage sur les 378 exécutions antérieures donnait zéro), et « présent »
+n'est plus confondu avec « actif » dans les réponses réelles.
+
+⚠ **La somme faite de tête produit un chiffre faux, pas seulement intraçable.** Mesuré :
+sur trois exécutions d'une même question, l'agent additionne deux montants de sa propre
+requête et **se trompe d'une unité deux fois sur trois**. Vérifié contre la base. La règle
+« aucun calcul de tête » ne se défend donc plus par la traçabilité seule mais par
+l'exactitude. Deux campagnes payées ont montré la même chose : **une règle de prompt
+infléchit, elle ne garantit pas.** Si ce défaut doit être fermé, ce sera par la boucle ou
+le code — et sur un défaut constaté, pas par anticipation. Détail dans `docs/decisions.md`.
 
 ### Le constat d'origine — la grille client ne bouge pas
 
