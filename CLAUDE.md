@@ -478,11 +478,18 @@ Restent, par ordre d'utilité :
    la somme déterministe, dont l'effet ne peut pas se lire dans le cache (péremption
    voulue, `11b906927aa5`). Séquence habituelle : peuplement `--k 1` → itérations
    `--a-blanc` → référence. À faire suivre d'une notation manuelle, gratuite.
-2. **Vérification visuelle de l'interface**, sur les deux thèmes — jamais faite, et
-   désormais **plus urgente** : trois règles de graphique ont changé le 26/08, dont deux
-   qui transforment des courbes en barres et une qui refuse 14 graphiques du cache.
-   Aucun outil de rendu n'est disponible en session. C'est la manipulation à la main qui
-   a produit les meilleurs correctifs du projet, trois fois.
+   ⚠ **Deux attentes à écrire avant de la lancer**, toutes deux constatées à l'œil le
+   26/08 : le correctif ne couvre pas les colonnes agrégées dans une CTE, donc un gain
+   faible ne vaut pas échec ; et l'agent re-requête parfois un total qu'on vient de lui
+   donner, donc **le coût par question se lit à côté du score**.
+2. ~~Vérification visuelle de l'interface~~ — **FAITE le 26/08**, de bout en bout et
+   sur les deux thèmes : huit questions couvrant les trois formes de graphique, les trois
+   cas de refus et les quatre demandes du client. Les trois règles posées le jour même
+   tiennent, mensuel compris, et l'interface n'offre aucune bascule pour retransformer en
+   courbe ce que la règle a mis en barres. Quatre constats, aucun bloquant, tous
+   invisibles des tests — détail dans `docs/decisions.md`. Le seul qui touche une demande
+   du client : **le paragraphe de raisonnement peut être vide et disparaît en silence**,
+   `required` étant satisfait par une chaîne vide. Consigné, non corrigé.
 3. **Lot E** : image Docker **jamais reconstruite depuis les changements web**, doc de
    reprise pour l'équipe client.
 4. **Purge de confidentialité** avant toute publication, et vidéo de démonstration à

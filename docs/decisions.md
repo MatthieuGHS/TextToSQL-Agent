@@ -1737,6 +1737,56 @@ gratuite, elle porte sur le critère réel, et elle a produit les six derniers c
 utiles du projet. Une campagne payée mesure un proxy dont on sait qu'il diverge.
 **Aucune campagne payée qui ne teste pas un correctif déjà écrit.**
 
+### La vérification visuelle, faite pour la première fois de bout en bout
+
+26/08/2026, huit questions couvrant les trois formes de graphique, les trois cas de refus
+et les quatre demandes du client, en thème clair puis sombre. Elle était due depuis le
+lot C et elle avait déjà produit, trois fois, les meilleurs correctifs du projet.
+
+**Les trois règles de graphique posées le jour même tiennent en conditions réelles** :
+des dates choisies par leur valeur rendent des barres — et l'interface **n'offre alors
+aucune bascule** vers la courbe, parce que `variantes` est vide hors continuum ; le
+correctif ne se contourne donc pas depuis l'écran. Les séries régulières sont préservées,
+mensuel compris (écarts de 28 à 31 jours, rapport 1,107 contre un seuil de 3) — c'était
+la régression la plus probable.
+
+Rien de ce que cette vérification cherchait n'a été trouvé : pas de bloc vide sur un
+refus, pas de graphique orphelin, pas de section « 0 requête » sans contenu. Le tracé par
+bloc ne s'ouvre jamais seul, et le bloc qui porte la conclusion, lui, s'ouvre — vérifié
+trois fois plutôt qu'une, après une observation contradictoire qui s'est révélée non
+reproductible.
+
+Quatre constats en sont sortis, aucun bloquant, tous invisibles des tests :
+
+**Le paragraphe de raisonnement peut être vide, et disparaît alors en silence.** Le champ
+est déclaré `required` dans le schéma d'outil — mais **une chaîne vide satisfait
+`required`**, et l'interface ne rend rien plutôt que de signaler l'absence. Une demande
+explicite du client repose donc sur la bonne volonté du modèle et non sur le code, ce que
+le premier principe du projet interdit. Fréquence non chiffrable : le cache d'évaluation
+ne conserve pas ce champ. Observé une fois sur onze requêtes. **Consigné, non corrigé** —
+la correction utile (rendre l'absence visible) est à décider, celle qui refuserait la
+requête coûterait bien plus cher que le défaut.
+
+**La somme déterministe ne voit pas à travers les CTE.** Quand l'agrégation a lieu dans
+une CTE et que le `SELECT` externe se contente de réexposer la colonne, le parseur voit
+`round(colonne)`, ne trouve pas d'agrégat, et refuse — conformément à sa règle, le refus
+étant le défaut. La couverture est donc **plus étroite que ne le laissait croire** la
+section qui l'introduit, et c'est précisément une forme où deux colonnes de montants
+invitent à l'addition mentale. Suivre la filiation d'une colonne à travers les CTE
+demanderait de résoudre les alias de bout en bout : beaucoup de mécanisme pour une
+famille de cas qu'on ne sait pas chiffrer. **À écrire dans le rapport de campagne** —
+sans quoi un gain faible se lirait comme un échec du correctif.
+
+**L'agent re-requête le total même quand on le lui donne.** Sur la répartition par canal,
+il a reçu la somme dans le retour d'outil, puis a lancé une requête dédiée pour obtenir
+le même nombre. C'est le bon comportement — mais ça veut dire que le correctif peut
+ajouter des tokens sans rien économiser. **Le coût par question devient une métrique à
+lire dans la campagne**, à côté du score.
+
+Deux points cosmétiques, notés pour ne pas être redécouverts : une ligne vide en bas des
+tableaux rendus depuis le markdown, et le journal d'étapes qui conserve ses points de
+suspension une fois l'exécution terminée.
+
 ## Vérifications faites, à ne pas refaire de mémoire
 
 Ces points ont été mesurés sur la version des bibliothèques figée dans
