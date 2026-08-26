@@ -31,6 +31,15 @@ export interface Requete {
   raisonnement: string
   /** Ce que ce résultat permettrait de tracer — affiché à la demande, jamais d'office. */
   graphique: Graphique | null
+  /**
+   * Le bloc d'où sort le graphique principal, donc celui qui porte la conclusion.
+   *
+   * Décidé par le serveur, jamais recalculé ici : rejouer la règle côté navigateur la
+   * ferait diverger de `boucle._graphique`, et l'interface ouvrirait un bloc
+   * d'exploration en le présentant comme la réponse. Faux partout quand il n'y a pas
+   * de graphique.
+   */
+  porte_la_conclusion: boolean
 }
 
 export interface Serie {

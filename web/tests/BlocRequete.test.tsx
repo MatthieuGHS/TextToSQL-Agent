@@ -23,6 +23,7 @@ const REQUETE: Requete = {
   tables: ['media'],
   raisonnement: 'Je somme le coût sur le périmètre annonceur.',
   graphique: null,
+  porte_la_conclusion: false,
 }
 
 describe('bloc de requête', () => {
@@ -70,6 +71,27 @@ describe('bloc de requête', () => {
     fireEvent.click(screen.getByText(/^requête$/i))
 
     expect(screen.queryByText(/Je somme le coût/)).not.toBeInTheDocument()
+  })
+
+  it('ouvre d emblée le bloc qui porte la conclusion', () => {
+    // `role.md` demande au modèle de ne pas réénumérer un résultat au motif que
+    // l'utilisateur l'a sous les yeux. Tant que tout était replié, la consigne
+    // s'appuyait sur un écran qui n'existait pas.
+    render(<BlocRequete requete={{ ...REQUETE, porte_la_conclusion: true }} />)
+
+    expect(
+      screen.getByText('Je somme le coût sur le périmètre annonceur.'),
+    ).toBeInTheDocument()
+  })
+
+  it('laisse replies les blocs d exploration', () => {
+    // Contre-épreuve : sans elle, le test précédent passerait aussi avec « tout ouvert ».
+    // Les tâtonnements restent repliés, sinon la réponse disparaît sous son brouillon.
+    render(<BlocRequete requete={REQUETE} />)
+
+    expect(
+      screen.queryByText('Je somme le coût sur le périmètre annonceur.'),
+    ).not.toBeInTheDocument()
   })
 
   it("n'affiche aucune table sur une requête en échec", () => {

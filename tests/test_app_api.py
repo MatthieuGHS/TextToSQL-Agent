@@ -48,6 +48,14 @@ def base(tmp_path_factory) -> pathlib.Path:
 
 
 @pytest.fixture
+def con_api(base):
+    """Une connexion sur la base d'essai, pour les tests qui n'ont pas besoin de HTTP."""
+    c = connexion.ouvrir(base)
+    yield c
+    c.close()
+
+
+@pytest.fixture
 def client(base, monkeypatch):
     """Substitue l'agent partagé, et la base, par ceux de l'essai.
 
@@ -235,6 +243,49 @@ def test_chaque_requete_reussie_porte_sa_specification_de_graphique(client):
     assert charge["requetes"][0]["graphique"] is not None
     assert charge["requetes"][0]["graphique"]["type"] == "courbe"
     assert "variantes" in charge["requetes"][0]["graphique"]
+
+
+def test_seul_le_bloc_qui_porte_la_conclusion_est_marque(con_api):
+    """L'interface ouvre ce bloc d'emblée : encore faut-il que ce soit le bon.
+
+    Deux requêtes traçables ici, et c'est ce qui rend le test discriminant — avec une
+    exploration non traçable en tête, la marque tomberait au bon endroit même sous la
+    règle inverse « la première ».
+    """
+    modele = ModeleScripte([
+        appel_sql("SELECT step_date, cost FROM media ORDER BY step_date"),
+        appel_sql("SELECT channel, cost FROM media", "t2"),
+        texte("Voici."),
+    ])
+    agent = boucle.Agent(
+        modele=modele, systeme=SystemMessage(content="x"),
+        empreinte_prompt="essai00000ab", con=con_api,
+    )
+
+    sortie = serialisation.reponse(boucle.ask("Quoi ?", agent=agent))
+
+    assert [r.porte_la_conclusion for r in sortie.requetes] == [False, True]
+
+
+def test_sans_graphique_aucun_bloc_ne_porte_la_conclusion(con_api):
+    """Contre-épreuve : la marque ne se pose pas par défaut sur la dernière requête.
+
+    Un refus pédagogique ou un scalaire final n'ont pas de conclusion à ouvrir, et
+    marquer quand même le dernier bloc désignerait une exploration comme la réponse.
+    """
+    modele = ModeleScripte([
+        appel_sql("SELECT SUM(cost) FROM media"),
+        texte("Le total est de 1 250,75 €."),
+    ])
+    agent = boucle.Agent(
+        modele=modele, systeme=SystemMessage(content="x"),
+        empreinte_prompt="essai00000ab", con=con_api,
+    )
+
+    sortie = serialisation.reponse(boucle.ask("Total ?", agent=agent))
+
+    assert sortie.graphique is None
+    assert not any(r.porte_la_conclusion for r in sortie.requetes)
 
 
 def test_une_requete_tronquee_n_offre_pas_de_tracer_son_resultat():

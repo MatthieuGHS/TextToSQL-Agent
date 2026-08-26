@@ -62,6 +62,12 @@ class RequeteSortante(BaseModel):
     # Écrit par le modèle avant d'exécuter, pour qui relit. Demandé par le client pour du
     # débogage : voir l'intention à côté du SQL dit pourquoi une requête est ce qu'elle est.
     raisonnement: str
+    # Le bloc que l'interface ouvre d'emblée : celui d'où sort le graphique principal,
+    # donc celui qui porte la conclusion. Décidé ici et non côté navigateur — le rejouer
+    # là-bas le ferait diverger de `boucle._graphique` à la première règle ajoutée, et
+    # l'interface ouvrirait alors un bloc d'exploration en le présentant comme la
+    # conclusion. Faux sur toutes les requêtes quand il n'y a pas de graphique.
+    porte_la_conclusion: bool = False
     # Défini plus bas dans le module ; résolu à la première validation.
     graphique: GraphiqueSortant | None
 

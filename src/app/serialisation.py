@@ -110,6 +110,34 @@ def graphique(spec) -> schemas.GraphiqueSortant | None:
     )
 
 
+def _requetes_avec_conclusion(agent_response: AgentResponse):
+    """Marque le bloc d'où sort le graphique principal, pour que l'interface l'ouvre.
+
+    `role.md` a longtemps promis au modèle que ses résultats étaient « sous les yeux »
+    de l'utilisateur, alors que tous les blocs sont repliés : la consigne de ne pas
+    réénumérer un résultat s'appuyait donc sur un écran qui n'existait pas. On rend le
+    monde vrai plutôt que la phrase — au moins pour le résultat qui porte la conclusion.
+
+    La marque suit `boucle._graphique` en réutilisant sa décision plutôt qu'en la
+    rejouant : la requête retenue est la dernière dont la spécification égale celle du
+    graphique principal. Rejouer la règle ici la ferait diverger à la première condition
+    ajoutée — c'est déjà arrivé une fois entre `refus()` et `proposer()`.
+    """
+    sorties = [requete(r) for r in agent_response.requetes]
+    if agent_response.graphique is None:
+        return sorties
+    for indice in range(len(agent_response.requetes) - 1, -1, -1):
+        r = agent_response.requetes[indice]
+        if r.a_reussi and not r.tronque and charts.proposer(
+            r.colonnes, r.lignes
+        ) == agent_response.graphique:
+            sorties[indice] = sorties[indice].model_copy(
+                update={"porte_la_conclusion": True}
+            )
+            break
+    return sorties
+
+
 def reponse(agent_response: AgentResponse) -> schemas.ReponseSortante:
     """`arret_normal` est calculé ici, jamais réinterprété par l'interface.
 
@@ -120,7 +148,7 @@ def reponse(agent_response: AgentResponse) -> schemas.ReponseSortante:
     """
     return schemas.ReponseSortante(
         texte=agent_response.texte,
-        requetes=[requete(r) for r in agent_response.requetes],
+        requetes=_requetes_avec_conclusion(agent_response),
         graphique=graphique(agent_response.graphique),
         arret=agent_response.arret.value,
         arret_normal=agent_response.arret.est_normal,

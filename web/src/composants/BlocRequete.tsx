@@ -12,7 +12,11 @@ import { TableauResultat } from './TableauResultat'
  * reprendre, et les masquer donnerait de l'exécution une image plus lisse que la réalité.
  */
 export function BlocRequete({ requete }: { requete: Requete }) {
-  const [ouvert, setOuvert] = useState(false)
+  // Le bloc qui porte la conclusion s'ouvre d'emblée. `role.md` promettait au modèle que
+  // ses résultats étaient « sous les yeux » de l'utilisateur pour lui demander de ne pas
+  // les réénumérer, alors que tout était replié : la consigne s'appuyait sur un écran qui
+  // n'existait pas. On rend le monde vrai plutôt que la phrase.
+  const [ouvert, setOuvert] = useState(requete.porte_la_conclusion)
   // À la demande seulement : le tracé automatique reste réservé à la dernière requête,
   // celle qui porte la conclusion. Les précédentes sont des explorations.
   const [trace, setTrace] = useState(false)
