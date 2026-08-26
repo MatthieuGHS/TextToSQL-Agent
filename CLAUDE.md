@@ -369,14 +369,22 @@ modèle**, **A1 avant la campagne de référence d'E8**, **C avant E11**.
   prompt ; une décision d'effort demanderait de repayer les deux campagnes.
   Restent gratuits : l'ouverture du scellé et la notation manuelle des 18 questions.
 
-- **Lot C — le thème clair par défaut, avec bascule.** Des **jetons sémantiques** dans
-  `index.css`, définis deux fois, plutôt que 147 paires `dark:` — un seul endroit décide,
-  les composants rendent, comme `src/charts` le fait déjà. Trois pièges vérifiés dans le
-  code : `Graphique` est mémoïsé et resterait figé dans l'ancienne palette (d'où un
-  contexte, qui traverse `memo`), Recharts veut des couleurs littérales et non des
-  classes, et sans script d'amorçage dans `index.html` le rechargement flashe en blanc.
-  Deux palettes à re-dériver, pas une : les 12 séries de `Graphique.tsx` **et** les
-  9 jetons Prism de `SqlColore.tsx`.
+- **Lot C — FAIT le 26/08. Le thème clair par défaut, avec bascule.** Des **jetons
+  sémantiques** dans `index.css`, définis deux fois — aucun composant n'écrit plus une
+  couleur littérale. Les trois pièges annoncés étaient réels et sont fermés : la palette
+  de `Graphique` vient d'un **contexte** (Recharts veut des littéraux, et `memo` aurait
+  figé une palette prise dans un module — le test le prouve sur le SVG peint et rougit
+  si on lit le thème ailleurs), deux palettes de séries sont dérivées, et le script
+  d'amorçage de `index.html` est en clair dans la page, pas dans un module différé.
+  `prose-invert`, figé en sombre, est remplacé par les variables de `typography`
+  branchées sur les jetons. Les 9 jetons Prism restent **distincts** de ceux d'état.
+  **Le contraste est un test** (`tests/test_web_contraste.py`, 47 cas, les deux thèmes) :
+  il a trouvé deux défauts **déjà livrés** en sombre — un texte secondaire à 3,75:1 et du
+  blanc à 2,77:1 sur le bouton d'envoi, ce dernier imposant de séparer les deux rôles de
+  l'accent (`accent` se lit sur la page, `accent-fond` porte du texte par-dessus lui).
+  ⚠ **La vérification visuelle à l'œil reste due** — aucun outil de rendu n'est
+  disponible en session, et c'est une manipulation à la main qui a produit les quatre
+  correctifs les plus utiles du projet. Elle appartient au lot E.
 - **Lot D — E10** : consolidation d'observabilité (coût par question en production, taux
   de cache, arrêts anormaux) — mince, l'essentiel existe.
 - **Lot E — E11** : image Docker reconstruite et vérifiée (pas rebâtie depuis les
