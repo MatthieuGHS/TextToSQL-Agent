@@ -1317,6 +1317,150 @@ il faut donc appeler pour le connaître. Une campagne commence par un appel mini
 prompt système, quelques tokens — dont c'est le seul but, et qui vérifie du même coup que la
 clé répond avant d'engager le reste.
 
+### La notation manuelle : le proxy et le critère du client divergent sur 5 questions
+
+Faite pour la première fois le 25/08/2026, sur les trois colonnes que le client a
+lui-même définies et qu'aucune campagne n'avait jamais remplies. Lecture intégrale des
+18 réponses réelles, SQL ré-exécuté contre la base pour reconstituer le graphique
+effectivement affiché. Zéro appel.
+
+Le résultat qui compte n'est pas le score, c'est l'écart : **le harnais et le client se
+trompent dans les deux sens.** Deux questions que le harnais échoue sont bonnes pour le
+client — dont une où il fait tout ce qu'on lui demande et se fait échouer sur une borne
+approximative. Trois questions que le harnais réussit portent un graphique inadapté,
+qu'aucune assertion ne pouvait voir : hors `PasDeGraphiqueSurResultatVide`, **le
+graphique n'est couvert par rien**.
+
+Conséquence méthodologique, et elle vaut plus que les chiffres : « la note n'a pas
+bougé » parlait d'un proxy qu'on n'avait jamais calibré. Un score de harnais stable ne
+dit rien d'un critère client stable tant que les deux n'ont pas été confrontés une fois.
+
+La suite ne consiste pas à ajouter des assertions de graphique — ce serait ajouter du
+mécanisme à l'instrument, exactement le motif que ce document recense. Elle consiste à
+noter à la main après chaque campagne de référence, ce qui est gratuit et prend une
+heure.
+
+### Deux graphiques qui montraient autre chose que ce qu'ils disaient
+
+Constatés le 25/08/2026, l'un sur les réponses en cache, l'autre à la notation. Les
+deux produisaient un tracé plausible, sans erreur et sans avertissement.
+
+**Un résultat tronqué se traçait.** `run_sql` garde les premières lignes, pas un
+échantillon : une question sur toute la période rendait une courbe s'arrêtant bien avant
+la fin, muette sur ce qui manquait. Le drapeau existait de bout en bout — `ResultatSql`,
+`RequeteExecutee` — et n'était lu nulle part. La condition est posée aux **deux** chemins
+qui mènent à `src/charts`, le graphique principal et le « tracer ce résultat » : un seul
+des deux l'aurait perdue.
+
+**Un pivot dont aucune série n'a plus d'un point se traçait.** La garde d'échelle
+n'existe que dans le format large, dont le commentaire nomme pourtant le cas exact —
+trois métriques non comparables sur un axe. Le pivot l'a abandonnée à dessein le 19/08,
+et c'était juste pour ce qui avait été mesuré alors : des séries d'une même colonne, donc
+d'une même unité, dont l'écart est un écart réel. Ça ne couvrait pas la forme où
+l'abscisse **est** le nom de la métrique — chaque position devient une unité, chaque
+série se réduit à un point, et l'adjacence des barres invite la comparaison que
+l'abscisse sépare. Une réponse expliquait que les unités ne se comparent pas, sous un
+graphique qui les comparait.
+
+La règle porte sur la forme et non sur les unités, que ce module ne connaît pas : une
+règle qui reconnaîtrait des noms de métriques passerait ce cas pour échouer au suivant.
+
+**Mesuré avant d'être posé**, et par ré-exécution du SQL de tout le cache — surtout pas
+par rejeu à blanc, puisque `Resultat.graphique` n'entre dans aucune clé. Sur
+115 requêtes traçables : la garde de pivot en retire **1**, celle de troncature **9**,
+toutes issues d'une seule question. Contrairement aux quatre durcissements précédents du
+projet, la mesure a confirmé l'intuition au lieu de la contredire — c'est ce qui autorise
+à poser la garde, pas l'intuition elle-même.
+
+### La boucle exécutait une requête au dernier tour, puis jetait tout
+
+Défaut constaté le 25/08/2026 sur les deux seuls `plafond_iterations` de la campagne
+courante. Ni l'un ni l'autre n'est une erreur de raisonnement : dans les deux cas l'agent
+avait fait le travail — l'un avait calculé exactement ce qu'on lui demandait et tracé le
+graphique attendu — et l'utilisateur lisait « Je n'ai pas abouti dans le nombre d'étapes
+imparti ».
+
+Le mécanisme tient en une ligne : `for tour in range(max_iterations)`. Au dernier tour, la
+boucle appelle, exécute, empile le résultat, et sort. **Le résultat du dernier appel n'est
+jamais lu par personne** — un appel payé, une requête exécutée, tout à la poubelle.
+
+Le symétrique se mesure aussi, et c'est la même racine : médiane d'**une** requête pour un
+plafond de cinq, et 43 % des réponses se terminant par une offre plutôt qu'un résultat.
+L'agent est simultanément affamé de tours et oisif, parce qu'il n'a aucune représentation
+de son budget.
+
+Le correctif appartient à la boucle, pas au prompt : au plafond, un appel de plus avec
+`tool_choice` « none » contraint le modèle à répondre avec ce qu'il a. C'est le principe
+directeur du module appliqué à ce qui lui manquait — *ce qui doit être vrai à chaque fois
+appartient à la boucle*, et « rendre une réponse » en fait partie.
+
+**Écarté : annoncer le nombre de tours dans le prompt.** C'est du texte, donc ça se
+contourne, et ça pousserait à la précipitation. Le tour de rédaction garantit ce que
+l'annonce demanderait.
+
+Le motif d'arrêt **reste** `PLAFOND_ITERATIONS` et reste anormal. Le score ne bouge donc
+pas dans le sens flatteur : on cesse de jeter le travail, on ne maquille pas la mesure.
+Détail qui n'en est pas un — les outils restent *déclarés* sur l'appel de rédaction : ils
+précèdent le prompt système dans le préfixe mis en cache, et les retirer ferait payer les
+deux au prix fort.
+
+### La clé de réglages indexait des constantes, pas un comportement
+
+Quatrième instance de la famille recensée plus haut, et trouvée avant d'avoir produit un
+chiffre faux. Le dict d'empreinte contenait neuf constantes. Il ne contenait ni les textes
+de repli, ni le flux de contrôle.
+
+Or sur tout arrêt anormal, `Resultat.reponse` **est** l'un de ces textes — donc la chaîne
+que lisent `TexteContient` et `TracabiliteNumerique`. En reformuler un change des verdicts
+sans qu'aucune clé ne bouge. Et le tour de rédaction ci-dessus change la réponse rendue
+sans toucher une seule constante : un dict de constantes ne pouvait, par construction, pas
+le voir.
+
+Les six textes entrent dans la clé. Le flux de contrôle passe par `VERSION_BOUCLE`, tenue
+**à la main** du côté de la boucle avec son motif écrit à côté d'elle — la forme déjà
+retenue pour le budget de `tests/eval`. Ce n'est pas le quatrième mécanisme posé pour
+couvrir le troisième : pas d'introspection des constantes, pas de hachage de module.
+
+### Le prompt décrivait très bien les données et très mal la situation
+
+Six corrections groupées le 25/08/2026, toutes nées de réponses réelles, aucune ne
+mentionnant une question, une valeur attendue ou un mot-clé de la grille.
+
+**Trois relèvent du généré, donc se périment toutes seules.** Le grain est désormais
+chiffré autant qu'énoncé : le modèle écrivait `COUNT(*) AS n_lignes` — nommant donc sa
+colonne juste — puis la racontait comme un nombre de semaines. « Une semaine × un
+segment » est exact mais demande une déduction qu'il ne fait pas sous charge ; « jusqu'à
+N lignes pour une même semaine » rend l'équation visiblement absurde. Une section dit,
+par canal, ses semaines présentes contre ses semaines actives : à une même question sur
+la complétude d'un historique, trois exécutions écrivaient trois filtres et rendaient
+trois verdicts contradictoires, faute de savoir à quoi ressemble une semaine sans
+diffusion. Enfin, un canal déclaré sur une métrique dont il n'a aucune valeur non nulle
+est signalé : il était cité parmi les contributeurs d'un total auquel il n'apporte rien.
+
+**Trois relèvent de l'écrit, et deux étaient devenues fausses.** `principes.md`
+enseignait « absent n'est pas manquant » quand le piège de ce jeu est l'inverse :
+l'inactivité s'y encode par une ligne présente à zéro. `role.md` annonçait un refus de
+tracé pour « ordres de grandeur trop éloignés », supprimé par le second axe du 19/08 — le
+modèle s'excusait d'un écrasement qui n'a pas lieu et proposait un remède inutile. C'est
+le prix d'une note laissée en l'état : « aucun de ces changements ne touche le prompt »
+était vrai du code et faux de sa description. **Rien ne vérifie `role.md` contre le code
+qu'il décrit**, et c'est une limite assumée : un test qui compare de la prose à des
+constantes serait du mécanisme sur du mécanisme.
+
+**La somme faite de tête, prise par son prix.** La règle demandait de relancer une
+requête pour un total déjà sous les yeux. Sous un budget de tours invisible, obéir coûte
+un aller-retour et désobéir ne coûte rien : une consigne dans cette position se suit une
+fois sur trois, ce que B1 avait mesuré exactement. Plutôt que de répéter la consigne, on
+en supprime le prix — le modèle apprend qu'il peut appeler `run_sql` plusieurs fois dans
+le même tour. Vérifié avant d'être écrit : la boucle itère déjà sur les appels, le
+connecteur recolle deux résultats en un seul message comme l'API l'exige, et le
+comportement est absent des 378 exécutions en cache, quatre configurations et trois
+prompts confondus. La phrase « une requête de lecture à la fois » en était la cause
+probable. **Reste supposé** : que le modèle groupe effectivement une fois invité. Ça se
+tranche sur une question réelle, pas sur une campagne.
+
+---
+
 ---
 
 ## Vérifications faites, à ne pas refaire de mémoire

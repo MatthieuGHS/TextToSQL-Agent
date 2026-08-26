@@ -182,7 +182,7 @@ géographique ni démographique · les trois tables n'ont pas les mêmes bornes 
   l'agent opère sur les vraies données.
 - Aucune clé API dans le code : tout passe par les variables d'environnement.
 
-## État au 24 août 2026 (retour client reçu, lots A à F arrêtés)
+## État au 26 août 2026 (retour client reçu, lots A à F arrêtés)
 
 Fait : socle · ETL et contrat de données (E1) · accès SQL unique et durci (E2) · prompt
 système généré (E3) · boucle agent (E4) · harnais d'évaluation en conditions réelles (E5)
@@ -249,7 +249,37 @@ décidé à l'étendue et non à la médiane, réglette de zoom, histogramme nat
 la demande » sur chaque bloc de requête, bascules courbe/barres/empilées déclarées par
 le serveur. Aucun de ces changements ne touche le prompt : la ligne de base tient.
 
-## ⚠ Le constat du 25 août 2026 — la grille client ne bouge pas
+## ⚠ Le constat du 25 août 2026, et ce qui l'a corrigé le 26
+
+**Le constat tenait sur un proxy jamais calibré.** La notation manuelle des 18 questions
+sur les trois colonnes du client — `SQL Check`, `Chart Check`, `Pédagogie IA` — a été
+faite pour la première fois le 25/08 (détail hors Git dans
+`docs/prive/notation-grille-25-08.md`). Elle diverge du harnais sur **5 questions sur
+18**, et dans les deux sens : deux questions échouées par le harnais sont bonnes pour le
+client, trois qu'il réussit portent un graphique inadapté qu'aucune assertion ne peut
+voir. « La note n'a pas bougé » parlait donc d'un instrument qu'on n'avait jamais
+confronté au critère réel. Le constat ci-dessous reste vrai du proxy ; il ne l'est plus
+du client.
+
+Ce que la notation a produit, toutes corrections **gratuites** et faites le 25-26/08 :
+
+- **deux graphiques faux dans le produit livré** — un résultat tronqué se traçait
+  (courbe muette sur 44 % de période manquante), et un pivot dont chaque série n'a qu'un
+  point comparait des unités que la réponse déclarait incomparables. Mesuré par
+  ré-exécution de tout le cache avant d'être posé : 1 et 9 décisions changées sur 115 ;
+- **la boucle jetait le travail du dernier tour** — deux `plafond_iterations` où l'agent
+  avait tout fait, et où l'utilisateur lisait « je n'ai pas abouti ». Un tour de rédaction
+  sans outil rend désormais ce qu'il a. Le motif d'arrêt reste anormal : on cesse de jeter
+  le travail, on ne maquille pas la mesure ;
+- **la clé de réglages était aveugle au comportement** — quatrième instance de la famille.
+  Les six textes de repli et `VERSION_BOUCLE` y entrent ;
+- **six corrections de prompt**, dont deux phrases devenues fausses depuis le 19/08.
+
+⚠ **Le cache est périmé volontairement** — prompt `44ebe23d8f07`, réglages `4014d5aee332`.
+Les 378 exécutions ont été produites par une boucle qui jetait le dernier tour. Une
+campagne de référence reste à payer ; elle n'a pas encore été lancée.
+
+### Le constat d'origine — la grille client ne bouge pas
 
 | | ligne de base | B0 (5 tours) | B1 (prompt + outil) |
 |---|---|---|---|
