@@ -53,11 +53,13 @@ describe('bloc de requête', () => {
     expect(screen.getByText('media')).toBeInTheDocument()
   })
 
-  it("affiche le raisonnement une fois le bloc déplié", () => {
-    // Écrit par le modèle avant d'exécuter, donc au-dessus du SQL : il explique la
-    // requête qu'on s'apprête à lire, il ne la justifie pas après coup.
+  it('affiche le raisonnement sans qu on ait rien à déplier', () => {
+    // **Le défaut que ce test existe pour attraper**, constaté en manipulant
+    // l'application le 26/08. Le client a demandé un paragraphe de raisonnement avant la
+    // requête ; il était rendu, mais à l'intérieur du repli — donc derrière un clic que
+    // personne ne fait, c'est-à-dire pas livré. La version précédente de ce test dépliait
+    // avant de vérifier : elle prouvait que le texte existait, pas qu'on le voyait.
     render(<BlocRequete requete={REQUETE} />)
-    fireEvent.click(screen.getByText(/^requête$/i))
 
     expect(
       screen.getByText('Je somme le coût sur le périmètre annonceur.'),
@@ -68,7 +70,6 @@ describe('bloc de requête', () => {
     // Les réponses produites avant que le champ n'existe le rendent vide : le bloc ne
     // doit pas ouvrir un encart vide pour autant.
     render(<BlocRequete requete={{ ...REQUETE, raisonnement: '' }} />)
-    fireEvent.click(screen.getByText(/^requête$/i))
 
     expect(screen.queryByText(/Je somme le coût/)).not.toBeInTheDocument()
   })
@@ -79,9 +80,10 @@ describe('bloc de requête', () => {
     // s'appuyait sur un écran qui n'existait pas.
     render(<BlocRequete requete={{ ...REQUETE, porte_la_conclusion: true }} />)
 
-    expect(
-      screen.getByText('Je somme le coût sur le périmètre annonceur.'),
-    ).toBeInTheDocument()
+    // Sur le **contenu du repli** — le tableau de résultat — et non sur le raisonnement,
+    // qui est désormais visible dans les deux états et ne dirait donc plus rien de
+    // l'ouverture du bloc.
+    expect(screen.getByText('somme')).toBeInTheDocument()
   })
 
   it('laisse replies les blocs d exploration', () => {
@@ -89,9 +91,7 @@ describe('bloc de requête', () => {
     // Les tâtonnements restent repliés, sinon la réponse disparaît sous son brouillon.
     render(<BlocRequete requete={REQUETE} />)
 
-    expect(
-      screen.queryByText('Je somme le coût sur le périmètre annonceur.'),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByText('somme')).not.toBeInTheDocument()
   })
 
   it("n'affiche aucune table sur une requête en échec", () => {

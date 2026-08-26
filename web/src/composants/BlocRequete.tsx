@@ -28,6 +28,16 @@ export function BlocRequete({ requete }: { requete: Requete }) {
         enEchec ? 'border-erreur-bordure bg-erreur-fond' : 'border-bordure bg-surface'
       }`}
     >
+      {/* **Hors du repli, et au-dessus de la requête.** Le client a demandé un paragraphe
+          de raisonnement avant la requête ; le mettre derrière un clic revenait à ne pas
+          le livrer — constaté en manipulant l'application, et invisible des tests, qui
+          dépliaient avant de vérifier. Ces deux phrases sont le fil du raisonnement d'un
+          bout à l'autre de la réponse : elles se lisent en enfilade, sans rien ouvrir. */}
+      {requete.raisonnement && (
+        <p className="px-3 pt-2.5 text-xs italic leading-relaxed text-texte-attenue">
+          {requete.raisonnement}
+        </p>
+      )}
       <button
         onClick={() => setOuvert(!ouvert)}
         className="w-full flex items-center gap-2 px-3 py-2 text-left
@@ -76,16 +86,6 @@ export function BlocRequete({ requete }: { requete: Requete }) {
 
       {ouvert && (
         <div className="border-t border-bordure">
-          {/* Au-dessus du SQL, et non en dessous : il a été écrit avant lui, et c'est
-              ce qui explique la requête qu'on s'apprête à lire. */}
-          {requete.raisonnement && (
-            <p
-              className="px-3 py-2 text-xs italic leading-relaxed text-texte-attenue
-                         border-b border-bordure-attenuee"
-            >
-              {requete.raisonnement}
-            </p>
-          )}
           <SqlColore sql={requete.sql} />
           {enEchec ? (
             <p
