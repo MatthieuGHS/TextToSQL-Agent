@@ -72,6 +72,42 @@ MAX_TRANCHES = 20
 # précisément celui du défaut constaté (coût TV ×43 au-dessus des mises en service).
 FACTEUR_SECOND_AXE = 25
 
+# Rapport entre le plus grand et le plus petit écart séparant deux abscisses temporelles
+# successives, au-delà duquel la série cesse d'être un continuum. Une ligne **affirme**
+# que ce qui sépare deux points est du temps parcouru ; sur cinq semaines de pic
+# sélectionnées par leur montant, cette affirmation est fausse et la pente n'existe pas.
+#
+# Le seuil n'est pas un jugement : il se lit sur les données. Mesuré sur les 466 requêtes
+# distinctes du cache, dont 82 rendent une courbe temporelle, la distribution de ce
+# rapport est **franchement bimodale** — 68 courbes entre 1,0 et 1,1 (une grille
+# régulière), une à 2,1, puis 13 à 15, 28 et 53. N'importe quelle valeur entre 3 et 14
+# donne exactement le même verdict sur les 466 ; on prend le bas de l'intervalle vide.
+FACTEUR_ESPACEMENT_IRREGULIER = 3
+
+# Rapport entre la plus grande et la plus petite valeur non nulle **d'une même série**,
+# au-delà duquel des barres cessent d'être lisibles sur une abscisse catégorielle.
+#
+# Le seuil a une justification physique avant d'être une mesure : à 1 000, la plus petite
+# barre occupe moins d'un pixel dans un graphique large de mille. Elle n'est pas petite,
+# elle est absente — et une catégorie absente se lit « zéro », ce qu'elle n'est pas.
+#
+# La mesure confirme, et elle est franche. Sur les 100 séries de barres à abscisse
+# catégorielle du cache : 14 dépassent 111 000×, et ce sont **toutes** des ventilations
+# par `performance_metric` — des GRP, des impressions et des clics sur un axe unique,
+# c'est-à-dire le piège principal du jeu de données. La suivante est à 696×, et c'est une
+# répartition de budget par canal parfaitement lisible. L'intervalle vide couvre deux
+# ordres de grandeur ; 1 000 s'y place sans arbitrage.
+#
+# **Sur abscisse non temporelle seulement, et la nuance a mordu.** Sur un axe du temps,
+# un écart énorme raconte une histoire vraie — un canal qui démarre à presque rien et
+# monte à des millions — et la forme reste lisible même si les premiers points sont
+# écrasés. Les catégories, elles, n'ont pas de forme : il ne reste que la hauteur
+# comparée. Conditionner cette garde à la *marque* plutôt qu'à la *nature* de l'abscisse
+# refusait quatre graphiques légitimes : des séries hebdomadaires que la règle
+# d'espacement venait de faire passer en barres restaient des séries temporelles, et
+# l'argument ci-dessus continue de valoir pour elles.
+FACTEUR_SERIE_ILLISIBLE = 1000
+
 COURBE = "courbe"
 BARRES = "barres"
 NUAGE = "nuage"
@@ -205,6 +241,61 @@ def _trier_si_ordonne(
     return list(lignes)
 
 
+def _espacement_regulier(abscisses: Sequence[Any]) -> bool:
+    """Vrai si ces abscisses temporelles sont assez régulières pour porter une ligne.
+
+    Une courbe interpole : entre deux points, elle dessine un chemin que personne n'a
+    mesuré, et le lecteur y lit une progression. C'est juste sur une grille régulière —
+    des semaines, des mois — où l'écart est partout le même et où la pente a donc un
+    sens. Ça ne l'est pas sur des dates **choisies par leur valeur** : les cinq semaines
+    de plus forte dépense sont séparées de 28 à 420 jours, et la ligne qui les relie
+    invente une trajectoire entre des points sans voisinage.
+
+    La régularité est une propriété des données seules, ce qui est tout l'intérêt : la
+    règle ne lit ni le nom des colonnes, ni la requête, ni l'intention. Elle constate.
+
+    Vrai par défaut quand elle ne peut pas se prononcer — moins de trois points, ou des
+    abscisses confondues. Le défaut d'un module de tracé doit être de tracer.
+    """
+    dates = [a for a in abscisses if isinstance(a, _TEMPORELS)]
+    if len(dates) != len(abscisses) or len(dates) < 3:
+        return True
+
+    # Sur l'ensemble ordonné : la régularité est une propriété des positions, pas de
+    # l'ordre dans lequel la requête les a rendues.
+    ordonnees = sorted(
+        datetime.datetime.combine(d, datetime.time()) if type(d) is datetime.date else d
+        for d in dates
+    )
+    ecarts = [
+        (b - a).total_seconds() for a, b in zip(ordonnees, ordonnees[1:]) if b > a
+    ]
+    if len(ecarts) < 2:
+        return True
+    return max(ecarts) / min(ecarts) <= FACTEUR_ESPACEMENT_IRREGULIER
+
+
+def _serie_illisible(series: Sequence[Serie]) -> bool:
+    """Vrai si une série écrase ses propres valeurs au point d'en effacer.
+
+    Le pendant intra-série de `_echelles_incompatibles`, qui ne regardait que les écarts
+    **entre** colonnes. Le cas manquant est réel et c'est le piège du jeu de données :
+    `SELECT channel, performance_metric, SUM(performance)` rend une seule colonne de
+    mesure, donc une seule série — mais chaque ligne y porte une unité différente, et
+    mille GRP voisinent trois milliards d'impressions. Aucune règle sur les unités n'est
+    nécessaire pour le voir : la série se dénonce elle-même par son étalement.
+
+    Constaté le 26/08/2026 sur la question « Top 3 des leviers les plus performants », où
+    la réponse explique que ces métriques ne se comparent pas — sous un graphique qui les
+    compare.
+    """
+    for serie in series:
+        valeurs = [abs(v) for v in serie.valeurs if v is not None and v != 0]
+        if len(valeurs) >= 2 and max(valeurs) / min(valeurs) >= FACTEUR_SERIE_ILLISIBLE:
+            return True
+    return False
+
+
 def _analyser(
     colonnes: Sequence[str], lignes: Sequence[Sequence[Any]]
 ) -> Graphique | str:
@@ -323,20 +414,30 @@ def _large(
 
     # Une abscisse ordinale (année, trimestre, numéro de semaine) est un continuum
     # ordonné au même titre qu'une date : la courbe y est la bonne lecture. Seule une
-    # abscisse catégorielle appelle des barres.
-    continuum = _est_temporelle(lignes, x) or _est_ordinale(lignes, x)
+    # abscisse catégorielle appelle des barres — et une suite de dates trop irrégulière
+    # pour qu'une ligne veuille dire quelque chose entre deux points.
+    etiquettes = tuple(l[x] for l in lignes)
+    continuum = (
+        _est_temporelle(lignes, x) and _espacement_regulier(etiquettes)
+    ) or _est_ordinale(lignes, x)
+    series = tuple(
+        Serie(
+            colonne=colonnes[i],
+            valeurs=tuple(None if l[i] is None else float(l[i]) for l in lignes),
+            axe_secondaire=(i == petite),
+        )
+        for i in mesures
+    )
+    if not _est_temporelle(lignes, x) and _serie_illisible(series):
+        return (
+            "une même série mélange des ordres de grandeur incomparables : les plus "
+            "petites barres seraient invisibles"
+        )
     return Graphique(
         type=COURBE if continuum else BARRES,
         x=colonnes[x],
-        etiquettes=tuple(l[x] for l in lignes),
-        series=tuple(
-            Serie(
-                colonne=colonnes[i],
-                valeurs=tuple(None if l[i] is None else float(l[i]) for l in lignes),
-                axe_secondaire=(i == petite),
-            )
-            for i in mesures
-        ),
+        etiquettes=etiquettes,
+        series=series,
         variantes=(BARRES,) if continuum else (),
     )
 
@@ -437,19 +538,27 @@ def _pivot(
         else None
     )
 
-    continuum = _est_temporelle(lignes, x) or _est_ordinale(lignes, x)
+    continuum = (
+        _est_temporelle(lignes, x) and _espacement_regulier(abscisses)
+    ) or _est_ordinale(lignes, x)
+    series = tuple(
+        Serie(
+            colonne=str(cat),
+            valeurs=tuple(valeurs_par_categorie[cat]),
+            axe_secondaire=(cat == petite),
+        )
+        for cat in valeurs_categorie
+    )
+    if not _est_temporelle(lignes, x) and _serie_illisible(series):
+        return (
+            "une même série mélange des ordres de grandeur incomparables : les plus "
+            "petites barres seraient invisibles"
+        )
     return Graphique(
         type=COURBE if continuum else BARRES,
         x=colonnes[x],
         etiquettes=tuple(abscisses),
-        series=tuple(
-            Serie(
-                colonne=str(cat),
-                valeurs=tuple(valeurs_par_categorie[cat]),
-                axe_secondaire=(cat == petite),
-            )
-            for cat in valeurs_categorie
-        ),
+        series=series,
         variantes=(BARRES,) if continuum else (),
         empilable=petite is None,
     )

@@ -39,6 +39,115 @@ def test_une_serie_temporelle_donne_une_courbe():
     assert g.series[0].valeurs == (100.0, 200.0, 150.0, 300.0)
 
 
+def test_des_dates_trop_irregulieres_ne_portent_pas_une_ligne():
+    """Constaté le 26/08/2026 sur la question des cinq semaines de plus forte dépense.
+
+    L'agent répond juste : il rend les cinq semaines et le canal qui a poussé chacune.
+    Le graphique, lui, les reliait par une ligne — alors qu'elles sont séparées de 28 à
+    420 jours et qu'elles ont été **choisies par leur montant**, pas par leur place dans
+    le temps. La pente entre deux points n'y décrit aucune évolution : elle relie deux
+    pics entre lesquels il manque un an de semaines que personne n'a demandées.
+
+    La correction dégrade la marque au lieu de refuser : des barres n'affirment rien
+    entre deux abscisses. Mesuré sur les 466 requêtes du cache — 13 décisions passent de
+    la courbe aux barres, et **aucun graphique n'est perdu** (178 avant, 178 après).
+    """
+    pics = [datetime.date(2024, 1, 1), datetime.date(2024, 1, 29),
+            datetime.date(2024, 6, 3), datetime.date(2025, 2, 10),
+            datetime.date(2025, 3, 3)]
+    lignes = [(d, v) for d, v in zip(pics, [1000.0, 950.0, 900.0, 880.0, 870.0])]
+
+    g = charts.proposer(["step_date", "cost"], lignes)
+
+    assert g is not None, "une abscisse irrégulière se trace toujours — en barres"
+    assert g.type == charts.BARRES
+    assert g.etiquettes == tuple(pics)
+
+
+def test_la_regle_d_espacement_epargne_une_grille_reguliere():
+    """La contre-épreuve : sans elle, la règle précédente refuserait toute courbe.
+
+    Mêmes colonnes, mêmes mesures, même nombre de points que le test ci-dessus — seul
+    l'espacement change. Une grille hebdomadaire garde sa ligne, et c'est ce qui distingue
+    une règle qui constate d'une règle qui punit les petits résultats.
+    """
+    semaines = [datetime.date(2024, 1, 1 + 7 * i) for i in range(5)]
+    lignes = [(d, v) for d, v in zip(semaines, [1000.0, 950.0, 900.0, 880.0, 870.0])]
+
+    g = charts.proposer(["step_date", "cost"], lignes)
+
+    assert g is not None and g.type == charts.COURBE
+
+
+def test_un_trou_dans_une_serie_par_ailleurs_reguliere_suffit():
+    """Le cas fréquent, et le plus trompeur des deux.
+
+    Une série hebdomadaire dont six mois manquent — un canal éteint puis rallumé — est
+    régulière partout sauf une fois. La ligne qui traverse le trou est une invention sur
+    toute sa longueur, et rien dans le graphique ne la distingue des segments mesurés.
+    """
+    presentes = [datetime.date(2024, 1, 1 + 7 * i) for i in range(4)]
+    apres = [datetime.date(2024, 9, 2 + 7 * i) for i in range(4)]
+    lignes = [(d, 100.0) for d in presentes + apres]
+
+    g = charts.proposer(["step_date", "cost"], lignes)
+
+    assert g is not None and g.type == charts.BARRES
+
+
+def test_une_serie_qui_ecrase_ses_propres_valeurs_est_refusee():
+    """Constaté le 26/08/2026 sur « Top 3 des leviers les plus performants ».
+
+    L'agent répond exactement ce que la question de test attend : ces métriques ne se
+    comparent pas, et il donne un classement **par unité**. Le graphique, lui, mettait
+    les trois sur un axe unique — mille unités d'un côté, trois milliards de l'autre.
+    Le texte disait le contraire de ce que la figure montrait.
+
+    Aucune règle sur les unités n'est nécessaire pour le voir, et c'est ce qui rend la
+    règle générale : la série se dénonce par son étalement. À mille pour un, la plus
+    petite barre occupe moins d'un pixel — elle se lit « zéro », ce qu'elle n'est pas.
+    """
+    # Valeurs inventées : seul le rapport entre elles est ce que la règle regarde.
+    lignes = [("alpha", 7_000_000.0), ("beta", 900_000_000.0), ("gamma", 300.0)]
+
+    g = charts.proposer(["metrique", "total"], lignes)
+
+    assert g is None
+    assert "invisibles" in charts.refus(["metrique", "total"], lignes)
+
+
+def test_un_ecart_ordinaire_entre_categories_reste_tracable():
+    """La contre-épreuve, et elle est serrée : le plus gros canal pèse 700 fois le plus
+    petit dans les données réelles, et cette répartition-là se lit très bien.
+
+    Sans ce test, le seuil pourrait dériver vers le bas sans que rien ne signale qu'on
+    a commencé à refuser des graphiques utiles.
+    """
+    # Rapport de 700 pour 1, inventé mais du même ordre que ce que la mesure a trouvé.
+    lignes = [("alpha", 70_000_000.0), ("beta", 41_000_000.0), ("gamma", 100_000.0)]
+
+    g = charts.proposer(["channel", "budget"], lignes)
+
+    assert g is not None and g.type == charts.BARRES
+
+
+def test_l_etalement_ne_condamne_pas_une_serie_temporelle():
+    """Sur un axe du temps, un écart énorme raconte une histoire vraie.
+
+    Un canal qui démarre à presque rien et monte à des millions doit rester traçable —
+    la forme de la courbe se lit même quand les premiers points sont écrasés. Ce test
+    existe parce que la garde d'étalement, d'abord conditionnée à la *marque* choisie et
+    non à la *nature* de l'abscisse, refusait quatre séries hebdomadaires légitimes que
+    la règle d'espacement venait de faire passer en barres.
+    """
+    semaines = [datetime.date(2024, 1, 1 + 7 * i) for i in range(4)]
+    lignes = list(zip(semaines, [3.0, 700.0, 5_000_000.0, 88_000_000.0]))
+
+    g = charts.proposer(["step_date", "impressions"], lignes)
+
+    assert g is not None
+
+
 def test_une_dimension_categorielle_donne_des_barres():
     lignes = [("tv", 100.0), ("radio", 50.0), ("display", 25.0)]
 
