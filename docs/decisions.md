@@ -1456,8 +1456,21 @@ le même tour. Vérifié avant d'être écrit : la boucle itère déjà sur les 
 connecteur recolle deux résultats en un seul message comme l'API l'exige, et le
 comportement est absent des 378 exécutions en cache, quatre configurations et trois
 prompts confondus. La phrase « une requête de lecture à la fois » en était la cause
-probable. **Reste supposé** : que le modèle groupe effectivement une fois invité. Ça se
-tranche sur une question réelle, pas sur une campagne.
+probable.
+
+**Vérifié le 26/08 sur deux questions réelles**, pour ~0,15 $ — et non sur une campagne,
+parce qu'un mécanisme se tranche sur un cas, pas sur un score. Sur une question demandant
+deux faits indépendants (un total dans `media`, une moyenne dans `contexte`), le modèle a
+émis **deux appels d'outil dans le même tour** : la boucle les a exécutés, le connecteur
+les a recollés, la réponse est venue en deux tours au lieu de trois. Le comportement,
+absent des 378 exécutions en cache, existe donc dès qu'on l'autorise.
+
+Sur une question où les deux requêtes pouvaient fusionner, il n'a pas groupé — il a écrit
+une seule requête plus riche, ce qui vaut mieux. **Limite constatée dans le même essai, et
+qu'il faut écrire** : quand les deux opérandes figurent déjà dans un même résultat, le
+modèle en dérive toujours les pourcentages de tête. Le groupage supprime le prix d'une
+requête *supplémentaire* ; il ne fait rien contre le calcul dérivé d'un résultat qu'on a
+sous les yeux. Ce reste-là n'a pas de correctif par le prompt identifié à ce jour.
 
 ---
 
