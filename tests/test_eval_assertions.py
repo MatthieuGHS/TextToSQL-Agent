@@ -471,6 +471,50 @@ def test_la_comparaison_porte_sur_les_grandeurs(con, reponse, attendu):
     assert a.TracabiliteNumerique().verifier(r, con).ok is attendu
 
 
+@pytest.mark.parametrize(
+    "reponse, attendu",
+    [
+        ("Le trafic oscille autour de 200 000 clics.", True),   # un seul chiffre écrit
+        ("Le trafic oscille autour de 350 000 clics.", False),  # deux : bien plus précis
+    ],
+)
+def test_la_precision_declaree_se_lit_aussi_sur_les_zeros_de_fin(con, reponse, attendu):
+    """Le pendant entier de la règle des décimales, corrigé le 26/08/2026.
+
+    « 200 000 » n'écrit qu'un chiffre significatif : il n'affirme rien en deçà de la
+    centaine de mille, et 178 500 en est un arrondi honnête. La tolérance relative de 2 %
+    le condamnait pourtant, et c'était la source de 4 des 13 échecs de la campagne de
+    référence — tous des bornes de fourchettes verbales.
+
+    La contre-épreuve tient à la portée exacte de la règle, et elle est calculable :
+    l'arrondi au rang écrit vaut `0,5 / d` en relatif, où `d` est la partie significative.
+    Il ne dépasse les 2 % existants que pour `d < 25`. « 350 000 » écrit deux chiffres,
+    donc revendique 1,4 % — plus strict que la tolérance générale, et la même valeur
+    calculée y est refusée. Écrire plus de chiffres, c'est affirmer davantage.
+    """
+    r = a.Resultat(reponse=reponse, sql=["SELECT 178500"])
+
+    assert a.TracabiliteNumerique().verifier(r, con).ok is attendu
+
+
+def test_un_total_de_tete_reste_attrape_malgre_la_regle_des_zeros(con):
+    """La garde du défaut que tout le dispositif existe pour voir.
+
+    Assouplir sur les zéros de fin ne doit rien céder sur le cas qui compte : un total
+    qu'aucune requête n'a produit, obtenu en additionnant deux résultats. Écrit à
+    l'unité, il ne porte aucun zéro de fin, donc il revendique l'unité — et la règle
+    nouvelle ne le touche pas.
+    """
+    r = a.Resultat(
+        reponse="Au total, 187 461 impressions sur les deux supports.",
+        sql=["SELECT 92841", "SELECT 94620"],
+    )
+
+    verdict = a.TracabiliteNumerique().verifier(r, con)
+    assert not verdict.ok
+    assert "187 461" in verdict.detail
+
+
 def test_un_ordre_de_grandeur_lu_de_loin_reste_non_tracable(con):
     """La contre-épreuve de tout ce qui précède, prise sur un cas réel.
 

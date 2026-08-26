@@ -429,6 +429,24 @@ def _normalise_nombre(brut: str) -> str:
     return texte.replace(",", ".")
 
 
+def _rang_significatif(texte: str) -> int:
+    """Le rang du dernier chiffre significatif écrit, au sens de `round()`.
+
+    C'est la précision que l'écriture **revendique**, et elle se lit des deux côtés de la
+    virgule : « 0,06 » revendique le centième (rang 2), « 350 000 » ne revendique que la
+    dizaine de mille (rang −4). Une seule notion pour les deux, parce que c'est le même
+    fait — un auteur qui n'écrit pas un chiffre n'affirme rien à ce rang.
+
+    Les zéros de fin ne comptent que sur un entier : « 1,50 » revendique bien son
+    centième, le zéro y est significatif puisque rien n'obligeait à l'écrire.
+    """
+    decimales = texte.partition(".")[2]
+    if decimales:
+        return len(decimales)
+    entier = texte.lstrip("0") or "0"
+    return -(len(entier) - len(entier.rstrip("0")))
+
+
 def _litteraux(requete: str, con: duckdb.DuckDBPyConnection) -> set[str]:
     """Les nombres tels qu'ils apparaissent **littéralement** dans un résultat.
 
@@ -500,9 +518,25 @@ class TracabiliteNumerique:
     **L'écriture déclare sa propre précision.** Un coefficient rendu « 0,06 » affirme une
     valeur entre 0,055 et 0,065 : le juger à 2 % *relatifs* réclamerait une exactitude que
     son auteur n'a pas revendiquée, et condamnerait un 0,0565 parfaitement calculé. On
-    accepte donc aussi une valeur qui, arrondie au nombre de décimales écrites, redonne le
-    nombre écrit. Cette règle ne dépend d'aucune question : elle dit seulement qu'un
-    arrondi n'est pas une invention.
+    accepte donc aussi une valeur qui, arrondie au **rang du dernier chiffre significatif
+    écrit**, redonne le nombre écrit. Cette règle ne dépend d'aucune question : elle dit
+    seulement qu'un arrondi n'est pas une invention.
+
+    Ce rang se lit des deux côtés de la virgule, et c'est une correction du 26/08/2026 :
+    la règle ne valait que pour les décimales, si bien qu'une borne de fourchette écrite
+    « 350 000 » était jugée au millier près alors qu'elle n'affirme qu'une dizaine de
+    mille. Mesuré sur les 105 exécutions de la campagne de référence : **4 échecs sur 13
+    disparaissent**, tous des bornes rondes de fourchettes verbales, et **aucun échec réel
+    n'est perdu** — un total faux à l'unité près n'a pas de zéro de fin, il continue
+    d'affirmer l'unité et reste attrapé.
+
+    ⚠ Les 4 artefacts restants ne sont **pas** un problème de tolérance et ne doivent pas
+    être traités en élargissant celle-ci : ce sont un nom d'unité (le « 1000 » d'un coût
+    pour mille), une constante de pourcentage (« NULL à 100 % »), un millésime, et une
+    borne dont aucune valeur calculée n'approche le rang revendiqué. Chacun demanderait
+    son propre régime, et cette fonction en a déjà trois. Une tolérance élargie d'un cran
+    les ferait tous passer — et accepterait aussi « 100 » pour n'importe quelle valeur
+    entre 0 et 200, ce qui retirerait au contrôle l'essentiel de ce qu'il sait faire.
 
     **La comparaison porte sur les grandeurs.** Le signe n'est pas capté par l'expression
     régulière — « −0,23 » en donne « 0,23 » — donc l'opposer à une corrélation négative
@@ -554,8 +588,8 @@ class TracabiliteNumerique:
                 continue
             if texte in litteraux:
                 continue
-            decimales = len(texte.partition(".")[2])
-            if not any(self._correspond(n, v, decimales) for v in calculees):
+            rang = _rang_significatif(texte)
+            if not any(self._correspond(n, v, rang) for v in calculees):
                 orphelins.append(brut.strip())
 
         return Verdict(
@@ -564,11 +598,11 @@ class TracabiliteNumerique:
             f"non traçables : {orphelins[:5]}" if orphelins else "",
         )
 
-    def _correspond(self, n: float, valeur: float, decimales: int) -> bool:
+    def _correspond(self, n: float, valeur: float, rang: int) -> bool:
         """Vrai si `n` approche `valeur`, à un facteur mille près.
 
         Couvre les unités de présentation : « 4,2 millions » pour 4 231 07x, et l'arrondi
-        que l'écriture revendique : « 0,06 » pour 0,0565.
+        que l'écriture revendique — « 0,06 » pour 0,0565, « 350 000 » pour 34x xxx.
 
         Sur les grandeurs, jamais sur les signes — l'expression régulière ne capte pas le
         « − » qui précède, et l'opposer à une valeur négative rejetterait un calcul juste.
@@ -582,6 +616,6 @@ class TracabiliteNumerique:
             for ecrit, calcule in ((n, valeur / echelle), (n * echelle, valeur)):
                 if _proche(ecrit, calcule, self.tolerance):
                     return True
-                if round(calcule, decimales) == round(ecrit, decimales):
+                if round(calcule, rang) == round(ecrit, rang):
                     return True
         return False

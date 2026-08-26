@@ -64,7 +64,23 @@ DOSSIER = pathlib.Path(__file__).resolve().parent / "eval"
 #   lignes ajoutées ne sont pas une assertion mais de l'indexation — exactement ce que le
 #   relèvement du 18/08 avait déjà admis. Le budget borne ce que l'instrument *juge*, pas
 #   ce qui l'empêche de juger sur des réponses périmées.
-BUDGET_EXECUTABLE = 1067
+# 26/08/2026 · 1 073 — correction d'un défaut de l'instrument, pas d'un jugement ajouté.
+#   La règle « l'écriture déclare sa propre précision » ne valait que pour les décimales :
+#   une borne de fourchette écrite avec des zéros de fin était jugée à l'unité près alors
+#   qu'elle n'affirme qu'un ordre de grandeur. Mesuré sur les 105 exécutions de la campagne
+#   de référence, 4 échecs sur 13 étaient des artefacts de ce trou, et aucun échec réel
+#   n'est perdu. Les six lignes vont à un helper qui **unifie** décimales et zéros de fin
+#   en une seule notion de rang significatif — la fonction perd un cas particulier au lieu
+#   d'en gagner un.
+#   Recherche de compensation faite, et sans résultat, mais elle a produit un chiffre qui
+#   vaut d'être gardé : sur les 483 exécutions du cache, `TracabiliteNumerique` porte
+#   **100 % des verdicts rouges** (20 sur 20) et les neuf autres familles n'en produisent
+#   aucun. Aucune n'est pour autant retirable — le critère reste « ne *peut pas* échouer »,
+#   et les douze familles sont toutes instanciées. Ce que ce chiffre dit vraiment est
+#   ailleurs : la totalité de la surface d'échec mesurée du projet tient dans un seul
+#   contrôle, donc tout mouvement de score en dépend, et sa justesse à lui prime sur son
+#   nombre de lignes.
+BUDGET_EXECUTABLE = 1073
 
 
 def _lignes_executables(chemin: pathlib.Path) -> int:
