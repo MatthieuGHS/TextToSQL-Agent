@@ -21,10 +21,10 @@ import pathlib
 import anthropic
 import duckdb
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 from src.agent import boucle, outil
-from src.agent.boucle import Agent, ask
+from src.agent.boucle import TEXTE_PLAFOND, Agent, ask
 from src.agent.reponse import Arret, Echange
 from src.db import connexion
 
@@ -636,6 +636,89 @@ def test_le_graphique_vient_de_la_derniere_requete_tracable(con):
     assert reponse.graphique is not None
     assert reponse.graphique.x == "step_date"
     assert [s.colonne for s in reponse.graphique.series] == ["cost"]
+
+
+def test_le_plafond_atteint_rend_le_travail_au_lieu_de_le_jeter(con):
+    """Défaut constaté le 25/08/2026 sur deux questions de la grille client.
+
+    Au dernier tour, la boucle exécutait la requête, empilait son résultat, puis
+    sortait : personne ne lisait ce résultat. L'utilisateur voyait « je n'ai pas
+    abouti » sous cinq requêtes de travail, dont l'une avait déjà calculé exactement ce
+    qu'on lui demandait. Un appel payé et une requête exécutée pour rien.
+
+    Le motif d'arrêt reste anormal : on cesse de jeter le travail, on ne maquille pas
+    la mesure.
+    """
+    modele = ModeleScripte([appel_sql("SELECT 1", f"t{i}") for i in range(3)])
+    redaction = ModeleScripte([texte("Le total est de 1 250 €.")])
+    agent = agent_avec(modele, con, max_iterations=3, modele_redaction=redaction)
+
+    reponse = ask("Le total ?", agent=agent)
+
+    assert reponse.arret is Arret.PLAFOND_ITERATIONS
+    assert "Le total est de 1 250 €." in reponse.texte
+    assert "nombre d'étapes imparti" in reponse.texte
+    # Le tour de rédaction voit tout le travail, résultats d'outil compris — sans quoi
+    # il n'aurait rien de plus à dire que la boucle elle-même.
+    assert any(
+        isinstance(m, ToolMessage) for m in redaction.appels[0]
+    ), "la rédaction doit recevoir les résultats déjà obtenus"
+
+
+def test_sans_tour_de_redaction_le_travail_est_perdu(con):
+    """Contre-épreuve : c'est exactement ce que faisait la boucle avant le 25/08/2026.
+
+    Même scénario, même plafond — seul le modèle de rédaction manque. La réponse
+    redevient la phrase d'échec, et les trois requêtes ne servent à personne.
+    """
+    modele = ModeleScripte([appel_sql("SELECT 1", f"t{i}") for i in range(3)])
+
+    reponse = ask("Le total ?", agent=agent_avec(modele, con, max_iterations=3))
+
+    assert reponse.arret is Arret.PLAFOND_ITERATIONS
+    assert reponse.texte == TEXTE_PLAFOND
+    assert len(reponse.requetes) == 3
+
+
+def test_une_redaction_en_panne_ne_coute_pas_la_reponse_de_repli(con):
+    """Un tour de rédaction qui échoue doit laisser l'utilisateur là où il était.
+
+    Sans ce repli, l'ajout d'un confort transformerait une panne du service en perte
+    sèche du texte partiel — un mécanisme qui dégrade le cas qu'il devait améliorer.
+    """
+    modele = ModeleScripte([appel_sql("SELECT 1", f"t{i}") for i in range(3)])
+    panne = ModeleEnPanne(anthropic.APIConnectionError(request=None))
+    agent = agent_avec(modele, con, max_iterations=3, modele_redaction=panne)
+
+    reponse = ask("Le total ?", agent=agent)
+
+    assert reponse.arret is Arret.PLAFOND_ITERATIONS
+    assert reponse.texte == TEXTE_PLAFOND
+
+
+def test_le_tour_de_redaction_est_compte_dans_l_usage(con):
+    """Un appel non compté fausserait le coût par question — le chiffre qui décide des
+    campagnes facturées."""
+    modele = ModeleScripte([
+        appel_sql("SELECT 1", f"t{i}") for i in range(3)
+    ])
+    redaction = ModeleScripte([
+        texte(
+            "Le total est de 1 250 €.",
+            usage={
+                "input_tokens": 900,
+                "output_tokens": 40,
+                "total_tokens": 940,
+                "input_token_details": {"cache_read": 800, "cache_creation": 0},
+            },
+        )
+    ])
+    agent = agent_avec(modele, con, max_iterations=3, modele_redaction=redaction)
+
+    reponse = ask("Le total ?", agent=agent)
+
+    assert reponse.usage.entree >= 900
+    assert reponse.usage.sortie >= 40
 
 
 @pytest.fixture(scope="session")

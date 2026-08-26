@@ -66,6 +66,20 @@ MAX_ITERATIONS = 5
 MAX_ECHECS_SQL = 3
 HISTORIQUE_MAX = 5
 
+# À incrémenter **à la main** quand le flux de contrôle de la boucle change la réponse
+# rendue sans qu'aucune constante ne bouge. Le harnais indexe son cache sur des valeurs ;
+# un changement de logique lui est invisible, et un rejeu à blanc resservirait alors les
+# réponses de l'ancienne boucle en concluant « ça ne change rien » — sans erreur ni
+# avertissement. C'est la quatrième occurrence de la même famille de défaut dans ce
+# projet (voir « Ce qui indexe quoi » dans `docs/decisions.md`).
+#
+# Volontairement une constante à tenir soi-même, et non une empreinte des modules : une
+# détection automatique serait le quatrième mécanisme posé pour couvrir le troisième,
+# c'est-à-dire le motif exact qui a produit les derniers défauts du dispositif.
+#
+# 1 → 2 le 25/08/2026 : tour de rédaction au plafond d'itérations.
+VERSION_BOUCLE = 2
+
 # Textes de repli, écrits ici et non par le modèle : ce sont les seuls cas où la boucle
 # parle à sa place, et elle ne dit alors qu'une chose — qu'elle n'a pas abouti.
 TEXTE_ERREUR_API = (
@@ -84,6 +98,14 @@ TEXTE_ECHECS_SQL = (
 TEXTE_PLAFOND = (
     "Je n'ai pas abouti dans le nombre d'étapes imparti. Les requêtes déjà exécutées "
     "figurent dans la réponse ; découper la question en deux permettrait d'aboutir."
+)
+# Le plafond atteint n'est plus une raison de tout jeter : un tour de rédaction rend
+# ce que le modèle a déjà. L'avertissement dit la contrainte sans démentir la réponse
+# qui le précède — contrairement à `TEXTE_PLAFOND`, qui annonçait un échec sous un
+# travail parfois complet.
+TEXTE_REDACTION_FORCEE = (
+    "(Rédigé avec les résultats déjà obtenus : le nombre d'étapes imparti était "
+    "atteint. Une question plus étroite permettrait d'aller plus loin.)"
 )
 TEXTE_TRONQUE = (
     "(Réponse interrompue : la limite de longueur a été atteinte. Ce qui précède est "
@@ -157,6 +179,12 @@ class Agent:
     identifiant: str = MODELE
     max_iterations: int = MAX_ITERATIONS
     max_echecs_sql: int = MAX_ECHECS_SQL
+    # Le même modèle, les mêmes outils déclarés, mais interdits d'appel. Sert au seul
+    # tour de rédaction du plafond. Les outils restent **déclarés** à dessein : ils font
+    # partie du préfixe mis en cache, et les retirer ferait payer le prompt entier pour
+    # cet appel-là. Absent, la boucle garde son comportement d'avant le 25/08/2026 —
+    # c'est ce que font les tests qui n'exercent pas ce chemin.
+    modele_redaction: Modele | None = None
 
 
 def construire(con: Any = None, *, effort: str = EFFORT) -> Agent:
@@ -178,12 +206,20 @@ def construire(con: Any = None, *, effort: str = EFFORT) -> Agent:
     con = con if con is not None else connexion.ouvrir()
     texte = prompt.construire(con)
 
-    modele = ChatAnthropic(
+    brut = ChatAnthropic(
         model=MODELE,
         max_tokens=MAX_TOKENS,
         thinking=RAISONNEMENT,
         reasoning_effort=effort,
-    ).bind_tools([outil.OUTIL_SQL])
+    )
+    modele = brut.bind_tools([outil.OUTIL_SQL])
+    # `tool_choice` « none » plutôt qu'un modèle sans outils : les définitions d'outils
+    # précèdent le prompt système dans le préfixe mis en cache, donc les retirer ferait
+    # payer les deux au prix fort sur cet appel. Le connecteur laisse passer un dict tel
+    # quel, et n'écarte que les types `any` et `tool` quand le raisonnement est actif.
+    modele_redaction = brut.bind_tools(
+        [outil.OUTIL_SQL], tool_choice={"type": "none"}
+    )
 
     return Agent(
         modele=modele,
@@ -201,6 +237,7 @@ def construire(con: Any = None, *, effort: str = EFFORT) -> Agent:
         ),
         empreinte_prompt=prompt.empreinte(texte),
         con=con,
+        modele_redaction=modele_redaction,
     )
 
 
@@ -382,8 +419,47 @@ def ask(
             return _finir(agent, TEXTE_ECHECS_SQL, requetes, Arret.TROP_D_ECHECS_SQL,
                           usage, identifiant)
 
-    return _finir(agent, _avec_avertissement(dernier_texte, TEXTE_PLAFOND), requetes,
-                  Arret.PLAFOND_ITERATIONS, usage, identifiant)
+    # Le plafond est atteint, et le dernier tour s'est terminé par un appel d'outil —
+    # sinon la boucle serait déjà sortie plus haut. Son résultat vient d'être empilé et
+    # personne ne l'a lu : sans ce qui suit, un appel payé et une requête exécutée
+    # partent à la poubelle, et l'utilisateur lit une phrase d'échec sous cinq requêtes
+    # de travail. Défaut constaté le 25/08/2026 sur deux questions de la grille client,
+    # dont l'une avait déjà calculé ce qu'on lui demandait.
+    #
+    # Un tour de rédaction, sans outil : le modèle est contraint de répondre avec ce
+    # qu'il a. Le motif d'arrêt **reste** `PLAFOND_ITERATIONS`, et reste anormal — on
+    # cesse de jeter le travail, on ne maquille pas la mesure.
+    dire(ETAPE_REDACTION, {})
+    texte_final, usage = _rediger_sans_outil(agent, messages, usage)
+    if texte_final is None:
+        return _finir(agent, _avec_avertissement(dernier_texte, TEXTE_PLAFOND),
+                      requetes, Arret.PLAFOND_ITERATIONS, usage, identifiant)
+    return _finir(agent, _avec_avertissement(texte_final, TEXTE_REDACTION_FORCEE),
+                  requetes, Arret.PLAFOND_ITERATIONS, usage, identifiant)
+
+
+def _rediger_sans_outil(
+    agent: Agent, messages: list[Any], usage: Usage
+) -> tuple[str | None, Usage]:
+    """Un dernier appel, outils interdits, pour que le travail déjà fait soit rendu.
+
+    Rend `None` quand la rédaction n'a pas pu avoir lieu — pas de modèle de rédaction
+    (agent monté à la main), erreur d'API, ou réponse vide. L'appelant se rabat alors
+    sur le texte de plafond : un tour de rédaction qui échoue ne doit pas coûter à
+    l'utilisateur la réponse partielle qu'il aurait eue sans lui.
+
+    L'usage est rendu avec le texte plutôt que muté : ce module ne compte les jetons
+    qu'à un seul endroit, et un appel non compté fausserait le coût par question — le
+    chiffre même qui décide des campagnes.
+    """
+    if agent.modele_redaction is None:
+        return None, usage
+    try:
+        reponse = agent.modele_redaction.invoke(messages)
+    except anthropic.APIError as exc:
+        logger.warning("tour de rédaction en échec : %s", type(exc).__name__)
+        return None, usage
+    return (reponse.text or None), usage + _usage_de(reponse)
 
 
 def _sans_trace(etape: str, detail: dict) -> None:

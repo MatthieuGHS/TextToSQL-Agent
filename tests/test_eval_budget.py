@@ -55,7 +55,16 @@ DOSSIER = pathlib.Path(__file__).resolve().parent / "eval"
 #   demandées. Trace gardée parce qu'elle vaut mieux que le chiffre — la correction qui
 #   retire du mécanisme paie souvent celle qui en ajoute, et un plafond qui monte sans
 #   qu'on ait cherché est un plafond qui cède.
-BUDGET_EXECUTABLE = 1063
+# 25/08/2026 · 1 067 — complétion de la clé de réglages, encore, et pour la même famille
+#   de défaut : les six textes de repli **sont** `Resultat.reponse` sur tout arrêt anormal,
+#   donc la chaîne que lisent les assertions, et le flux de contrôle n'était indexé par
+#   rien — le tour de rédaction du plafond change la réponse sans toucher une constante.
+#   Aucune assertion retirée en compensation, et cette fois sans avoir cherché longtemps :
+#   la seule famille structurellement inerte était celle qu'E7 a réactivée, et les quatre
+#   lignes ajoutées ne sont pas une assertion mais de l'indexation — exactement ce que le
+#   relèvement du 18/08 avait déjà admis. Le budget borne ce que l'instrument *juge*, pas
+#   ce qui l'empêche de juger sur des réponses périmées.
+BUDGET_EXECUTABLE = 1067
 
 
 def _lignes_executables(chemin: pathlib.Path) -> int:

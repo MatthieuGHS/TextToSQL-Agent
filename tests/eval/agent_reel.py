@@ -101,6 +101,15 @@ def empreinte_reglages(agent: boucle.Agent, effort: str) -> str:
     quelle plutôt que pré-hachée : le `json.dumps` trié ci-dessous s'en charge, et un
     hachage de plus serait un mécanisme de plus pour le même effet.
 
+    **Les textes de repli et la version de la boucle aussi**, ajoutés le 25/08/2026 et
+    pour la même raison encore. Sur tout arrêt anormal, `Resultat.reponse` **est** l'un
+    de ces textes : c'est la chaîne que lisent `TexteContient` et `TracabiliteNumerique`.
+    En reformuler un change des verdicts sans qu'aucune clé ne bouge. Et le flux de
+    contrôle échappait entièrement à l'indexation — le tour de rédaction du plafond
+    change ce que l'agent rend sans toucher une seule constante, ce qu'un dict de
+    constantes ne pouvait par construction pas voir. D'où `VERSION_BOUCLE`, tenue à la
+    main du côté de la boucle, avec son motif écrit à côté d'elle.
+
     Limite, écrite plutôt que couverte : ceci complète la clé **aujourd'hui**. Rien
     n'empêche un réglage futur d'être ajouté ailleurs sans passer ici. Construire une
     détection automatique — introspection des constantes, hachage des modules — serait le
@@ -118,6 +127,10 @@ def empreinte_reglages(agent: boucle.Agent, effort: str) -> str:
         "budget_caracteres": acces_sql.BUDGET_CARACTERES,
         "delai_sql": acces_sql.DELAI_SECONDES,
         "outil": outil.OUTIL_SQL,
+        "version_boucle": boucle.VERSION_BOUCLE,
+        "textes_repli": [boucle.TEXTE_ERREUR_API, boucle.TEXTE_REFUS,
+                         boucle.TEXTE_ECHECS_SQL, boucle.TEXTE_PLAFOND,
+                         boucle.TEXTE_TRONQUE, boucle.TEXTE_REDACTION_FORCEE],
     }
     brut = json.dumps(reglages, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(brut.encode("utf-8")).hexdigest()[:12]

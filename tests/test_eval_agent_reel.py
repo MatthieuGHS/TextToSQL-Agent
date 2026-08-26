@@ -216,7 +216,14 @@ AGENT_NU = boucle.Agent(modele=None, systeme=None, empreinte_prompt="")
 # 25/08/2026 · 7b0ab29b6987 — champ `raisonnement` sur l'outil, qui entre dans la clé par
 #   `OUTIL_SQL`. Campagne 1 d'E8 : quatre modifications de prompt et celle-ci en une seule
 #   péremption du cache.
-EMPREINTE_MEDIUM = "7b0ab29b6987"
+# 25/08/2026 · 4014d5aee332 — les six textes de repli et `VERSION_BOUCLE` entrent dans la
+#   clé. Les textes **sont** `Resultat.reponse` sur tout arrêt anormal, donc ce que lisent
+#   `TexteContient` et `TracabiliteNumerique` ; le flux de contrôle, lui, n'était indexé
+#   par rien — et le tour de rédaction du plafond change la réponse rendue sans toucher
+#   une seule constante. Péremption **voulue** : les 378 exécutions en cache ont été
+#   produites par une boucle qui jetait le travail du dernier tour, et les resservir
+#   ferait conclure « ça ne change rien » sans erreur ni avertissement.
+EMPREINTE_MEDIUM = "4014d5aee332"
 
 
 def test_l_empreinte_des_reglages_courants_est_epinglee():
