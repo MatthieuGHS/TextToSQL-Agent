@@ -223,7 +223,14 @@ AGENT_NU = boucle.Agent(modele=None, systeme=None, empreinte_prompt="")
 #   une seule constante. Péremption **voulue** : les 378 exécutions en cache ont été
 #   produites par une boucle qui jetait le travail du dernier tour, et les resservir
 #   ferait conclure « ça ne change rien » sans erreur ni avertissement.
-EMPREINTE_MEDIUM = "4014d5aee332"
+# 26/08/2026 · 11b906927aa5 — `VERSION_BOUCLE` 2 → 3 : `run_sql` totalise les colonnes
+#   issues d'un `SUM()` et `en_texte` rend cette somme au modèle. **Cinquième occurrence
+#   de la famille**, et la seule que `docs/decisions.md` avait vue venir : le retour
+#   d'outil change à chaque requête sans qu'aucun prompt ni aucune constante de réglage
+#   ne bouge. Péremption **voulue** — les 105 exécutions de la campagne du 26/08 ont été
+#   produites par un outil qui ne rendait pas la somme, et c'est précisément le
+#   comportement dont on veut mesurer l'effet.
+EMPREINTE_MEDIUM = "11b906927aa5"
 
 
 def test_l_empreinte_des_reglages_courants_est_epinglee():

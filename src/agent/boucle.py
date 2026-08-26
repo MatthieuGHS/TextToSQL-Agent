@@ -78,7 +78,13 @@ HISTORIQUE_MAX = 5
 # c'est-à-dire le motif exact qui a produit les derniers défauts du dispositif.
 #
 # 1 → 2 le 25/08/2026 : tour de rédaction au plafond d'itérations.
-VERSION_BOUCLE = 2
+# 2 → 3 le 26/08/2026 : `run_sql` totalise les colonnes issues d'un `SUM()`, et
+#   `en_texte` rend cette somme au modèle. C'est la **cinquième** occurrence de la
+#   famille, et celle que `docs/decisions.md` avait annoncée : le retour d'outil n'entre
+#   dans aucune clé — ni le prompt, ni les constantes de réglage ne bougent — alors qu'il
+#   change ce que le modèle lit à chaque requête. Sans ce passage à 3, un rejeu à blanc
+#   resservirait les réponses d'avant en concluant que le correctif ne change rien.
+VERSION_BOUCLE = 3
 
 # Textes de repli, écrits ici et non par le modèle : ce sont les seuls cas où la boucle
 # parle à sa place, et elle ne dit alors qu'une chose — qu'elle n'a pas abouti.

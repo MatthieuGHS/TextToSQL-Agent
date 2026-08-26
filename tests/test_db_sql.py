@@ -209,6 +209,86 @@ def test_pas_de_troncature_a_la_limite_exacte(con):
     assert not r.tronque
 
 
+# --- La somme des colonnes additives --------------------------------------------------
+
+
+def test_une_colonne_issue_d_un_sum_est_totalisee(con):
+    """Le correctif du défaut le plus tenace du projet, et sa raison d'être.
+
+    Le modèle additionnait lui-même les valeurs de son propre résultat, et se trompait :
+    sur la campagne de référence du 26/08/2026, un total annoncé sur trois était faux
+    d'une unité, sans que rien ne le signale. Quatre tentatives par le prompt l'ont
+    infléchi sans le fermer. Le total d'une ventilation est une propriété du résultat,
+    pas du modèle : il se calcule ici, exactement, et il devient citable.
+    """
+    r = sql.run_sql(
+        "SELECT channel, SUM(cost) AS depense FROM media GROUP BY channel", con
+    )
+
+    assert r.sommes == {"depense": 1750.0}
+    assert "Somme des 2 lignes du résultat : depense = 1750" in sql.en_texte(r)
+
+
+@pytest.mark.parametrize(
+    "requete, motif",
+    [
+        ("SELECT channel, AVG(cost) AS a FROM media GROUP BY channel",
+         "une somme de moyennes n'est pas une moyenne"),
+        ("SELECT channel, MIN(step_date) AS d FROM media GROUP BY channel",
+         "des dates ne s'additionnent pas"),
+        ("SELECT channel, COUNT(*) AS n FROM media GROUP BY channel",
+         "un compte de lignes n'est pas une quantité du monde"),
+        ("SELECT channel, SUM(cost)/SUM(cost) AS r FROM media GROUP BY channel",
+         "un ratio contient deux sommes sans en être une"),
+        ("SELECT channel, SUM(cost)/SUM(SUM(cost)) OVER () AS p "
+         "FROM media GROUP BY channel",
+         "une fonction de fenêtre porte déjà son propre total"),
+    ],
+)
+def test_ce_qui_n_est_pas_additif_n_est_pas_totalise(con, requete, motif):
+    """La contre-épreuve, cas par cas : sans elle, le mécanisme fabriquerait des faux.
+
+    C'est le risque propre à ce correctif — un chiffre annoncé par le moteur porte
+    l'autorité d'un résultat de requête, bien plus que s'il venait du modèle. Une somme
+    de pourcentages ou de moyennes serait donc pire que le défaut qu'on corrige, et le
+    refus est pour cette raison le comportement par défaut de `_est_agregat_additif`.
+    """
+    assert sql.run_sql(requete, con).sommes == {}, motif
+
+
+def test_un_resultat_tronque_n_est_jamais_totalise(con):
+    """La garde qui empêche le correctif de créer le défaut qu'il corrige.
+
+    La somme d'un extrait n'est pas la somme du tout. L'annoncer sur un résultat tronqué
+    donnerait au modèle un total faux **présenté comme calculé**, c'est-à-dire exactement
+    le mode de défaillance que tout ce module traque : plausible, sans erreur, sans
+    avertissement.
+    """
+    complet = sql.run_sql("SELECT channel, SUM(cost) AS c FROM media GROUP BY channel",
+                          con, limite=3)
+    tronque = sql.run_sql("SELECT channel, SUM(cost) AS c FROM media GROUP BY channel",
+                          con, limite=1)
+
+    assert complet.sommes == {"c": 1750.0}, "la contre-épreuve : sans troncature, ça somme"
+    assert tronque.tronque and tronque.sommes == {}
+
+
+def test_une_ligne_unique_ne_se_totalise_pas(con):
+    """Recopier une valeur sous un autre nom n'apprend rien et invite à la confusion."""
+    assert sql.run_sql("SELECT SUM(cost) AS total FROM media", con).sommes == {}
+
+
+def test_le_total_ne_part_pas_en_notation_scientifique(con):
+    """Le modèle doit pouvoir recopier ce chiffre sans le convertir.
+
+    Un « 1.75e+03 » l'obligerait à calculer pour l'écrire, donc rouvrirait la porte que
+    ce mécanisme vient de fermer.
+    """
+    r = sql.run_sql("SELECT channel, SUM(cost) AS c FROM media GROUP BY channel", con)
+
+    assert "e+" not in sql.en_texte(r)
+
+
 def test_delai_depasse_interrompt(con):
     """Une jointure croisée non bornée doit être coupée, pas figer l'appel."""
     with pytest.raises(sql.SqlTropLong, match="interrompue"):

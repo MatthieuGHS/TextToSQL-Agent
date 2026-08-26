@@ -26,6 +26,8 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import Any, Sequence
 
 import duckdb
 
@@ -79,6 +81,9 @@ class ResultatSql:
     # Les tables réellement lues. Vide plutôt que faux quand l'analyse échoue : voir
     # `tables_citees`.
     tables: list[str] = field(default_factory=list)
+    # La somme des lignes rendues, pour les seules colonnes qui sont elles-mêmes des
+    # agrégats additifs. Vide dès qu'un doute existe : voir `_colonnes_additives`.
+    sommes: dict[str, float] = field(default_factory=dict)
 
     def __len__(self) -> int:
         return len(self.lignes)
@@ -239,6 +244,108 @@ def tables_citees(query: str, con: duckdb.DuckDBPyConnection) -> list[str]:
     return sorted((set(lues) - set(ctes)) & reelles)
 
 
+# Les seules fonctions qu'on accepte de traverser pour reconnaître un agrégat additif.
+# `round` et `abs` ne changent pas la nature de ce qu'elles enveloppent ; une division ou
+# une multiplication, si — la somme d'une colonne de ratios ou de pourcentages n'est pas
+# une quantité, et l'annoncer comme un total serait précisément le genre de chiffre
+# plausible et faux que ce module existe pour empêcher.
+_ENVELOPPES_ADDITIVES = frozenset({"sum", "round", "abs"})
+_CLASSES_ADDITIVES = frozenset({"FUNCTION", "COLUMN_REF", "CONSTANT", "CAST"})
+
+
+def _est_agregat_additif(noeud: Any) -> bool:
+    """Vrai si cette expression de sélection est une somme, à des enveloppes près.
+
+    `SUM(cost)` et `ROUND(SUM(cost))` le sont : leur colonne se totalise, et le total a
+    la même unité que chaque ligne. `AVG(cost)`, `MIN(step_date)`, `COUNT(*)` ne le sont
+    pas — additionner des moyennes ou des dates ne produit rien. `SUM(x)/SUM(y)` ne l'est
+    pas davantage, bien qu'il contienne deux sommes : c'est un ratio.
+
+    Le refus est le défaut. Toute forme non reconnue — une fonction hors de la liste, une
+    fonction de fenêtre, une classe de nœud inattendue — rend faux, et la colonne n'est
+    simplement pas totalisée. Une somme manquante coûte un tour au modèle ; une somme
+    fausse lui fait écrire un chiffre faux avec l'autorité d'un résultat de requête.
+    """
+    trouve_somme = False
+    pile = [noeud]
+    while pile:
+        courant = pile.pop()
+        if isinstance(courant, list):
+            pile.extend(courant)
+            continue
+        if not isinstance(courant, dict):
+            continue
+        classe = courant.get("class")
+        if classe and classe not in _CLASSES_ADDITIVES:
+            return False  # WINDOW, OPERATOR, SUBQUERY, CASE…
+        if classe == "FUNCTION":
+            nom = courant.get("function_name", "")
+            if nom not in _ENVELOPPES_ADDITIVES:
+                return False
+            trouve_somme = trouve_somme or nom == "sum"
+        pile.extend(
+            v for k, v in courant.items()
+            if k not in ("class", "type", "alias", "query_location", "function_name")
+        )
+    return trouve_somme
+
+
+def _colonnes_additives(
+    query: str, con: duckdb.DuckDBPyConnection, colonnes: Sequence[str]
+) -> list[int]:
+    """Les rangs des colonnes dont la valeur est une somme, par le parseur du moteur.
+
+    Même principe que `tables_citees`, et pour la même raison : reconnaître un `SUM` à
+    son nom dans le texte se ferait berner par une chaîne, un alias appelé `sum_cost`,
+    ou une colonne de la base qui porterait ce nom. L'arbre ne confond pas les trois.
+
+    Vide en cas de doute, et le premier doute est structurel : si la liste de sélection
+    n'a pas exactement autant d'entrées que le résultat a de colonnes — un `SELECT *`,
+    par exemple — les rangs ne se correspondent plus, et totaliser la mauvaise colonne
+    serait pire que de ne rien totaliser.
+    """
+    try:
+        brut = con.execute("SELECT json_serialize_sql(?)", [query]).fetchone()[0]
+        selection = json.loads(brut)["statements"][0]["node"]["select_list"]
+    except Exception:  # noqa: BLE001 — un enrichissement ne fait pas tomber une réponse
+        return []
+    if len(selection) != len(colonnes):
+        return []
+    return [i for i, e in enumerate(selection) if _est_agregat_additif(e)]
+
+
+def _sommes_de_colonnes(
+    query: str,
+    con: duckdb.DuckDBPyConnection,
+    colonnes: Sequence[str],
+    lignes: Sequence[Sequence[Any]],
+) -> dict[str, float]:
+    """Le total des lignes rendues, pour les colonnes qui sont des sommes.
+
+    Existe parce que le défaut le plus tenace du projet est que le modèle additionne
+    lui-même deux valeurs de son résultat, et se trompe : mesuré sur la campagne de
+    référence, un total annoncé sur trois était faux d'une unité, sans que rien ne le
+    signale. Quatre tentatives par le prompt l'ont infléchi sans jamais le fermer. Le
+    total d'une ventilation est une propriété du **résultat**, pas du modèle : il se
+    calcule ici, une fois, exactement.
+
+    Trois conditions, et chacune ferme une façon de rendre un chiffre faux :
+
+    - **plus d'une ligne** — sur une seule, la somme recopie la valeur et n'apprend rien ;
+    - **résultat non tronqué** — la somme d'un extrait n'est pas la somme du tout, et
+      c'est le seul cas où ce mécanisme pourrait *créer* le défaut qu'il corrige ;
+    - **colonne additive** au sens du parseur, jamais du nom.
+    """
+    if len(lignes) < 2:
+        return {}
+    sommes: dict[str, float] = {}
+    for i in _colonnes_additives(query, con, colonnes):
+        valeurs = [l[i] for l in lignes if l[i] is not None]
+        if valeurs and all(isinstance(v, (int, float, Decimal)) for v in valeurs):
+            sommes[colonnes[i]] = float(sum(valeurs))
+    return sommes
+
+
 def _executer_borne(
     con: duckdb.DuckDBPyConnection, query: str, delai: float, origine: str
 ) -> tuple[list[str], list[tuple]]:
@@ -337,6 +444,14 @@ def run_sql(
         # celle-ci ajoute un `SELECT * FROM (…)` qui n'est de personne. Hors du chronomètre
         # aussi — c'est notre analyse, pas le coût de sa requête.
         tables = tables_citees(query, con)
+        # Après la troncature éventuelle, jamais avant : la somme d'un extrait n'est pas
+        # la somme du tout. `lignes` porte encore la ligne sentinelle de `limite + 1`,
+        # d'où le découpage ici plutôt qu'à la construction du résultat.
+        sommes = (
+            {}
+            if len(lignes) > limite
+            else _sommes_de_colonnes(query, con, colonnes, lignes)
+        )
     except SqlTropLong as exc:
         fermable = getattr(exc, "connexion_liberee", True)
         raise
@@ -351,7 +466,19 @@ def run_sql(
         " ".join(query.split())[:120],
     )
 
-    return ResultatSql(colonnes, lignes[:limite], tronque, duree_ms, tables)
+    return ResultatSql(colonnes, lignes[:limite], tronque, duree_ms, tables, sommes)
+
+
+def _nombre(v: float) -> str:
+    """Un nombre lisible et recopiable : ni notation scientifique, ni décimale inutile.
+
+    Le modèle doit pouvoir reprendre ce chiffre **tel quel** dans sa réponse — c'est tout
+    l'objet du mécanisme. Un « 1.2069e+06 » l'obligerait à le convertir, donc à calculer,
+    donc à rouvrir la porte qu'on vient de fermer.
+    """
+    if v == int(v) and abs(v) < 1e15:
+        return str(int(v))
+    return f"{v:.4f}".rstrip("0").rstrip(".")
 
 
 def en_texte(
@@ -405,5 +532,20 @@ def en_texte(
         rendu.append(
             f"\n({len(gardees)} premières lignes affichées, il y en a davantage — "
             f"affiner la requête ou agréger avant de conclure.)"
+        )
+
+    # Le total calculé, annoncé pour ce qu'il est. **« Somme des N lignes » et non
+    # "total"** : sur un `ORDER BY … LIMIT 5`, la somme des cinq lignes rendues n'est pas
+    # le total de la base, et un libellé qui le laisserait croire fabriquerait le chiffre
+    # plausible et faux qu'on cherche à supprimer. Le libellé dit exactement ce qui a été
+    # additionné, et le modèle dispose alors d'une valeur qu'il peut citer sans calculer.
+    # « du résultat » et non « ci-dessus » pour la même raison : le budget d'affichage
+    # peut avoir omis des lignes que la somme, elle, compte bien.
+    if resultat.sommes:
+        colonnes = ", ".join(
+            f"{nom} = {_nombre(v)}" for nom, v in resultat.sommes.items()
+        )
+        rendu.append(
+            f"\nSomme des {len(resultat.lignes)} lignes du résultat : {colonnes}"
         )
     return "\n".join(rendu)
