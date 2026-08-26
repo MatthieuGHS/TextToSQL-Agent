@@ -296,13 +296,35 @@ portent 6, 7 et 8 requêtes pour un plafond de 5 tours — impossible sans plusi
 par tour ; le comptage sur les 378 exécutions antérieures donnait zéro), et « présent »
 n'est plus confondu avec « actif » dans les réponses réelles.
 
-⚠ **La somme faite de tête produit un chiffre faux, pas seulement intraçable.** Mesuré :
-sur trois exécutions d'une même question, l'agent additionne deux montants de sa propre
-requête et **se trompe d'une unité deux fois sur trois**. Vérifié contre la base. La règle
-« aucun calcul de tête » ne se défend donc plus par la traçabilité seule mais par
-l'exactitude. Deux campagnes payées ont montré la même chose : **une règle de prompt
-infléchit, elle ne garantit pas.** Si ce défaut doit être fermé, ce sera par la boucle ou
-le code — et sur un défaut constaté, pas par anticipation. Détail dans `docs/decisions.md`.
+### ⚠ La décision ouverte, à trancher avant tout nouveau lot
+
+**Le défaut « l'agent additionne de tête » est détecté depuis plusieurs sessions et n'a
+jamais reçu de correctif déterministe.** Quatre tentatives, toutes par le prompt : E6
+(mécanisme, supprimé), `role.md`, les règles de B1 (0/3 → 1/3), le groupage de requêtes
+(0/3). Chaque fois la même conclusion écrite — *une règle de prompt infléchit, elle ne
+garantit pas* — puis l'arrêt, en invoquant la doctrine anti-mécanisme de
+`docs/decisions.md`. **Or cette doctrine porte sur l'instrument de mesure, pas sur
+l'agent**, et le premier principe de ce fichier exige l'inverse.
+
+Deux faits nouveaux du 26/08 encadrent la décision :
+
+- **le défaut produit un chiffre faux**, pas seulement intraçable — sur une question, le
+  total réel est 212 694 et l'agent annonce 212 693 **deux fois sur trois**, vérifié
+  contre la base ;
+- **il est deux fois plus petit qu'annoncé** — sur les 13 échecs de traçabilité, **8 sont
+  des artefacts de l'assertion** (elle compte le `1000` de « pour 1000 impressions »,
+  le `100` de « NULL à 100 % », l'année `2024`, les bornes rondes d'une fourchette). Le
+  vrai défaut fait **5 exécutions sur 105**, dont 2 fausses. Sur les **6 échecs de
+  grille**, tous de traçabilité, **4 sont des artefacts**.
+
+Deux propositions sont posées, chiffrées et testées, dans `docs/decisions.md` : **A**
+étendre aux entiers à zéros de fin le principe de précision que l'assertion énonce déjà
+pour les décimales (gratuit, retire les 8 artefacts, laisse les 2 vrais échecs attrapés) ;
+**B2** rendre le total déterministe dans `run_sql` quand la colonne vient d'un `SUM()`
+(~20 lignes, une campagne ~3,5 $, et ⚠ le retour d'outil n'entre dans aucune clé — bumper
+`VERSION_BOUCLE`). **A avant la campagne de B2**, sinon les faux échecs masquent l'effet.
+
+**Rien n'est décidé.**
 
 ### Le constat d'origine — la grille client ne bouge pas
 
@@ -422,7 +444,28 @@ modèle**, **A1 avant la campagne de référence d'E8**, **C avant E11**.
   du dépôt.
 
 Le jeu de contrôle sous scellé ne s'ouvre qu'à la fin d'E8, et il mesure une
-non-régression sur les refus — pas une généralisation.
+non-régression sur les refus — pas une généralisation. **Non ouvert, non décidé.**
+
+### Où en est la livraison, au 26 août 2026
+
+**Les quatre demandes du client sont livrées** : thème clair avec bascule (lot C), tables
+utilisées par requête, paragraphe de raisonnement — ⚠ celui-ci était rendu **derrière un
+clic** jusqu'au 26/08, donc pas livré, défaut trouvé en ouvrant l'application et invisible
+de tous les tests, qui dépliaient avant de vérifier — et affichage du SQL.
+
+Restent, par ordre d'utilité :
+
+1. **Notation manuelle des 18 questions** sur la campagne courante — gratuite, c'est la
+   recette du client. Celle qui existe (`docs/prive/notation-grille-25-08.md`) porte sur
+   l'ancien prompt. Elle a déjà montré que **le harnais et le critère du client divergent
+   sur 5 questions de 18, dans les deux sens**.
+2. **Vérification visuelle de l'interface**, sur les deux thèmes — jamais faite. Aucun
+   outil de rendu n'est disponible en session : elle demande une manipulation à la main.
+   C'est elle qui a produit les meilleurs correctifs du projet, trois fois.
+3. **Lot E** : image Docker **jamais reconstruite depuis les changements web**, doc de
+   reprise pour l'équipe client.
+4. **Purge de confidentialité** avant toute publication, et vidéo de démonstration à
+   refilmer sur le jeu inventé.
 
 **Hors plan tant qu'il n'a pas tranché : le choix du modèle.** `boucle.MODELE` est une
 constante de module ; l'effort est paramétrable, le modèle non. Aucune comparaison

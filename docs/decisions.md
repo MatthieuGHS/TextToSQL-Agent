@@ -1541,6 +1541,79 @@ ne doit l'être avant qu'un défaut le justifie sur un cas réel.
 
 ---
 
+### Les échecs de traçabilité font 5 %, pas 12 % — et la grille n'échoue que là-dessus
+
+Mesuré le 26/08/2026 sur les 105 exécutions de la campagne de référence, en lisant les
+treize réponses en échec au lieu de les compter.
+
+**Sur 13 exécutions en échec, 8 ne sont pas des fautes de l'agent.** L'assertion compte
+comme « nombre inventé » :
+
+| Ce qu'elle rejette | Ce que c'est réellement |
+|---|---|
+| `1000` dans « coût pour 1000 impressions » | un nom d'unité — le CPM |
+| `100` dans « `cost` est NULL à 100 % » | une constante de pourcentage |
+| `2024` | une année |
+| `350 000`, `13 000` dans « oscille entre X et Y » | les bornes rondes d'une fourchette |
+
+Le défaut réel fait donc **5 exécutions sur 105 (5 %)**, dont **2 numériquement fausses**.
+Et sur les **6 échecs de grille** — qui sont tous des échecs de traçabilité, sans
+exception — **4 sont des artefacts** : il n'en reste que deux, la somme de tête sur la
+question de répartition du budget.
+
+C'est la cinquième fois que l'instrument est la source dominante des échecs. La leçon ne
+change pas : lire la réponse réelle avant de conclure.
+
+**Correctif proposé, testé, non appliqué.** L'assertion énonce déjà le bon principe —
+*« l'écriture déclare sa propre précision »*, un coefficient rendu « 0,06 » affirmant une
+valeur entre 0,055 et 0,065. Elle l'applique aux décimales et **pas aux zéros de fin**.
+Or « 350 000 » n'affirme qu'un ordre de grandeur quand « 212 693 » affirme l'unité.
+Étendre le principe aux entiers à zéros de fin, vérifié sur les cas réels :
+
+- les 8 artefacts disparaissent ;
+- le total **faux** de la question Twitch (`212 693` pour 212 694) **reste attrapé** — sans
+  zéro de fin, il affirme l'unité ;
+- le total dérivé mais exact (`23,66`) **reste attrapé** — décimales, la règle ne le touche
+  pas.
+
+⚠ Contrepartie à écrire si on l'applique : **le score monte sans que l'agent s'améliore**,
+et il devient non comparable aux campagnes antérieures. C'est une mesure plus honnête, pas
+un meilleur agent, et le confondre serait exactement ce que ce document interdit ailleurs.
+
+### La somme faite de tête n'a jamais reçu de correctif déterministe
+
+Relevé par le client du travail lui-même, le 26/08/2026, et il a raison.
+
+Historique du défaut : **E6** devait le traiter par mécanisme, il a été **supprimé** ;
+`role.md` l'interdit en clair ; **B1** a ajouté des règles de prompt (0/3 → 1/3) ; le
+**26/08** le groupage de requêtes (0/3). **Quatre tentatives, toutes par le prompt, aucune
+par le code** — alors que la conclusion écrite à chaque fois est la même : *une règle de
+prompt infléchit un comportement, elle ne le garantit pas*.
+
+**Pourquoi rien n'a été fait.** Chaque session a re-dérivé cette conclusion, puis s'est
+arrêtée là en invoquant la doctrine anti-mécanisme de ce document. Or **cette doctrine
+porte sur l'instrument de mesure**, qui a produit les quatre derniers défauts du projet.
+Elle ne dit rien contre corriger l'agent dans le code — et le premier principe du projet
+l'exige même : *ce qui doit être vrai à chaque fois ne peut pas dépendre du modèle*.
+Appliquée à l'agent, la prudence méthodologique s'est transformée en paralysie : on mesure
+le même défaut à chaque campagne, on écrit la même phrase, on ne le ferme jamais.
+
+**Piste posée, non décidée.** Rendre le total déterministe plutôt que de le redemander au
+modèle : `run_sql` ajoute la somme d'une colonne **quand cette colonne vient elle-même
+d'un `SUM()`** — propriété générale, lisible par le parseur du moteur déjà utilisé pour
+les tables, jamais déduite du nom de la colonne. Le total devient une valeur du résultat,
+donc traçable par construction et exacte. Vérifié sur les deux cas réels : la colonne de
+dépense vient d'un `ROUND(SUM(...))` et serait totalisée, les colonnes `MIN`/`MAX` ne le
+seraient pas.
+
+⚠ Deux avertissements pour qui l'implémentera. Ça change le **retour d'outil**, qui
+n'entre dans **aucune clé d'indexation** — cinquième instance de la famille recensée plus
+haut, il faut donc bumper `VERSION_BOUCLE`. Et l'effet demande une campagne (~3,5 $) :
+la faire **après** le correctif d'assertion ci-dessus, sinon quatre faux échecs polluent
+la mesure et l'effet réel restera invisible.
+
+---
+
 ---
 
 ## Vérifications faites, à ne pas refaire de mémoire
