@@ -464,41 +464,53 @@ modèle**, **A1 avant la campagne de référence d'E8**, **C avant E11**.
 Le jeu de contrôle sous scellé ne s'ouvre qu'à la fin d'E8, et il mesure une
 non-régression sur les refus — pas une généralisation. **Non ouvert, non décidé.**
 
-### Où en est la livraison, au 26 août 2026
+### Où en est la livraison, au 28 août 2026
 
 **Les quatre demandes du client sont livrées** : thème clair avec bascule (lot C), tables
 utilisées par requête, paragraphe de raisonnement — ⚠ celui-ci était rendu **derrière un
-clic** jusqu'au 26/08, donc pas livré, défaut trouvé en ouvrant l'application et invisible
-de tous les tests, qui dépliaient avant de vérifier — et affichage du SQL.
+clic** jusqu'au 26/08, défaut trouvé en ouvrant l'application et invisible de tous les
+tests — et affichage du SQL.
+
+**La campagne de référence est faite** (28/08, rapport `2026-08-28-2018.md`, 105
+exécutions, ~3,5 $, réglages `11b906927aa5`). Elle testait un correctif déjà écrit :
+
+| | 26/08 | **28/08** |
+|---|---|---|
+| corpus | 48/51 | **50/51** |
+| `valeur présente dans une autre colonne` | 0/3 | **3/3** |
+| grille (harnais) | 49/54 | 46/54 |
+| **grille (client, notée à la main)** | **52/54** | **52/52** |
+| arrêts anormaux | 0/105 | **0/105** |
+| entrée par question | 27 575 | **26 199** |
+
+**La cible est atteinte** : le total n'est plus calculé par le modèle mais par le code, et
+cité exactement. **Le score du harnais baisse pendant que celui du client monte** — 6 de
+ses 8 échecs de grille sont des artefacts (un millésime, des bornes rondes). Troisième
+mesure de cette divergence, et la plus nette : **son total ne doit plus être cité comme une
+note**, il reste utile comme détecteur.
+
+**La grille du client est rendue remplie** — `docs/prive/grille-notee-2026-08-28.xlsx`,
+son formulaire, son vocabulaire, un commentaire par question. Notation raisonnée dans
+`docs/prive/notation-grille-28-08.md`.
+
+⚠ **52/52 est un score parfait et le vocabulaire binaire le rend trop généreux** : lu
+sévèrement il fait 49/52. Trois réserves nommées, dont deux défauts réels — un total
+**recopié faux** d'un million dans une réponse sur trois, et **un graphique annoncé que
+personne ne voit** (huit séries, refusées, texte affirmant le contraire). Le second a un
+correctif de principe clair — rendre au modèle le fait que son résultat se trace ou non —
+mais il change le retour d'outil, donc **périme le cache et coûte une campagne**.
 
 Restent, par ordre d'utilité :
 
-1. **Une campagne de référence, et une seule** (~3,5 $) — la première depuis longtemps qui
-   teste des correctifs déjà écrits plutôt que de mesurer sans améliorer. Elle porte sur
-   la somme déterministe, dont l'effet ne peut pas se lire dans le cache (péremption
-   voulue, `11b906927aa5`). Séquence habituelle : peuplement `--k 1` → itérations
-   `--a-blanc` → référence. À faire suivre d'une notation manuelle, gratuite.
-   ⚠ **Deux attentes à écrire avant de la lancer**, toutes deux constatées à l'œil le
-   26/08 : le correctif ne couvre pas les colonnes agrégées dans une CTE, donc un gain
-   faible ne vaut pas échec ; et l'agent re-requête parfois un total qu'on vient de lui
-   donner, donc **le coût par question se lit à côté du score**.
-2. ~~Vérification visuelle de l'interface~~ — **FAITE le 26/08**, de bout en bout et
-   sur les deux thèmes : huit questions couvrant les trois formes de graphique, les trois
-   cas de refus et les quatre demandes du client. Les trois règles posées le jour même
-   tiennent, mensuel compris, et l'interface n'offre aucune bascule pour retransformer en
-   courbe ce que la règle a mis en barres. Quatre constats, aucun bloquant, tous
-   invisibles des tests — détail dans `docs/decisions.md`. Le seul qui touche une demande
-   du client : **le paragraphe de raisonnement peut être vide et disparaît en silence**,
-   `required` étant satisfait par une chaîne vide. Consigné, non corrigé.
-3. **Lot E** : image Docker **jamais reconstruite depuis les changements web**, doc de
-   reprise pour l'équipe client.
-4. **Purge de confidentialité** avant toute publication, et vidéo de démonstration à
+1. **Lot E** : image Docker **jamais reconstruite depuis les changements web** — la
+   dernière date du 17/08, avant le thème clair, les règles de graphique et la somme
+   déterministe. C'est le livrable. Puis la doc de reprise pour l'équipe cliente.
+2. **Purge de confidentialité** avant toute publication, et vidéo de démonstration à
    refilmer sur le jeu inventé.
 
 **Hors plan tant qu'il n'a pas tranché : le choix du modèle.** `boucle.MODELE` est une
 constante de module ; l'effort est paramétrable, le modèle non. Aucune comparaison
-Sonnet/Opus n'existe — les trois campagnes sont sur Sonnet. La rendre possible coûte
-~5 lignes en miroir de `--effort`, **et A3 en est le préalable**.
+Sonnet/Opus n'existe. La rendre possible coûte ~5 lignes en miroir de `--effort`.
 
 ## Démonstration client du 20 août 2026
 

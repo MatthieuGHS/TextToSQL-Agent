@@ -1787,6 +1787,73 @@ Deux points cosmétiques, notés pour ne pas être redécouverts : une ligne vid
 tableaux rendus depuis le markdown, et le journal d'étapes qui conserve ses points de
 suspension une fois l'exécution terminée.
 
+### La campagne du 28/08 — la cible est atteinte, et le harnais a cessé de mesurer
+
+105 exécutions, ~3,5 $, réglages `11b906927aa5`. Première campagne depuis longtemps qui
+teste un correctif déjà écrit plutôt que de mesurer sans améliorer.
+
+**Le résultat cible ne souffre aucune ambiguïté** : la propriété `valeur présente dans une
+autre colonne`, à **0/3** depuis l'origine du projet, passe à **3/3**. Sur la question qui
+la porte, l'agent écrit désormais le total exact, là où la campagne précédente se trompait
+d'une unité deux fois sur trois. Corpus 48/51 → **50/51**, zéro arrêt anormal sur 105, et
+le coût par question **baisse** légèrement — la crainte écrite avant la campagne, que
+rendre la somme fasse gonfler la consommation, ne se vérifie pas.
+
+**L'arrêt intermédiaire après le peuplement a payé, et c'est la leçon de méthode.** Les 35
+premières exécutions ont montré que l'agent écrivait le bon total *et que l'assertion
+l'échouait quand même* : elle ne connaissait pas cette source. Sans cet arrêt, la campagne
+de référence aurait mesuré cet angle mort et conclu que le correctif ne servait à rien.
+Corrigé pour zéro appel — les assertions n'entrent dans aucune clé de cache.
+
+**Le score de grille du harnais baisse pendant que celui du client monte** (46/54 contre
+49/54, quand la notation manuelle passe de 52/54 à 52/52). L'explication tient entière dans
+la composition des 8 échecs : **6 sont des artefacts** — trois citations d'un millésime
+absent du résultat, trois bornes rondes de fourchettes verbales. C'est la troisième mesure
+de cette divergence et la plus nette.
+
+**Conséquence à tenir** : le harnais reste utile comme *détecteur* — il a attrapé les deux
+défauts réels — mais son **total** ne doit plus être cité comme une note. Les trois quarts
+de ses échecs viennent de sa propre lecture, pas de l'agent.
+
+### Deux limites du correctif, et un défaut qu'il ne pouvait pas voir
+
+**Le correctif ne couvre pas les sous-totaux.** Il rend la somme de *toutes* les lignes,
+jamais d'un sous-ensemble. Une question rend quatre lignes dont l'agent veut la somme de
+deux : il l'additionne de tête. Fournir un sous-total demanderait de deviner le regroupement
+voulu — c'est-à-dire de juger une intention, le geste que ce document proscrit.
+
+**Il ne voit pas non plus à travers les CTE**, comme la vérification visuelle l'avait déjà
+montré. Les deux limites sont des refus, conformes à la règle posée : le refus est le
+défaut. Elles expliquent qu'une part du calcul de tête subsiste.
+
+**Et une faute que je disais jamais observée l'a été aussitôt.** Le commit du correctif
+d'assertion assumait sa contrepartie en écrivant qu'une *faute de recopie* n'avait jamais
+été constatée. La campagne suivante en produit une : le code rend un total, le modèle le
+recopie faux d'un million dans sa phrase d'ouverture. L'assertion l'attrape — l'écart
+dépasse la tolérance — mais l'argument qui justifiait l'élargissement était plus fragile
+que ce qui était écrit. **Une contrepartie assumée doit être formulée comme un risque
+mesuré, jamais comme un cas qui n'arrive pas.**
+
+### Un graphique annoncé que personne ne voit
+
+Constaté à la notation du 28/08, et c'est le défaut le plus intéressant de la campagne.
+
+Un tirage sur trois d'une question ouvre par « Ce résultat est bien tracé : c'est le
+graphique proposé », puis décrit en détail ce qu'on y verrait. Sa requête finale porte huit
+séries, au-delà du seuil de lisibilité : **le module refuse, et l'utilisateur ne voit
+rien.** Le texte décrit une figure qui n'existe pas.
+
+C'est la famille de défaut déjà consignée le 19/08 — l'agent annonce un tracé et son texte
+devient faux — mais dont la cause est plus profonde que le repli alors posé : **l'agent
+n'a aucun moyen de savoir si son résultat sera tracé.** Le prompt lui dit que ses résultats
+le sont, le code en décide seul, et rien ne le lui rapporte.
+
+Le correctif de principe est clair et suit exactement celui de la somme : rendre le fait au
+modèle plutôt que d'espérer qu'il le devine — le retour d'outil dirait si le résultat se
+trace, et sinon pourquoi. ⚠ Il change le retour d'outil, donc **périme le cache et coûte
+une campagne**. Consigné, non corrigé : le défaut apparaît une fois sur trois sur une seule
+question, et la note du client est atteinte sur son propre vocabulaire.
+
 ## Vérifications faites, à ne pas refaire de mémoire
 
 Ces points ont été mesurés sur la version des bibliothèques figée dans
