@@ -497,6 +497,41 @@ def test_la_precision_declaree_se_lit_aussi_sur_les_zeros_de_fin(con, reponse, a
     assert a.TracabiliteNumerique().verifier(r, con).ok is attendu
 
 
+def test_la_somme_rendue_par_l_outil_est_une_source_tracable(con):
+    """Constaté le 28/08/2026, dès la première campagne suivant le correctif de `run_sql`.
+
+    L'agent écrivait le total **exact** d'une ventilation — celui que le code venait de
+    lui rendre, là où la campagne précédente se trompait d'une unité — et l'assertion le
+    déclarait inventé, faute de le trouver dans une cellule. L'instrument était en retard
+    sur le produit, une fois de plus.
+
+    Une somme de `run_sql` est produite par le code sur le résultat entier : un chiffre
+    qui la reprend est traçable par construction.
+    """
+    r = a.Resultat(
+        reponse="Les deux supports totalisent 1 750 € sur la période.",
+        sql=["SELECT channel, SUM(cost) AS depense FROM media GROUP BY channel"],
+    )
+
+    assert a.TracabiliteNumerique().verifier(r, con).ok
+
+
+def test_la_somme_n_ouvre_pas_la_porte_a_un_autre_chiffre(con):
+    """La contre-épreuve : élargir les sources ne doit pas tout blanchir.
+
+    Un nombre qui n'est ni une cellule, ni la somme, ni une valeur du prompt reste
+    inventé — c'est la seule chose que ce contrôle sait faire, et il doit continuer.
+    """
+    r = a.Resultat(
+        reponse="Les deux supports totalisent 9 400 € sur la période.",
+        sql=["SELECT channel, SUM(cost) AS depense FROM media GROUP BY channel"],
+    )
+
+    verdict = a.TracabiliteNumerique().verifier(r, con)
+    assert not verdict.ok
+    assert "9 400" in verdict.detail
+
+
 def test_un_total_de_tete_reste_attrape_malgre_la_regle_des_zeros(con):
     """La garde du défaut que tout le dispositif existe pour voir.
 

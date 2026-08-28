@@ -103,11 +103,18 @@ def _valeurs_numeriques(
     valeur. C'est l'assertion appelante qui décide si c'est un échec.
     """
     try:
-        rows = acces_sql.run_sql(requete, con, delai=DELAI_SECONDES).lignes
+        resultat = acces_sql.run_sql(requete, con, delai=DELAI_SECONDES)
     except ECHECS_SQL:
         return []
-    valeurs = []
-    for row in rows:
+    # Les sommes que `run_sql` calcule et **rend au modèle** sont des valeurs de la
+    # requête au même titre que ses cellules — davantage même : elles sont produites par
+    # le code, sur le résultat entier, sans que le modèle puisse s'en écarter. Les
+    # omettre déclarait « inventé » un total parfaitement traçable, constaté le
+    # 28/08/2026 sur la première campagne postérieure au correctif : l'agent écrivait le
+    # total exact — là où la campagne précédente se trompait d'une unité — et l'assertion
+    # l'échouait. L'instrument était en retard sur le produit, une fois de plus.
+    valeurs = list(resultat.sommes.values())
+    for row in resultat.lignes:
         for cell in row:
             # `bool` est un `int` en Python : l'exclure avant tout autre test.
             if cell is None or isinstance(cell, bool):
@@ -547,6 +554,22 @@ class TracabiliteNumerique:
     Ce qui reste attrapé, et c'est le cas qui compte : un chiffre qu'aucune requête n'a
     produit — un total fait de tête à partir de deux résultats, ou une lecture approximative
     d'un ordre de grandeur qu'on n'a pas demandé à la base.
+
+    **Les sommes calculées par `run_sql` comptent parmi les valeurs de la requête**, depuis
+    le 28/08/2026. Elles sont produites par le code sur le résultat entier et rendues au
+    modèle : un chiffre qui les reprend est traçable par construction, davantage même
+    qu'une cellule. Les omettre déclarait « inventé » un total exact, constaté dès la
+    première campagne postérieure au correctif.
+
+    ⚠ **Contrepartie mesurée, et assumée.** Le total devient une valeur de référence, donc
+    la tolérance de 2 % s'y applique comme partout : un total **mal recopié** d'une unité
+    passerait désormais, là où la campagne du 26/08 l'attrapait. Vérifié sur son cache.
+    C'est cohérent avec la portée que ce contrôle se donne déjà pour le signe — *il traite
+    l'invention, pas la lecture* — et surtout le raisonnement a changé de camp : le total
+    n'est plus calculé par le modèle mais par le code, si bien que le mode de défaillance
+    visé (une addition fausse) n'existe plus. Ce qui resterait est une faute de recopie,
+    jamais observée. Resserrer ici demanderait un quatrième régime de comparaison à une
+    fonction qui en a déjà trois.
 
     ⚠️ **Le contrôle se dilue quand le résultat grossit**, et il faut le savoir avant de
     lire un score. Un nombre est accepté s'il approche *n'importe laquelle* des valeurs de
