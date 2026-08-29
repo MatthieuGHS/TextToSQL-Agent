@@ -68,15 +68,26 @@ dispositif du harnais de mesure, pas du produit.
 Deux pages.
 
 **Conversation** — la question, la réponse rendue en Markdown, le graphique quand le
-résultat s'y prête, puis chaque requête exécutée avec son SQL coloré et le tableau de son
-résultat. Les requêtes en échec y figurent aussi : la boucle est faite pour se reprendre,
-et les masquer donnerait de l'exécution une image plus lisse que la réalité. Les étapes
-défilent pendant que l'agent travaille et restent affichées ensuite.
+résultat s'y prête, puis chaque requête exécutée avec **le raisonnement écrit avant de la
+lancer**, les tables qu'elle a réellement lues, son SQL coloré et le tableau de son
+résultat. Le bloc qui porte la conclusion s'ouvre de lui-même ; les autres se déplient.
+Les requêtes en échec y figurent aussi : la boucle est faite pour se reprendre, et les
+masquer donnerait de l'exécution une image plus lisse que la réalité. Les étapes défilent
+pendant que l'agent travaille et restent affichées ensuite.
+
+Thème clair par défaut, bascule sombre en haut à droite. Aucun composant n'écrit une
+couleur littérale : tout passe par des jetons sémantiques définis deux fois dans
+`web/src/index.css`, et le contraste des deux thèmes est vérifié par un test.
 
 **Données** — l'état des fichiers sources, leur remplacement, et la relance de la pipeline
 avec son journal complet. Le téléversement passe par un dossier d'attente qui n'est promu
 qu'après une construction réussie : un fichier mal formé ne dégrade ni les sources ni la
-base.
+base. Seuls les quatre noms de la pipeline sont acceptés, ce qui ferme aussi la traversée
+de chemin.
+
+⚠️ Cette page **écrit** dans `data/`, c'est pourquoi `compose.yaml` y monte le dossier en
+écriture. Le monter en lecture seule casse la page sans que rien ne l'annonce autrement
+qu'un « erreur interne » — c'est arrivé, et ça n'a été vu qu'en ouvrant le conteneur.
 
 ## Architecture
 
@@ -126,9 +137,46 @@ Le harnais d'évaluation est le seul endroit d'où partent des appels facturés,
 le vouloir :
 
 ```bash
-python -m tests.eval --a-blanc      # rejoue le cache : 0 appel, 0 $
-python -m tests.eval --k 1          # ⚠ campagne réelle, facturée
+python -m tests.eval --a-blanc                  # rejoue le cache : 0 appel, 0 $
+python -m tests.eval --k 1 --k-grille 1        # ⚠ peuplement facturé (~35 appels)
+python -m tests.eval --k 3 --k-grille 3        # ⚠ campagne de référence (~105 appels)
 ```
+
+## Reprendre ce dépôt
+
+Pour l'équipe qui récupère le projet. À lire dans cet ordre.
+
+**1. `docs/decisions.md` avant le code.** Il porte le *pourquoi* de chaque choix
+structurant, et surtout ce qui a déjà été mesuré : sa dernière section liste des pièges
+de bibliothèque silencieux, qu'il vaut mieux ne pas redécouvrir à ses frais. Les
+arbitrages tranchés y figurent avec le chiffre qui les a tranchés.
+
+**2. Trois propriétés portent tout le reste.** Le noyau expose `ask(question, historique)`
+et ne connaît pas l'interface. Aucun module n'ouvre la base hors de `src/db/connexion.py`.
+Et le graphique est décidé **par le code**, à partir de la forme du résultat : le modèle
+n'a ni outil de dessin ni spécification à produire, son SQL *est* l'expression de son
+intention. Les trois sont vérifiées par des tests qui échouent si on les casse.
+
+**3. Ce qui doit être vrai à chaque fois ne dépend jamais du modèle.** Les bornes de
+`run_sql`, les plafonds de la boucle, les règles de lisibilité des graphiques et le total
+d'une ventilation sont dans le code. Le prompt décrit le monde ; il n'arbitre rien de
+critique. Ajouter une règle de prompt pour garantir un comportement est le geste qui a
+échoué quatre fois sur ce projet.
+
+**4. Ce qui n'est pas dans Git.** Les données sources, la base construite, `.env` et
+`docs/prive/` (documents de travail, notations, chiffres client). Le dépôt reste
+exécutable sans eux : la suite de tests passe, le harnais refuse simplement de démarrer
+faute de campagne à rejouer.
+
+**5. Le coût.** Les tests ne consomment aucun appel. L'interface et la ligne de commande
+en consomment à chaque question. Le harnais d'évaluation est le seul endroit d'où partent
+des campagnes facturées, et il faut le vouloir — commencer systématiquement par
+`--a-blanc`, qui rejoue gratuitement ce qui a déjà été payé.
+
+**6. Évaluer une modification.** La grille de 18 questions du client se note **à la main**,
+sur ses trois colonnes. Le score du harnais mesure autre chose et diverge : il reste utile
+comme détecteur d'anomalie, jamais comme note. Toute campagne payée doit tester un
+correctif déjà écrit, sinon elle mesure sans améliorer.
 
 ## Conventions
 
