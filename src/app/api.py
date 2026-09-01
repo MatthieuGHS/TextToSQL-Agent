@@ -69,7 +69,7 @@ def _agent_pour_la_requete() -> tuple[boucle.Agent, object]:
 
     `interrupt()` de DuckDB porte sur la connexion et non sur la requête : deux questions
     en vol sur une connexion partagée, et le dépassement de délai de l'une interromprait
-    l'autre. C'est la décision que `CLAUDE.md` laissait ouverte depuis E4, tranchée ici.
+    l'autre. Le raisonnement complet est dans `docs/decisions.md`.
 
     Le prompt et son empreinte restent ceux de l'agent partagé — donc construits une fois.
     Les regénérer par requête coûterait une lecture complète du schéma et, surtout,
