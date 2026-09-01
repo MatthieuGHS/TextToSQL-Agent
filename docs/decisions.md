@@ -1,8 +1,8 @@
 # Décisions de conception
 
 Le *pourquoi* des choix structurants du projet. Ce document est versionné et ne contient
-aucune valeur issue des données client : ni montant, ni volumétrie, ni nom de marque. Les
-documents de travail qui en contiennent vivent dans `docs/prive/`, hors Git.
+aucune valeur issue des données client : ni montant, ni volumétrie, ni nom de marque —
+les mesures y sont citées en propriétés générales et en ordres de grandeur.
 
 Chaque décision est datée du moment où elle a été prise, avec l'alternative écartée. Une
 décision qu'on ne sait pas justifier est une décision à rejouer.
