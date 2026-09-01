@@ -217,9 +217,9 @@ le monde ; il n'arbitre rien de critique.
 mesure, jamais un cahier des charges. Une règle qui mentionnerait une question précise ou
 une valeur attendue ferait passer ce cas et échouer le suivant.
 
-**Ce qui n'est pas versionné** : les fichiers sources, la base construite, `.env` et
-`docs/prive/`. Le dépôt reste exécutable sans eux — la suite de tests passe, seul le
-harnais refuse de démarrer faute de campagne à rejouer.
+**Ce qui n'est pas versionné** : les fichiers sources, la base construite et `.env`. Le
+dépôt reste exécutable sans eux — la suite de tests passe, seul le harnais refuse de
+démarrer faute de campagne à rejouer.
 
 ## Conventions
 
