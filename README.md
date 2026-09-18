@@ -1,154 +1,154 @@
 # Text-to-SQL Agent — Media Analytics
 
-Un agent conversationnel qui répond en langage naturel à des questions sur une base de données média. Il écrit le SQL, l'exécute, et rend le résultat en texte, tableau et graphique — avec le raisonnement à chaque étape.
+A conversational agent that answers natural language questions over a media analytics database. It writes SQL, executes it, and returns answers in text, tables, and charts — with full reasoning at every step.
 
-Construit dans le cadre d'un projet de *Marketing Mix Modeling* : l'agent sert à **explorer et auditer les données avant modélisation**, pas à modéliser.
+Built for a *Marketing Mix Modeling* project: the agent is designed to **explore and audit data before modeling**, not to model.
 
 ---
 
-## Démonstration
+## Demo
 
-> *« Comment s'est réparti le budget marketing entre les canaux l'année dernière ? »*
+> *"How was the marketing budget distributed across channels last year?"*
 
-L'agent annonce ce qu'il cherche, écrit sa requête SQL, et rend :
+The agent announces what it's looking for, writes its SQL query, and returns:
 
-- une **réponse rédigée** — périmètre explicité, réserves incluses (ex. : le SEO n'apparaît pas car son coût est `NULL`, non acheté et non pas gratuit)
-- un **graphique**, choisi automatiquement par le code selon la forme du résultat, ou refusé avec son motif si aucune figure honnête n'est possible
-- **chaque requête exécutée** — raisonnement pré-requête, tables réellement lues, SQL coloré, résultat
+- a **written answer** — scope clearly stated, caveats included (e.g. SEO doesn't appear in the ranking because its cost is `NULL`: not purchased, not free)
+- a **chart**, automatically chosen by the code based on the shape of the result, or declined with a reason when no honest figure is possible
+- **every query executed** — reasoning written before running it, tables actually read, syntax-highlighted SQL, result
 
-Les **questions pièges** font partie du contrat. Demander un classement des canaux « les plus performants » obtient un refus argumenté : GRP, clics et impressions ne se comparent pas, et rien dans ces données ne relie un canal à une vente.
+**Trick questions are part of the contract.** Asking for a ranking of the "best-performing" channels gets a reasoned refusal: GRP, clicks, and impressions are not comparable, and nothing in this data links a channel to a sale.
 
 ---
 
 ## Stack
 
-| Couche | Technologie |
+| Layer | Technology |
 |---|---|
-| LLM | Claude (Anthropic) via API |
-| Base de données | DuckDB |
+| LLM | Claude (Anthropic) |
+| Database | DuckDB |
 | Backend | Python — FastAPI, Pandas |
 | Frontend | React + Vite + TypeScript |
-| Livraison | Docker |
+| Delivery | Docker |
 | Tests | pytest, Vitest |
 
 ---
 
 ## Architecture
 
-Le principe directeur : **ce qui doit être vrai à chaque fois ne peut pas dépendre du modèle**. Les bornes SQL, les règles de graphique, le calcul des totaux — tout ça est dans le code. Le prompt décrit le monde ; il n'arbitre rien de critique.
+The guiding principle: **anything that must always be true cannot depend on the model**. SQL bounds, chart rules, total computation — all enforced in code. The prompt describes the world; it decides nothing critical.
 
 ```
 src/
-├── etl/          construction de la base depuis les fichiers sources
-│   ├── transforms.py     fonctions pures — aucun effet de bord
-│   ├── checks.py         contrat de données : invariants bloquants + avertissements
-│   └── build_db.py       orchestration, écriture atomique, CLI
+├── etl/          builds the database from source files
+│   ├── transforms.py     pure functions — no side effects
+│   ├── checks.py         data contract: blocking invariants + warnings
+│   └── build_db.py       orchestration, atomic writes, CLI
 ├── db/
-│   ├── connexion.py      ouverture durcie : lecture seule, accès réseau fermé
-│   └── sql.py            point d'entrée unique — valide, borne, exécute
+│   ├── connexion.py      hardened connection: read-only, network access closed
+│   └── sql.py            single entry point — validate, bound, execute
 ├── agent/
-│   ├── boucle.py         ask(question, historique) → AgentResponse
-│   └── prompt/           description des données : générée depuis la base + écrite
-├── charts/               décide s'il y a un graphique, et lequel — fonctions pures
-└── app/                  API HTTP — coquille mince, aucune logique métier
+│   ├── boucle.py         ask(question, history) → AgentResponse
+│   └── prompt/           data description: generated from the DB + hand-written
+├── charts/               decides whether there's a chart, and which one — pure functions
+└── app/                  HTTP API — thin shell, no business logic
 
-web/                      interface React + Vite + TypeScript
+web/                      React + Vite + TypeScript interface
 tests/
-├── test_*.py             unitaires (~480 tests, 0 appel API)
-└── eval/                 harnais d'évaluation en conditions réelles
+├── test_*.py             unit tests (~480 tests, 0 API calls)
+└── eval/                 evaluation harness under real conditions
 ```
 
-**Trois propriétés vérifiées mécaniquement :**
+**Three properties enforced mechanically:**
 
-- Aucun module n'ouvre la base hors de `src/db/connexion.py` — un test parcourt les sources pour le garantir
-- La suite de tests ne consomme aucun appel API — un test fait échouer toute tentative
-- L'observation ne change pas le résultat — `ask()` accepte un `trace=` optionnel, mais deux exécutions identiques, observée ou non, rendent la même réponse
-
----
-
-## Fonctionnalités
-
-**Boucle agentique**
-Le modèle dispose d'un seul outil : exécuter une requête SQL de lecture. Il peut en enchaîner plusieurs par tour, se reprendre après une erreur SQL, et s'arrête quand il a de quoi répondre. Le dernier tour est toujours une réponse rédigée — le travail n'est jamais jeté.
-
-**Accès SQL durci**
-`run_sql` valide avec le parseur du moteur (jamais une regex), refuse tout ce qui n'est pas une lecture unique, borne lignes et temps d'exécution, annonce toute troncature. Il calcule aussi automatiquement la **somme des colonnes issues d'un `SUM()`** pour que le modèle n'additionne jamais de tête.
-
-**Graphiques décidés par le code**
-Quatre formes reconnues : série temporelle ou catégorielle (format large), pivot (format long), nuage de points (corrélation), histogramme. Le refus est un résultat de premier ordre — résultat vide, ligne unique, trop de catégories, unités incomparables : le module le dit, il ne force pas.
-
-**Interface en temps réel**
-Les étapes d'exécution sont diffusées au fil de l'eau (Server-Sent Events). Thème clair/sombre, graphiques interactifs (zoom, bascule courbe/barres/empilées), second axe automatique sur les séries d'ordres de grandeur éloignés.
-
-**Chargement de données depuis l'interface**
-Une page dédiée permet de téléverser les fichiers sources et de relancer la pipeline sans toucher au terminal. Le téléversement passe par un dossier d'attente promu seulement après une construction réussie — un fichier mal formé ne dégrade ni les sources ni la base.
+- No module opens the database outside `src/db/connexion.py` — a test scans the sources to guarantee it
+- The test suite makes zero API calls — a test fails on any attempt
+- Observation does not change the result — `ask()` accepts an optional `trace=` callback, but two identical runs, observed or not, return the same answer
 
 ---
 
-## Lancer le projet
+## Features
 
-### Prérequis
+**Agentic loop**
+The model has a single tool: execute a read SQL query. It can chain multiple queries per turn, recover from SQL errors, and stops when it has enough to answer. The last turn is always a written response — work is never discarded.
+
+**Hardened SQL access**
+`run_sql` validates using the engine's own parser (never a regex), rejects anything that isn't a single read statement, bounds row count and execution time, and reports any truncation. It also automatically **computes the sum of columns produced by a `SUM()`**, so the model never adds numbers in its head.
+
+**Code-driven charts**
+Four recognized shapes: time series or categorical (wide format), pivot (long format), scatter plot (correlation), histogram. Refusal is a first-class result — empty result, single row, too many categories, incomparable units: the module says so, it never forces a figure.
+
+**Real-time interface**
+Execution steps are streamed live (Server-Sent Events). Light/dark theme, interactive charts (zoom, toggle between line/bar/stacked), automatic dual axis when series have very different scales.
+
+**Data upload from the UI**
+A dedicated page lets you upload source files and re-run the pipeline without touching the terminal. Uploads go through a staging folder promoted only after a successful build — a malformed file corrupts neither the sources nor the database.
+
+---
+
+## Getting Started
+
+### Prerequisites
 
 - Python 3.11+
 - Node.js 18+
-- Une clé API Anthropic
+- An Anthropic API key
 
-### Installation
+### Setup
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # renseigner ANTHROPIC_API_KEY
+cp .env.example .env          # fill in ANTHROPIC_API_KEY
 ```
 
-Déposer les fichiers sources dans `data/raw/`, puis :
+Drop source files into `data/raw/`, then build the database:
 
 ```bash
 python -m src.etl.build_db
 ```
 
-### Lancement
+### Running
 
 ```bash
-./run.sh                      # développement — API + interface, rechargement à chaud
-docker compose up --build     # production — une image, une seule adresse (:8000)
+./run.sh                      # development — API + interface with hot reload
+docker compose up --build     # production — single image, single address (:8000)
 ```
 
-> ⚠️ Chaque question consomme des appels API facturés.
+> ⚠️ Every question consumes billed API calls.
 
 ---
 
-## Tests
+## Testing
 
 ```bash
-pytest tests/ -q              # ~480 tests, ~10 s, 0 appel API
-cd web && npm test            # tests interface
+pytest tests/ -q              # ~480 tests, ~10 s, 0 API calls
+cd web && npm test            # frontend tests
 ```
 
-### Évaluation en conditions réelles
+### Evaluation under real conditions
 
 ```bash
-python -m tests.eval --a-blanc          # rejoue le cache : 0 appel, 0 $
-python -m tests.eval --k 1              # ⚠ campagne facturée
+python -m tests.eval --a-blanc          # replays the cache: 0 calls, $0
+python -m tests.eval --k 1              # ⚠ billed run
 ```
 
-Le cache est indexé sur tout ce qui peut changer une réponse (modèle, prompt, bornes, version de la boucle). **Toujours commencer à blanc** : les campagnes déjà payées se rejouent gratuitement.
+The cache is keyed on everything that can change a response (model, prompt, bounds, loop version). **Always start from cache**: already-paid runs replay for free.
 
 ---
 
-## Déploiement
+## Deployment
 
 ```bash
 docker compose up --build
 ```
 
-Une seule image sert l'API et l'interface statique. Les données et la clé API sont montées, jamais construites dans une couche — une image ne contient aucune donnée client. Le conteneur tourne sous un utilisateur non privilégié.
+A single image serves the API and the static frontend. Data and the API key are mounted, never baked into a layer — the image contains no client data. The container runs as a non-root user.
 
 ---
 
 ## Conventions
 
-- **Français** partout — code, commentaires, commits
-- Lignes ≤ 92 caractères
-- Les commentaires expliquent **pourquoi**, pas quoi
-- Aucune clé API dans le code — tout passe par les variables d'environnement
+- Code, comments, and commits are in **French** (client project convention)
+- Lines ≤ 92 characters
+- Comments explain **why**, not what
+- No API keys in code — everything goes through environment variables
