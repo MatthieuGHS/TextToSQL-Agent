@@ -406,7 +406,7 @@ def test_un_ecart_de_budget_ne_fait_pas_refuser_un_pivot():
 
     Le refus d'un pivot pour « ordres de grandeur incompatibles » avait été généralisé
     depuis le format large ; il s'est révélé faux sur le cas le plus attendu du jeu de
-    données — onze canaux en euros, de 12 k€ à 2,7 M€. Un rapport de 209 n'y est pas un
+    données — onze canaux en euros, de ~15 k€ à ~3 M€. Un rapport de 209 n'y est pas un
     mélange d'unités mais un écart de budget réel, et tout vient d'une seule colonne.
     Au-delà de deux séries, le pivot trace donc, quelles que soient les échelles.
     """

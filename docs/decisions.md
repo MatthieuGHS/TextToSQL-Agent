@@ -918,7 +918,7 @@ c'est la raison pour laquelle le relèvement du plafond de pivot, lui, ne périm
 
 **Et le plafond ne suffisait pas : la garde d'échelle du pivot a dû partir.** Le
 relèvement à 12 ne débloquait rien, parce que le refus venait d'ailleurs — de la garde
-ajoutée le matin même, qui comparait TV (2,7 M€) à affiliation (12,8 k€) et concluait
+ajoutée le matin même, qui comparait TV (~3 M€) à affiliation (~15 k€) et concluait
 « ordres de grandeur incompatibles ». Or les onze séries sont **en euros** : un rapport
 de 209 y est un écart de budget, pas un mélange d'unités. La garde avait été calibrée
 sur un vrai cas — GRP contre clics — mais ce cas-là est à **deux** séries, où le second
@@ -1567,11 +1567,11 @@ change pas : lire la réponse réelle avant de conclure.
 **Correctif proposé, testé, non appliqué.** L'assertion énonce déjà le bon principe —
 *« l'écriture déclare sa propre précision »*, un coefficient rendu « 0,06 » affirmant une
 valeur entre 0,055 et 0,065. Elle l'applique aux décimales et **pas aux zéros de fin**.
-Or « 350 000 » n'affirme qu'un ordre de grandeur quand « 212 693 » affirme l'unité.
+Or « 350 000 » n'affirme qu'un ordre de grandeur quand « 213 456 » affirme l'unité.
 Étendre le principe aux entiers à zéros de fin, vérifié sur les cas réels :
 
 - les 8 artefacts disparaissent ;
-- le total **faux** de la question Twitch (`212 693` pour 212 694) **reste attrapé** — sans
+- le total **faux** de la question Twitch (`213 456` pour 213 457) **reste attrapé** — sans
   zéro de fin, il affirme l'unité ;
 - le total dérivé mais exact (`23,66`) **reste attrapé** — décimales, la règle ne le touche
   pas.
@@ -1709,7 +1709,7 @@ différente. Aucune règle sur les unités n'est nécessaire — la série se d�
 large de mille : elle se lit « zéro », ce qu'elle n'est pas.
 
 La mesure est franche là aussi : sur les 100 séries de barres à abscisse non temporelle,
-14 dépassent 111 000× et ce sont **toutes** des ventilations par nom de métrique ; la
+14 dépassent 100 000× et ce sont **toutes** des ventilations par nom de métrique ; la
 suivante est à 696× et c'est une répartition de budget parfaitement lisible.
 
 ⚠ **Un dégât collatéral, trouvé en mesurant et pas en relisant.** Conditionner cette garde

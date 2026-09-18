@@ -92,7 +92,7 @@ FACTEUR_ESPACEMENT_IRREGULIER = 3
 # elle est absente — et une catégorie absente se lit « zéro », ce qu'elle n'est pas.
 #
 # La mesure confirme, et elle est franche. Sur les 100 séries de barres à abscisse
-# catégorielle du cache : 14 dépassent 111 000×, et ce sont **toutes** des ventilations
+# catégorielle du cache : 14 dépassent 100 000×, et ce sont **toutes** des ventilations
 # par `performance_metric` — des GRP, des impressions et des clics sur un axe unique,
 # c'est-à-dire le piège principal du jeu de données. La suivante est à 696×, et c'est une
 # répartition de budget par canal parfaitement lisible. L'intervalle vide couvre deux
@@ -460,7 +460,7 @@ def _pivot(
     **Au-delà de deux séries, en revanche, l'écart d'échelle ne fait pas refuser** — et
     c'est une correction, pas un oubli. Le refus existait ici jusqu'au 19/08/2026, par
     généralisation de la règle du format large ; il s'est révélé faux le soir même sur
-    le cas le plus attendu du jeu de données : onze canaux en euros, de 12 k€ à 2,7 M€,
+    le cas le plus attendu du jeu de données : onze canaux en euros, de ~15 k€ à ~3 M€,
     soit un rapport de 209 qui n'est pas un mélange d'unités mais un écart de budget
     réel. Dans un format large, deux colonnes distinctes sont deux mesures distinctes,
     et la règle d'E7 garde son sens ; ici tout vient d'une seule colonne, et refuser
